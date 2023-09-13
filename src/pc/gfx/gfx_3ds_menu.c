@@ -19,7 +19,7 @@ static int touch_x;
 static int touch_y;
 
 // Unused. We clear the screen elsewhere with a proper clear function.
-static void gfx_3ds_menu_draw_background(float *vbo_buffer)
+/*static void gfx_3ds_menu_draw_background(float *vbo_buffer)
 {
     Mtx_Identity(&modelView);
     Mtx_OrthoTilt(&projection, 0.0, 320.0, 0.0, 240.0, 0.0, 1.0, true);
@@ -40,7 +40,7 @@ static void gfx_3ds_menu_draw_background(float *vbo_buffer)
     C3D_DrawArrays(GPU_TRIANGLES, buffer_offset, 6); // 2 triangles
 
     buffer_offset += 6;
-}
+}*/
 
 static void gfx_3ds_menu_draw_button(float *vbo_buffer, int x, int y, C3D_Tex texture, bool thin)
 {
