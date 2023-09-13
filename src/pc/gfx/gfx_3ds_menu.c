@@ -109,7 +109,7 @@ menu_action gfx_3ds_menu_on_touch(int x, int y)
     touch_y = y;
     debounce = 8; // wait quarter second between mashing
 
-    // aa
+    // toggle anti-aliasing
     if (is_inside_box(touch_x, touch_y, 11, 32, 64, 64))
     {
         // cannot use AA in 3D mode
@@ -120,22 +120,24 @@ menu_action gfx_3ds_menu_on_touch(int x, int y)
         }
         return DO_NOTHING;
     }
-    // screen mode
-    if (is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
+    // 400px vs 800px
+    else if (is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
     {
         gfx_config.useWide = !gfx_config.useWide;
+
         // disable AA if 3D mode
         if (!gfx_config.useWide && gfx_config.useAA)
             gfx_config.useAA = false;
+
         return CONFIG_CHANGED;
     }
-    // resume
-    if (is_inside_box(touch_x, touch_y, 11, 144, 64, 64))
+    // hide menu
+    else if (is_inside_box(touch_x, touch_y, 11, 144, 64, 64))
     {
         return EXIT_MENU;
     }
-    // exit?
-    if (is_inside_box(touch_x, touch_y, 86, 144, 64, 64))
+    // exit to loader
+    else if (is_inside_box(touch_x, touch_y, 86, 144, 64, 64))
     {
         gShouldRun = false;
     }
