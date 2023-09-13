@@ -9,6 +9,8 @@ C3D_RenderTarget *gTarget;
 C3D_RenderTarget *gTargetRight;
 C3D_RenderTarget *gTargetBottom;
 
+bool gBottomScreenNeedsRender;
+
 int uLoc_projection, uLoc_modelView;
 
 float gSliderLevel;
@@ -203,15 +205,18 @@ static void gfx_3ds_handle_events(void)
             menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
             if (res == CONFIG_CHANGED)
             {
+                gBottomScreenNeedsRender = true;
                 deinitialise_screens();
                 initialise_screens();
             } else if (res == EXIT_MENU)
             {
+                gBottomScreenNeedsRender = true;
                 gShowConfigMenu = false;
             }
         } else
         {
             // screen tapped so show menu
+            gBottomScreenNeedsRender = true;
             gShowConfigMenu = true;
         }
     }

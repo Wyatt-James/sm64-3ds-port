@@ -50,6 +50,8 @@ extern C3D_RenderTarget *gTarget;
 extern C3D_RenderTarget *gTargetRight;
 extern C3D_RenderTarget *gTargetBottom;
 
+extern bool gBottomScreenNeedsRender;
+
 extern int uLoc_projection, uLoc_modelView;
 
 extern float gSliderLevel;

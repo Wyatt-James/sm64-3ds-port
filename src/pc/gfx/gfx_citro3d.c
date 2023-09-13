@@ -822,10 +822,16 @@ static void gfx_citro3d_start_frame(void)
         sCurrentGfx3DSMode = gGfx3DSMode;
     }
 
+    // Clear top screen
     C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+
+    // If rendering in 800px, clear right eye view
     if (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22)
         C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-    C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+
+    // Clear bottom screen only if it needs re-rendering.
+    if (gBottomScreenNeedsRender)
+        C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
 
     // reset model view matrix
     Mtx_Identity(&modelView);
@@ -846,6 +852,7 @@ static void gfx_citro3d_end_frame(void)
 {
     // TOOD: draw the minimap here
     gfx_3ds_menu_draw(sVboBuffer, sBufIdx, gShowConfigMenu);
+
     // set the texenv back
     update_shader(false);
 

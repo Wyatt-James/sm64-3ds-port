@@ -18,7 +18,7 @@ static u8 debounce;
 static int touch_x;
 static int touch_y;
 
-
+// Unused. We clear the screen elsewhere with a proper clear function.
 static void gfx_3ds_menu_draw_background(float *vbo_buffer)
 {
     Mtx_Identity(&modelView);
@@ -118,6 +118,7 @@ menu_action gfx_3ds_menu_on_touch(int x, int y)
             gfx_config.useAA = !gfx_config.useAA;
             return CONFIG_CHANGED;
         }
+        
         return DO_NOTHING;
     }
     // 400px vs 800px
@@ -128,7 +129,7 @@ menu_action gfx_3ds_menu_on_touch(int x, int y)
         // disable AA if 3D mode
         if (!gfx_config.useWide && gfx_config.useAA)
             gfx_config.useAA = false;
-
+        
         return CONFIG_CHANGED;
     }
     // hide menu
@@ -177,18 +178,26 @@ void gfx_3ds_menu_init()
 
     load_t3x_texture(&menu_cup_tex, NULL, menu_cup_t3x, menu_cup_t3x_size);
     C3D_TexSetFilter(&menu_cup_tex, GPU_LINEAR, GPU_NEAREST);
+
+    gBottomScreenNeedsRender = true;
 }
 
-void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool enabled)
+void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButtonsEnabled)
 {
+    if (debounce)
+        debounce--;
+
+    if (!gBottomScreenNeedsRender)
+        return;
+
+    gBottomScreenNeedsRender = false;
+
     C3D_FrameDrawOn(gTargetBottom);
 
     buffer_offset = vertex_offset;
-    gfx_3ds_menu_draw_background(vertex_buffer);
-    if (enabled)
+
+    if (configButtonsEnabled)
         gfx_3ds_menu_draw_buttons(vertex_buffer);
-    if (debounce)
-        debounce--;
 
     gfx_3ds_menu_draw_cbuttons(vertex_buffer);
 }
