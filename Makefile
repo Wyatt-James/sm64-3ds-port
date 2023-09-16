@@ -238,7 +238,7 @@ ASM_DIRS := lib
 ifeq ($(TARGET_N64),1)
   ASM_DIRS := asm $(ASM_DIRS)
 else
-  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/audio src/pc/controller
+  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/audio src/pc/controller
   ASM_DIRS :=
 endif
 BIN_DIRS := bin bin/$(VERSION)

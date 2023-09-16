@@ -12,6 +12,8 @@
 #include "gfx_cc.h"
 #include "gfx_rendering_api.h"
 
+#include "gfx_citro3d.h"
+
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
 
@@ -79,6 +81,12 @@ static int sOrigBufIdx;
 static int s2DMode;
 float iodZ = 8.0f;
 float iodW = 16.0f;
+
+struct ScreenFlags3DS gfx_screen_clear_flags = {
+    VIEW_CLEAR_ON,  // top
+    VIEW_CLEAR_ON,  // right
+    VIEW_CLEAR_ONCE  // bottom
+};
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
 {
@@ -823,15 +831,22 @@ static void gfx_citro3d_start_frame(void)
     }
 
     // Clear top screen
-    C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+    if (gfx_screen_clear_flags.top)
+        C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
 
     // If rendering in 800px, clear right eye view
-    if (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22)
+    if (gfx_screen_clear_flags.right &&
+         (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
         C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
 
     // Clear bottom screen only if it needs re-rendering.
-    if (gBottomScreenNeedsRender)
+    if (gfx_screen_clear_flags.bottom)
         C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+
+    // Update clear flags
+    updateClearMode(&gfx_screen_clear_flags.top);
+    updateClearMode(&gfx_screen_clear_flags.right);
+    updateClearMode(&gfx_screen_clear_flags.bottom);
 
     // reset model view matrix
     Mtx_Identity(&modelView);
@@ -856,7 +871,7 @@ static void gfx_citro3d_end_frame(void)
     // set the texenv back
     update_shader(false);
 
-    C3D_FrameEnd(0);
+    C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
 
 static void gfx_citro3d_finish_render(void)

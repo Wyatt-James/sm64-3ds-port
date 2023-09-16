@@ -5,6 +5,9 @@
 #include "gfx_3ds.h"
 #include "gfx_3ds_menu.h"
 
+#include "multi_viewport/multi_viewport.h"
+#include "gfx_citro3d.h"
+
 C3D_RenderTarget *gTarget;
 C3D_RenderTarget *gTargetRight;
 C3D_RenderTarget *gTargetBottom;
@@ -221,6 +224,9 @@ static void gfx_3ds_handle_events(void)
         }
     }
 
+    if (gBottomScreenNeedsRender)
+        gfx_screen_clear_flags.bottom = VIEW_CLEAR_ONCE;
+
     float st = 0.0;
     if ((prevSliderLevel > st && gSliderLevel <= st) || (prevSliderLevel <= st && gSliderLevel > st))
     {
@@ -252,6 +258,7 @@ static bool gfx_3ds_start_frame(void)
 
 static void gfx_3ds_swap_buffers_begin(void)
 {
+    // Citro3D handles swapping automatically in C3D_FrameEnd()
 }
 
 static void gfx_3ds_swap_buffers_end(void)
