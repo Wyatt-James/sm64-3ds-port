@@ -49,13 +49,17 @@ static void audio_3ds_play(const uint8_t *buf, size_t len)
 {
     if (len > 4096 * 4)
         return;
+    
+    // If the next buffer hasn't yet been played, return.
     if (sDspBuffers[sNextBuffer].status != NDSP_WBUF_FREE &&
         sDspBuffers[sNextBuffer].status != NDSP_WBUF_DONE)
         return;
+        
     sDspBuffers[sNextBuffer].nsamples = len / 4;
     sDspBuffers[sNextBuffer].status = NDSP_WBUF_FREE;
     ndspChnWaveBufAdd(0, &sDspBuffers[sNextBuffer]);
 
+    // Copy the data to be played
     s16* dst = (s16*)sDspBuffers[sNextBuffer].data_vaddr;
     memcpy(dst, buf, len);
     DSP_FlushDataCache(dst, len);
@@ -70,16 +74,28 @@ static void audio_3ds_loop()
 {
     while (running)
     {
+        // Wait for audio to be started
         LightEvent_Wait(&s_event_audio);
+
         if (!running)
             break;
+        
+        // Create audio buffer
+        // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
         u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
         s16 audio_buffer[SAMPLES_HIGH * 2 * 2];
+
+        // Create two SM64 audio buffers, written to audio_buffer.
+        // Synthesis occurs here.
         for (int i = 0; i < 2; i++) {
             create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
         }
-        audio_3ds_play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
+
         LightEvent_Signal(&s_event_main);
+        
+        // Play the audio that we created
+        // If we outrun the 3DS buffer, we throw out synthesized sound.
+        audio_3ds_play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
     }
 }
 
@@ -114,6 +130,9 @@ static bool audio_3ds_init()
 
     LightEvent_Init(&s_event_audio, RESET_ONESHOT);
     LightEvent_Init(&s_event_main, RESET_ONESHOT);
+
+    // Ensures that the game does not hang if the event is waited before the sound thread ticks once.
+    LightEvent_Signal(&s_event_main);
 
     s32 prio = 0;
 

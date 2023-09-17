@@ -206,6 +206,8 @@ s32 gAudioErrorFlags2 = 0;
 #else
 s32 gAudioErrorFlags = 0;
 #endif
+
+// Poor naming. A better option would be sAudioNeedsTick.
 s32 sGameLoopTicked = 0;
 
 // Dialog sounds
@@ -869,14 +871,21 @@ struct SPTask *create_next_audio_frame_task(void) {
 struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
+
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
+
     gAudioFrameCount++;
+
+    // Update the sound system's state
     if (sGameLoopTicked != 0) {
         update_game_sound();
         sGameLoopTicked = 0;
     }
+
+    // Use the existing sound system state to synthesize audio
     s32 writtenCmds;
     synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
+
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
     decrease_sample_dma_ttls();
 }

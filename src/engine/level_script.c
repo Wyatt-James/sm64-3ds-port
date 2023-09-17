@@ -25,6 +25,12 @@
 #include "surface_collision.h"
 #include "surface_load.h"
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+#include "pc/audio/audio_3ds_threading.h"
+#endif
+#endif
+
 #define CMD_GET(type, offset) (*(type *) (CMD_PROCESS_OFFSET(offset) + (u8 *) sCurrentCmd))
 
 // These are equal
@@ -830,9 +836,26 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
     sCurrentCmd = cmd;
 
+// Wait for audio to finish
+// Moved here because it's faster
+// TODO should this lock be removed for a performance gain? Look into race conds
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+        LightEvent_Wait(&s_event_main);
+#endif
+#endif
+
     while (sScriptStatus == SCRIPT_RUNNING) {
         LevelScriptJumpTable[sCurrentCmd->type]();
     }
+    audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
+
+// Signal 3DS audio to synthesize and play
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+        LightEvent_Signal(&s_event_audio);
+#endif
+#endif
 
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
     init_render_image();
