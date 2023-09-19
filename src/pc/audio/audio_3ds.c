@@ -94,6 +94,7 @@ static void audio_3ds_loop()
             create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
         }
         
+        // This must be after synthesis to avoid a race condition. A large-scale rewrite could fix this.
         LightEvent_Signal(&s_event_main);
 
         // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
