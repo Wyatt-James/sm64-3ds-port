@@ -26,6 +26,7 @@ extern struct gfx_configuration gfx_config;
 typedef enum {
     DO_NOTHING,
     CONFIG_CHANGED,
+    SHOW_MENU,
     EXIT_MENU
 } menu_action;
 

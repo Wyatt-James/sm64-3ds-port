@@ -58,10 +58,10 @@ extern float gSliderLevel;
 
 typedef enum
 {
-    GFX_3DS_MODE_NORMAL,
-    GFX_3DS_MODE_AA_22,
-    GFX_3DS_MODE_WIDE,
-    GFX_3DS_MODE_WIDE_AA_12
+    GFX_3DS_MODE_NORMAL,     // 400px no AA AND 400px 3D | !useAA && !useWide
+    GFX_3DS_MODE_AA_22,      // 400px +  AA (unused)     |  useAA && !useWide
+    GFX_3DS_MODE_WIDE,       // 800px no AA              | !useAA &&  useWide
+    GFX_3DS_MODE_WIDE_AA_12  // 800px +  AA              |  useAA &&  useWide
 } Gfx3DSMode;
 
 extern bool gShouldRun;
@@ -69,6 +69,7 @@ extern bool gShowConfigMenu;
 
 extern struct GfxWindowManagerAPI gfx_3ds;
 extern Gfx3DSMode gGfx3DSMode;
+extern bool gGfx3DEnabled;
 
 static bool load_t3x_texture(C3D_Tex* tex, C3D_TexCube* cube, const void* data, size_t size)
 {

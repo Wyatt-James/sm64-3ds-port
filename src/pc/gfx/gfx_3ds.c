@@ -19,6 +19,7 @@ int uLoc_projection, uLoc_modelView;
 float gSliderLevel;
 
 Gfx3DSMode gGfx3DSMode;
+bool gGfx3DEnabled;
 
 bool gShowConfigMenu = false;
 bool gShouldRun = true;
@@ -92,13 +93,13 @@ static void initialise_screens()
 
     // used to determine scissoring
     if (!useAA && !useWide)
-        gGfx3DSMode = GFX_3DS_MODE_NORMAL;
+        gGfx3DSMode = GFX_3DS_MODE_NORMAL;     // 400px no AA
     else if (useAA && !useWide)
-        gGfx3DSMode = GFX_3DS_MODE_AA_22;
+        gGfx3DSMode = GFX_3DS_MODE_AA_22;      // 400px + AA (unused, crashes)
     else if (!useAA && useWide)
-        gGfx3DSMode = GFX_3DS_MODE_WIDE;
-    else
-        gGfx3DSMode = GFX_3DS_MODE_WIDE_AA_12;
+        gGfx3DSMode = GFX_3DS_MODE_WIDE;       // 800px no AA
+    else // (useAA && useWide)
+        gGfx3DSMode = GFX_3DS_MODE_WIDE_AA_12; // 800px + AA
 
     // TODO: refactor; this is (also) set in gfx_citro3d_init,
     C3D_CullFace(GPU_CULL_NONE);
@@ -116,16 +117,64 @@ static void gfx_3ds_update_stereoscopy(void)
 {
 	if(gSliderLevel > 0.0)
     {
+        gGfx3DEnabled = true;
+
 		gfx_config.useAA = false;
 		gfx_config.useWide = false;
+
+        gfx_screen_clear_flags.right = VIEW_CLEAR_ON;
 	} else
     {
         // default to true; this is different to initialisation where both are false
+        gGfx3DEnabled = false;
 		gfx_config.useAA = true;
 		gfx_config.useWide = true;
+
+        // screen must be cleared once or crash
+        gfx_screen_clear_flags.right = VIEW_CLEAR_ON_ONCE;
 	}
+
+    gBottomScreenNeedsRender = true;
+
 	deinitialise_screens();
     initialise_screens();
+}
+
+static void gfx_3ds_handle_touch() {
+    hidScanInput();
+    touchPosition pos;
+    hidTouchRead(&pos);
+
+    if ((pos.px || pos.py) && (pos.px < 160))
+    {
+        menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
+
+        switch (res) {
+            case CONFIG_CHANGED: {
+                gBottomScreenNeedsRender = true;
+                deinitialise_screens();
+                initialise_screens();
+                break;
+            }
+
+            case SHOW_MENU: {
+                gBottomScreenNeedsRender = true;
+                gShowConfigMenu = true;
+                break;
+            }
+
+            case EXIT_MENU: {
+                gBottomScreenNeedsRender = true;
+                gShowConfigMenu = false;
+                break;
+            }
+
+            default:
+            case DO_NOTHING: {
+                break;
+            }
+        }
+    }
 }
 
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)
@@ -150,6 +199,12 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
     initialise_screens();
     gSliderLevel = osGet3DSliderState();
     gfx_3ds_update_stereoscopy();
+    
+    // Clear all framebuffers. Right-hand screen crashes if cleared in an invalid mode.
+    C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+    C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+    if (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22)
+        C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
 }
 
 static void gfx_set_keyboard_callbacks(UNUSED bool (*on_key_down)(int scancode), UNUSED bool (*on_key_up)(int scancode), UNUSED void (*on_all_keys_up)(void))
@@ -181,7 +236,6 @@ static void gfx_3ds_get_dimensions(uint32_t *width, uint32_t *height)
     *height = 240;
 }
 
-static int debounce;
 static void gfx_3ds_handle_events(void)
 {
     float prevSliderLevel = gSliderLevel;
@@ -189,49 +243,19 @@ static void gfx_3ds_handle_events(void)
     // as good a time as any
     gSliderLevel = osGet3DSliderState();
 
-    if (debounce > 0)
-    {
-        debounce--;
-        return;
-    }
+    // Debounce is handled inside of this function
+    gfx_3ds_handle_touch();
 
-    // check if screen is pressed
-    hidScanInput();
-    touchPosition pos;
-    hidTouchRead(&pos);
-
-    if ((pos.px || pos.py) && (pos.px < 160))
-    {
-        debounce = 8;
-        if (gShowConfigMenu)
-        {
-            menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
-            if (res == CONFIG_CHANGED)
-            {
-                gBottomScreenNeedsRender = true;
-                deinitialise_screens();
-                initialise_screens();
-            } else if (res == EXIT_MENU)
-            {
-                gBottomScreenNeedsRender = true;
-                gShowConfigMenu = false;
-            }
-        } else
-        {
-            // screen tapped so show menu
-            gBottomScreenNeedsRender = true;
-            gShowConfigMenu = true;
-        }
-    }
-
-    if (gBottomScreenNeedsRender)
-        gfx_screen_clear_flags.bottom = VIEW_CLEAR_ONCE;
-
+    // if (prev > 0.0 > curr) OR (curr > 0.0 > prev)
+    // TODO can't we just check if they're different?
     float st = 0.0;
     if ((prevSliderLevel > st && gSliderLevel <= st) || (prevSliderLevel <= st && gSliderLevel > st))
     {
 		gfx_3ds_update_stereoscopy();
     }
+
+    if (gBottomScreenNeedsRender)
+        gfx_screen_clear_flags.bottom = VIEW_CLEAR_ON_ONCE;
 }
 
 float cpu_time, gpu_time;

@@ -428,7 +428,7 @@ Gfx *create_skybox_facing_camera(s8 player, s8 background, f32 fov,
     f32 cameraFaceZ = focZ - posZ;
     s8 colorIndex = 1;
 #ifdef TARGET_N3DS
-    is3D = ((gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22) && gSliderLevel > 0.0f);
+    is3D = gGfx3DEnabled;
 #endif
 
     // If the first star is collected in JRB, make the sky darker and slightly green

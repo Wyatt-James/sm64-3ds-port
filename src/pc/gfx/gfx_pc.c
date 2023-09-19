@@ -684,7 +684,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         // trivial clip rejection
         d->clip_rej = 0;
 #ifdef TARGET_N3DS
-    if ((gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22) && gSliderLevel > 0.0f) {
+    if (gGfx3DEnabled) {
         float wMod = w * 1.2f; // expanded w-range for testing clip rejection
         if (x < -wMod) d->clip_rej |= 1;
         if (x > wMod) d->clip_rej |= 2;

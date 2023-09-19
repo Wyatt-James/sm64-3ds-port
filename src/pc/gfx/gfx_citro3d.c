@@ -83,9 +83,9 @@ float iodZ = 8.0f;
 float iodW = 16.0f;
 
 struct ScreenFlags3DS gfx_screen_clear_flags = {
-    VIEW_CLEAR_ON,  // top
-    VIEW_CLEAR_ON,  // right
-    VIEW_CLEAR_ONCE  // bottom
+    VIEW_CLEAR_ON,      // top
+    VIEW_CLEAR_ON,      // right (overwritten in gfx_3ds_update_stereoscopy)
+    VIEW_CLEAR_ON_ONCE  // bottom
 };
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
@@ -765,7 +765,7 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if ((gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22) && gSliderLevel > 0.0f)
+    if (gGfx3DEnabled)
     {
         // left screen
         sOrigBufIdx = sBufIdx;
@@ -831,16 +831,17 @@ static void gfx_citro3d_start_frame(void)
     }
 
     // Clear top screen
-    if (gfx_screen_clear_flags.top)
-        C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-
-    // If rendering in 800px, clear right eye view
+    if (VIEWPORT_SHOULD_CLEAR(gfx_screen_clear_flags.top))
+        C3D_RenderTargetClear(gTarget, C3D_CLEAR_DEPTH, 0x000000FF, 0xFFFFFFFF);
+        
+    // Clear right eye view
+    // We check gGfx3DSMode because clearing in 800px modes causes a crash.
     if (gfx_screen_clear_flags.right &&
          (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_DEPTH, 0x000000FF, 0xFFFFFFFF);
 
     // Clear bottom screen only if it needs re-rendering.
-    if (gfx_screen_clear_flags.bottom)
+    if (VIEWPORT_SHOULD_CLEAR(gfx_screen_clear_flags.bottom))
         C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
 
     // Update clear flags

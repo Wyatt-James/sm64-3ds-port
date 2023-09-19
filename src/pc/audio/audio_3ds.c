@@ -72,29 +72,31 @@ LightEvent s_event_audio, s_event_main;
 
 static void audio_3ds_loop()
 {
+    // Statically allocate to improve performance
+    s16 audio_buffer[SAMPLES_HIGH * 2 * 2];
+        
     while (running)
     {
-        // Wait for audio to be started
+        // Wait for Thread5
         LightEvent_Wait(&s_event_audio);
 
         if (!running)
             break;
         
-        // Create audio buffer
         // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
         u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
-        s16 audio_buffer[SAMPLES_HIGH * 2 * 2];
 
-        // Create two SM64 audio buffers, written to audio_buffer.
-        // Synthesis occurs here.
+        // Update sound system state and free Thread5
+        update_game_sound_wrapper_3ds();
+
+        // Synthesize to our audio buffer
         for (int i = 0; i < 2; i++) {
             create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
         }
-
-        LightEvent_Signal(&s_event_main);
         
-        // Play the audio that we created
-        // If we outrun the 3DS buffer, we throw out synthesized sound.
+        LightEvent_Signal(&s_event_main);
+
+        // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
         audio_3ds_play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
     }
 }

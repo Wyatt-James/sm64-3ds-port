@@ -864,7 +864,7 @@ struct SPTask *create_next_audio_frame_task(void) {
     task->yield_data_size = 0;
 #endif
 
-    decrease_sample_dma_ttls();
+    decrease_sample_dma_ttls(); // N64 only
     return gAudioTask;
 }
 #else
@@ -872,8 +872,35 @@ struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+
+// On 3DS, we split this out for Thread synchronization reasons
+void update_game_sound_wrapper_3ds() {
+    gAudioFrameCount++;
+
+    // Update the sound system's state
+    if (sGameLoopTicked != 0) {
+        update_game_sound();
+        sGameLoopTicked = 0;
+    }
+}
+
+// 3DS version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
 
+    // Use the sound system state to synthesize audio
+    s32 writtenCmds;
+    synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
+
+    gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
+    decrease_sample_dma_ttls();
+}
+#endif
+#else
+
+// Non-3DS version
+void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioFrameCount++;
 
     // Update the sound system's state
@@ -882,13 +909,14 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
         sGameLoopTicked = 0;
     }
 
-    // Use the existing sound system state to synthesize audio
+    // Use the sound system state to synthesize audio
     s32 writtenCmds;
     synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
 
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
-    decrease_sample_dma_ttls();
+    decrease_sample_dma_ttls(); // Non-3DS only
 }
+#endif
 #endif
 #endif
 

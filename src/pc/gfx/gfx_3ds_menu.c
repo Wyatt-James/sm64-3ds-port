@@ -100,19 +100,25 @@ static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int hei
     return pos_x >= x && pos_x <= (x+width) && pos_y >= y && pos_y <= (y+height);
 }
 
-menu_action gfx_3ds_menu_on_touch(int x, int y)
+menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 {
-    if (debounce)
+    if (debounce) {
+        debounce--;
         return DO_NOTHING;
+    }
 
-    touch_x = x;
-    touch_y = y;
     debounce = 8; // wait quarter second between mashing
 
-    // toggle anti-aliasing
-    if (is_inside_box(touch_x, touch_y, 11, 32, 64, 64))
+    
+    if (!gShowConfigMenu)
     {
-        // cannot use AA in 3D mode
+        return SHOW_MENU;
+    }
+
+    // toggle anti-aliasing
+    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, 11, 32, 64, 64))
+    {
+        // cannot use AA in 400px mode
         if (gfx_config.useWide)
         {
             gfx_config.useAA = !gfx_config.useAA;
@@ -122,11 +128,11 @@ menu_action gfx_3ds_menu_on_touch(int x, int y)
         return DO_NOTHING;
     }
     // 400px vs 800px
-    else if (is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
+    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
     {
         gfx_config.useWide = !gfx_config.useWide;
 
-        // disable AA if 3D mode
+        // disable AA if 400px
         if (!gfx_config.useWide && gfx_config.useAA)
             gfx_config.useAA = false;
         
