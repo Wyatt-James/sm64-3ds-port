@@ -28,8 +28,9 @@
 *.app
 *.hex
 
-# scripts
+# scripts and script support
 *.sh
+/build_flag_log.txt
 
 # Debug files
 *.dSYM/

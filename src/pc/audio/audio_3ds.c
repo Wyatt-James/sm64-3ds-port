@@ -69,6 +69,7 @@ static void audio_3ds_play(const uint8_t *buf, size_t len)
 
 static bool running = true;
 LightEvent s_event_audio, s_event_main;
+bool s_thread5_wait_for_audio = false;
 
 static void audio_3ds_loop()
 {
@@ -90,6 +91,8 @@ static void audio_3ds_loop()
         update_game_sound_wrapper_3ds();
 
         // Synthesize to our audio buffer
+        // If we could make this thread-safe with respect to
+        // the level script, it would improve performance a lot
         for (int i = 0; i < 2; i++) {
             create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
         }

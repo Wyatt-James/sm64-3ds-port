@@ -721,7 +721,7 @@ static void level_cmd_set_menu_music(void) {
     sCurrentCmd = CMD_NEXT;
 }
 
-static void level_cmd_38(void) {
+static void level_cmd_fadeout_music(void) {
     fadeout_music(CMD_GET(s16, 2));
     sCurrentCmd = CMD_NEXT;
 }
@@ -769,77 +769,81 @@ static void level_cmd_get_or_set_var(void) {
 }
 
 static void (*LevelScriptJumpTable[])(void) = {
-    /*00*/ level_cmd_load_and_execute,
-    /*01*/ level_cmd_exit_and_execute,
-    /*02*/ level_cmd_exit,
-    /*03*/ level_cmd_sleep,
-    /*04*/ level_cmd_sleep2,
-    /*05*/ level_cmd_jump,
-    /*06*/ level_cmd_jump_and_link,
-    /*07*/ level_cmd_return,
-    /*08*/ level_cmd_jump_and_link_push_arg,
-    /*09*/ level_cmd_jump_repeat,
-    /*0A*/ level_cmd_loop_begin,
-    /*0B*/ level_cmd_loop_until,
-    /*0C*/ level_cmd_jump_if,
-    /*0D*/ level_cmd_jump_and_link_if,
-    /*0E*/ level_cmd_skip_if,
-    /*0F*/ level_cmd_skip,
-    /*10*/ level_cmd_skippable_nop,
-    /*11*/ level_cmd_call,
-    /*12*/ level_cmd_call_loop,
-    /*13*/ level_cmd_set_register,
-    /*14*/ level_cmd_push_pool_state,
-    /*15*/ level_cmd_pop_pool_state,
-    /*16*/ level_cmd_load_to_fixed_address,
-    /*17*/ level_cmd_load_raw,
-    /*18*/ level_cmd_load_mio0,
-    /*19*/ level_cmd_load_mario_head,
-    /*1A*/ level_cmd_load_mio0_texture,
-    /*1B*/ level_cmd_init_level,
-    /*1C*/ level_cmd_clear_level,
-    /*1D*/ level_cmd_alloc_level_pool,
-    /*1E*/ level_cmd_free_level_pool,
-    /*1F*/ level_cmd_begin_area,
-    /*20*/ level_cmd_end_area,
-    /*21*/ level_cmd_load_model_from_dl,
-    /*22*/ level_cmd_load_model_from_geo,
-    /*23*/ level_cmd_23,
-    /*24*/ level_cmd_place_object,
-    /*25*/ level_cmd_init_mario,
-    /*26*/ level_cmd_create_warp_node,
-    /*27*/ level_cmd_create_painting_warp_node,
-    /*28*/ level_cmd_create_instant_warp,
-    /*29*/ level_cmd_load_area,
-    /*2A*/ level_cmd_unload_area,
-    /*2B*/ level_cmd_set_mario_start_pos,
-    /*2C*/ level_cmd_2C,
-    /*2D*/ level_cmd_2D,
-    /*2E*/ level_cmd_set_terrain_data,
-    /*2F*/ level_cmd_set_rooms,
-    /*30*/ level_cmd_show_dialog,
-    /*31*/ level_cmd_set_terrain_type,
-    /*32*/ level_cmd_nop,
-    /*33*/ level_cmd_set_transition,
-    /*34*/ level_cmd_set_blackout,
-    /*35*/ level_cmd_set_gamma,
-    /*36*/ level_cmd_set_music,
-    /*37*/ level_cmd_set_menu_music,
-    /*38*/ level_cmd_38,
-    /*39*/ level_cmd_set_macro_objects,
-    /*3A*/ level_cmd_3A,
-    /*3B*/ level_cmd_create_whirlpool,
-    /*3C*/ level_cmd_get_or_set_var,
+    /*00*/ level_cmd_load_and_execute,              // Sound: UNKNOWN
+    /*01*/ level_cmd_exit_and_execute,              // Sound: UNKNOWN
+    /*02*/ level_cmd_exit,                          // Sound: UNKNOWN
+    /*03*/ level_cmd_sleep,                         // Sound: SAFE
+    /*04*/ level_cmd_sleep2,                        // Sound: SAFE
+    /*05*/ level_cmd_jump,                          // Sound: BRANCH
+    /*06*/ level_cmd_jump_and_link,                 // Sound: BRANCH
+    /*07*/ level_cmd_return,                        // Sound: BRANCH
+    /*08*/ level_cmd_jump_and_link_push_arg,        // Sound: BRANCH
+    /*09*/ level_cmd_jump_repeat,                   // Sound: BRANCH
+    /*0A*/ level_cmd_loop_begin,                    // Sound: BRANCH
+    /*0B*/ level_cmd_loop_until,                    // Sound: BRANCH
+    /*0C*/ level_cmd_jump_if,                       // Sound: BRANCH
+    /*0D*/ level_cmd_jump_and_link_if,              // Sound: BRANCH
+    /*0E*/ level_cmd_skip_if,                       // Sound: BRANCH
+    /*0F*/ level_cmd_skip,                          // Sound: BRANCH
+    /*10*/ level_cmd_skippable_nop,                 // Sound: BRANCH
+    /*11*/ level_cmd_call,                          // Sound: BRANCH
+    /*12*/ level_cmd_call_loop,                     // Sound: BRANCH
+    /*13*/ level_cmd_set_register,                  // Sound: SAFE
+    /*14*/ level_cmd_push_pool_state,               // Sound: MEMORY
+    /*15*/ level_cmd_pop_pool_state,                // Sound: MEMORY
+    /*16*/ level_cmd_load_to_fixed_address,         // Sound: MEMORY
+    /*17*/ level_cmd_load_raw,                      // Sound: MEMORY
+    /*18*/ level_cmd_load_mio0,                     // Sound: MEMORY
+    /*19*/ level_cmd_load_mario_head,               // Sound: MEMORY
+    /*1A*/ level_cmd_load_mio0_texture,             // Sound: MEMORY
+    /*1B*/ level_cmd_init_level,                    // Sound: MEMORY
+    /*1C*/ level_cmd_clear_level,                   // Sound: MEMORY
+    /*1D*/ level_cmd_alloc_level_pool,              // Sound: MEMORY
+    /*1E*/ level_cmd_free_level_pool,               // Sound: MEMORY
+    /*1F*/ level_cmd_begin_area,                    // Sound: SAFE
+    /*20*/ level_cmd_end_area,                      // Sound: UNKNOSAFEWN
+    /*21*/ level_cmd_load_model_from_dl,            // Sound: MEMORY
+    /*22*/ level_cmd_load_model_from_geo,           // Sound: MEMORY
+    /*23*/ level_cmd_23,                            // Sound: MEMORY
+    /*24*/ level_cmd_place_object,                  // Sound: MEMORY
+    /*25*/ level_cmd_init_mario,                    // Sound: SAFE
+    /*26*/ level_cmd_create_warp_node,              // Sound: MEMORY
+    /*27*/ level_cmd_create_painting_warp_node,     // Sound: MEMORY
+    /*28*/ level_cmd_create_instant_warp,           // Sound: MEMORY
+    /*29*/ level_cmd_load_area,                     // Sound: UNSAFE_SOUND
+    /*2A*/ level_cmd_unload_area,                   // Sound: MEMORY
+    /*2B*/ level_cmd_set_mario_start_pos,           // Sound: SAFE
+    /*2C*/ level_cmd_2C,                            // Sound: MEMORY
+    /*2D*/ level_cmd_2D,                            // Sound: LIKELY_UNSAFE_MEMORY
+    /*2E*/ level_cmd_set_terrain_data,              // Sound: UNKNOWN
+    /*2F*/ level_cmd_set_rooms,                     // Sound: UNKNOWN
+    /*30*/ level_cmd_show_dialog,                   // Sound: UNKNOWN
+    /*31*/ level_cmd_set_terrain_type,              // Sound: UNKNOWN
+    /*32*/ level_cmd_nop,                           // Sound: UNKNOWN
+    /*33*/ level_cmd_set_transition,                // Sound: UNKNOWN
+    /*34*/ level_cmd_set_blackout,                  // Sound: UNKNOWN
+    /*35*/ level_cmd_set_gamma,                     // Sound: UNKNOWN
+    /*36*/ level_cmd_set_music,                     // Sound: UNSAFE
+    /*37*/ level_cmd_set_menu_music,                // Sound: UNSAFE
+    /*38*/ level_cmd_fadeout_music,                 // Sound: UNSAFE
+    /*39*/ level_cmd_set_macro_objects,             // Sound: UNKNOWN
+    /*3A*/ level_cmd_3A,                            // Sound: UNKNOWN
+    /*3B*/ level_cmd_create_whirlpool,              // Sound: UNKNOWN
+    /*3C*/ level_cmd_get_or_set_var,                // Sound: UNKNOWN
 };
 
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
     sCurrentCmd = cmd;
 
-// Wait for audio to finish updating state
+// Wait for the audio thread to finish. We can skip
+// this if a flag is set.
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
-        LightEvent_Wait(&s_event_main);
+    if(s_thread5_wait_for_audio)
+        LightEvent_Wait(&s_event_main); 
+    else
+        LightEvent_Clear(&s_event_main);
 #endif
 #endif
 
@@ -848,15 +852,16 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     }
 
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
-    
-    profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
 
 // Signal 3DS audio to synthesize and play
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
-        LightEvent_Signal(&s_event_audio);
+    LightEvent_Signal(&s_event_audio);
 #endif
 #endif
+    
+    // Out here to minimize blocking time for the audio thread
+    profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
 
     init_render_image();
     render_game();

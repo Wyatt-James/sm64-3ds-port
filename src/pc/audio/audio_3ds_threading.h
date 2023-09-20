@@ -30,5 +30,12 @@
 extern LightEvent s_event_audio;
 extern LightEvent s_event_main;
 
+// This flag allows Thread5 to skip waiting for s_event_main.
+// It is managed by Thread5, from within the level script. This
+// improves performance by quite a bit, as it lets us safely
+// avoid blocking caused by the audio Thread when the level
+// script permits.
+extern bool s_thread5_wait_for_audio;
+
 #endif
 #endif
