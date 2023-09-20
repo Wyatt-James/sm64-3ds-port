@@ -1129,70 +1129,39 @@ static s32 play_mode_unused(void) {
     return 0;
 }
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-
-// 3DS version
+/**
+ * Updates the main game level.
+ */
 s32 update_level(void) {
     s32 changeLevel;
+
+    switch (sCurrPlayMode) {
+        case PLAY_MODE_NORMAL:
+            changeLevel = play_mode_normal();
+            break;
+        case PLAY_MODE_PAUSED:
+            changeLevel = play_mode_paused();
+            break;
+        case PLAY_MODE_CHANGE_AREA:
+            changeLevel = play_mode_change_area();
+            break;
+        case PLAY_MODE_CHANGE_LEVEL:
+            changeLevel = play_mode_change_level();
+            break;
+        case PLAY_MODE_FRAME_ADVANCE:
+            changeLevel = play_mode_frame_advance();
+            break;
+    }
 
     // This is safe within vanilla SM64, as update_level is ALWAYS called
     // from within a CALL_LOOP, from which the only way to exit is to change
     // level. If it were instead called alone, and we did not change level,
     // it could cause a race condition.
-    s_thread5_wait_for_audio = false;
-
-    switch (sCurrPlayMode) {
-        case PLAY_MODE_NORMAL:
-            changeLevel = play_mode_normal();
-            break;
-        case PLAY_MODE_PAUSED:
-            changeLevel = play_mode_paused();
-            break;
-        case PLAY_MODE_CHANGE_AREA:
-            changeLevel = play_mode_change_area();
-            break;
-        case PLAY_MODE_CHANGE_LEVEL:
-            changeLevel = play_mode_change_level();
-            break;
-        case PLAY_MODE_FRAME_ADVANCE:
-            changeLevel = play_mode_frame_advance();
-            break;
-    }
-
-    if (changeLevel) {
-        s_thread5_wait_for_audio = true;
-        reset_volume();
-        enable_background_sound();
-    }
-
-    return changeLevel;
-}
-
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+    s_thread5_wait_for_audio = changeLevel == 0 ? true : false;
 #endif
-#else
-
-// Non-3DS and 3DS-audio-disabled version
-s32 update_level(void) {
-    s32 changeLevel;
-
-    switch (sCurrPlayMode) {
-        case PLAY_MODE_NORMAL:
-            changeLevel = play_mode_normal();
-            break;
-        case PLAY_MODE_PAUSED:
-            changeLevel = play_mode_paused();
-            break;
-        case PLAY_MODE_CHANGE_AREA:
-            changeLevel = play_mode_change_area();
-            break;
-        case PLAY_MODE_CHANGE_LEVEL:
-            changeLevel = play_mode_change_level();
-            break;
-        case PLAY_MODE_FRAME_ADVANCE:
-            changeLevel = play_mode_frame_advance();
-            break;
-    }
+#endif
 
     if (changeLevel) {
         reset_volume();
@@ -1201,7 +1170,6 @@ s32 update_level(void) {
 
     return changeLevel;
 }
-#endif
 
 s32 init_level(void) {
 #ifdef TARGET_N3DS

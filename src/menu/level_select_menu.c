@@ -14,6 +14,12 @@
 #include "seq_ids.h"
 #include "sm64.h"
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+    #include "src/pc/audio/audio_3ds_threading.h"
+#endif
+#endif
+
 #define PRESS_START_DEMO_TIMER 800
 
 #define STUB_LEVEL(textname, _1, _2, _3, _4, _5, _6, _7, _8) textname,
@@ -207,5 +213,12 @@ s32 lvl_intro_update(s16 arg1, UNUSED s32 arg2) {
             retVar = level_select_input_loop();
             break;
     }
+
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+    s_thread5_wait_for_audio = retVar == 0 ? true : false;
+#endif
+#endif
+
     return retVar;
 }
