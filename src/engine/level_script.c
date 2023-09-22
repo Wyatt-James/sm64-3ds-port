@@ -832,33 +832,65 @@ static void (*LevelScriptJumpTable[])(void) = {
     /*3C*/ level_cmd_get_or_set_var,                // Sound: UNKNOWN
 };
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
     sCurrentCmd = cmd;
 
-// Wait for the audio thread to finish. We can skip
-// this if a flag is set.
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-    if(s_thread5_wait_for_audio)
-        LightEvent_Wait(&s_event_main); 
-    else
-        LightEvent_Clear(&s_event_main);
+    // Wait for the audio thread to finish if we need to.
+    if(s_wait_for_audio_thread_to_finish) {
+        while (s_audio_frames_queued > 0) {}
+    }
+
+    // Wait for audio to be ready for a frame
+    while (s_audio_frames_queued >= MAXIMUM_QUEUED_AUDIO_FRAMES) {}
+
+    // Execute the script
+    while (sScriptStatus == SCRIPT_RUNNING) {
+        LevelScriptJumpTable[sCurrentCmd->type]();
+
+        // Wait for the audio thread to finish if we need to.
+        if (s_wait_for_audio_thread_to_finish) {
+            while (s_audio_frames_queued > 0) {}
+            break;
+        }
+    }
+    
+    // Optimization: avoid checking vars redundantly
+    while (sScriptStatus == SCRIPT_RUNNING) {
+        LevelScriptJumpTable[sCurrentCmd->type]();
+    }
+
+    profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
+
+    // Wait for audio to finish, then wake it.
+    while (s_audio_frames_queued > 0) {} // WYATT_TODO Is this really necessary?
+    audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
+    AtomicIncrement(&s_audio_frames_queued);
+
+    init_render_image();
+    render_game();
+    end_master_display_list();
+    alloc_display_list(0);
+
+    return sCurrentCmd;
+}
+
 #endif
-#endif
+#else
+
+// Non-3DS and 3DS-non-audio
+struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
+    sScriptStatus = SCRIPT_RUNNING;
+    sCurrentCmd = cmd;
 
     while (sScriptStatus == SCRIPT_RUNNING) {
         LevelScriptJumpTable[sCurrentCmd->type]();
     }
 
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
-
-// Signal 3DS audio to synthesize and play
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-    LightEvent_Signal(&s_event_audio);
-#endif
-#endif
     
     // Out here to minimize blocking time for the audio thread
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
@@ -870,3 +902,4 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
 
     return sCurrentCmd;
 }
+#endif

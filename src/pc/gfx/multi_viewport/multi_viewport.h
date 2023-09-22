@@ -3,18 +3,12 @@
 
 // Data that is generally specified per-viewport
 
-#define VIEWPORT_SHOULD_CLEAR(MODE) (MODE & 0b01)
-
-// Determines when a display should be cleared automatically by the graphics API.
-// Bit 0 signifies clear.
-enum ViewportClearMode {
-    VIEW_CLEAR_OFF       = 0,   // 00: The viewport will not be cleared
-    VIEW_CLEAR_ON        = 1,   // 01: The viewport will be cleared before every frame
-    VIEW_CLEAR_OFF_ONCE  = 2,   // 10: The viewport will be cleared repeatedly, after the next frame
-    VIEW_CLEAR_ON_ONCE   = 3    // 11: The viewport will be cleared once, before the next frame
+enum ViewportClearBuffer
+{
+    VIEW_CLEAR_BUFFER_NONE  = 0,      // 00: The viewport will not have a buffer cleared.
+	VIEW_CLEAR_BUFFER_COLOR = 0b01,   // 01: The viewport's color buffer will be cleared
+	VIEW_CLEAR_BUFFER_DEPTH = 0b10,   // 10: The viewport's depth buffer will be cleared
+	VIEW_CLEAR_BUFFER_BOTH  = 0b11    // 11: The viewport's color and depth buffers will be cleared
 };
-
-// Updates the value of a ViewportClearMode.
-void updateClearMode(enum ViewportClearMode* e);
 
 #endif

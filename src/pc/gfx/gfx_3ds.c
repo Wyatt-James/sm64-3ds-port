@@ -121,17 +121,12 @@ static void gfx_3ds_update_stereoscopy(void)
 
 		gfx_config.useAA = false;
 		gfx_config.useWide = false;
-
-        gfx_screen_clear_flags.right = VIEW_CLEAR_ON;
 	} else
     {
         // default to true; this is different to initialisation where both are false
         gGfx3DEnabled = false;
 		gfx_config.useAA = true;
 		gfx_config.useWide = true;
-
-        // screen must be cleared once or crash
-        gfx_screen_clear_flags.right = VIEW_CLEAR_ON_ONCE;
 	}
 
     gBottomScreenNeedsRender = true;
@@ -247,7 +242,6 @@ static void gfx_3ds_handle_events(void)
     gfx_3ds_handle_touch();
 
     // if (prev > 0.0 > curr) OR (curr > 0.0 > prev)
-    // TODO can't we just check if they're different?
     float st = 0.0;
     if ((prevSliderLevel > st && gSliderLevel <= st) || (prevSliderLevel <= st && gSliderLevel > st))
     {
@@ -255,7 +249,7 @@ static void gfx_3ds_handle_events(void)
     }
 
     if (gBottomScreenNeedsRender)
-        gfx_screen_clear_flags.bottom = VIEW_CLEAR_ON_ONCE;
+        gfx_citro3d_set_viewport_clear_buffer(VIEW_BOTTOM_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 }
 
 float cpu_time, gpu_time;

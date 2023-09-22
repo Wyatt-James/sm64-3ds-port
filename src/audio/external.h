@@ -63,11 +63,4 @@ void audio_init(void); // in load.c
 struct SPTask *unused_80321460(void);
 #endif
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-// On 3DS, we split this out for synchronization reasons.
-void update_game_sound_wrapper_3ds();
-#endif
-#endif
-
 #endif // AUDIO_EXTERNAL_H

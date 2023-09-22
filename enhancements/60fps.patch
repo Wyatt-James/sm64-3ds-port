@@ -1993,6 +1993,5 @@ index 9d1fc44..970f4ba 100644
 +    patch_interpolations();
 +    send_display_list(gGfxSPTask);
 +    gfx_end_frame();
- #ifdef TARGET_N3DS
- #ifndef DISABLE_AUDIO
-     LightEvent_Wait(&s_event_main);
+
+// Removed a wait for 3DS audio here as it no longer exists

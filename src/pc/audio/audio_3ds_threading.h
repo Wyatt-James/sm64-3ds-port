@@ -27,15 +27,17 @@
 
 #include <3ds.h>
 
-extern LightEvent s_event_audio;
-extern LightEvent s_event_main;
+// Currently, the maximum is 1, which allows for one frame to
+// be synthesizing and one frame to be ticking on Thread5.
+#define MAXIMUM_QUEUED_AUDIO_FRAMES 1
 
-// This flag allows Thread5 to skip waiting for s_event_main.
-// It is managed by Thread5, from within the level script. This
-// improves performance by quite a bit, as it lets us safely
-// avoid blocking caused by the audio Thread when the level
-// script permits.
-extern bool s_thread5_wait_for_audio;
+// Controls when Thread5 is allowed to skip waiting for the
+// 3DS audio thread.
+extern bool s_wait_for_audio_thread_to_finish;
+
+// This tracks how many audio frames are queued.
+// Always <= MAXIMUM_QUEUED_AUDIO_FRAMES.
+extern volatile s32 s_audio_frames_queued;
 
 #endif
 #endif

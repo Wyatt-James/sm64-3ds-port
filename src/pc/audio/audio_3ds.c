@@ -67,9 +67,9 @@ static void audio_3ds_play(const uint8_t *buf, size_t len)
     sNextBuffer = (sNextBuffer + 1) % N3DS_DSP_DMA_BUFFER_COUNT;
 }
 
-static bool running = true;
-LightEvent s_event_audio, s_event_main;
-bool s_thread5_wait_for_audio = false;
+static volatile bool running = true;
+bool s_wait_for_audio_thread_to_finish = true;
+volatile s32 s_audio_frames_queued = 0;
 
 static void audio_3ds_loop()
 {
@@ -78,31 +78,27 @@ static void audio_3ds_loop()
         
     while (running)
     {
-        // Wait for Thread5
-        LightEvent_Wait(&s_event_audio);
+        // Wait for Thread5 to give us a frame of audio
+        // Spin waits are acceptable on 3DS as this is what LightEvent_Wait did anyway. There is no sleep function.
+        if (s_audio_frames_queued) {
+            
+            // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
+            u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
 
-        if (!running)
-            break;
-        
-        // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
-        u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
+            // Update audio state and synthesize to our audio buffer
+            for (int i = 0; i < 2; i++) {
+                create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
+            }
 
-        // Update sound system state and free Thread5
-        update_game_sound_wrapper_3ds();
+            // Note: this value might have been incremented by Thread5.
+            AtomicDecrement(&s_audio_frames_queued);
 
-        // Synthesize to our audio buffer
-        // If we could make this thread-safe with respect to
-        // the level script, it would improve performance a lot
-        for (int i = 0; i < 2; i++) {
-            create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
+            // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
+            audio_3ds_play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
         }
-        
-        // This must be after synthesis to avoid a race condition. A large-scale rewrite could fix this.
-        LightEvent_Signal(&s_event_main);
-
-        // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
-        audio_3ds_play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
     }
+
+    s_audio_frames_queued = -9999;
 }
 
 Thread threadId;
@@ -134,12 +130,6 @@ static bool audio_3ds_init()
 
     sNextBuffer = 0;
 
-    LightEvent_Init(&s_event_audio, RESET_ONESHOT);
-    LightEvent_Init(&s_event_main, RESET_ONESHOT);
-
-    // Ensures that the game does not hang if the event is waited before the sound thread ticks once.
-    LightEvent_Signal(&s_event_main);
-
     s32 prio = 0;
 
     int cpu;
@@ -169,13 +159,14 @@ static bool audio_3ds_init()
     return threadId != NULL;
 }
 
+// Stops the audio thread and waits for it to exit.
 static void audio_3ds_stop(void)
 {
     running = false;
-    LightEvent_Signal(&s_event_audio);
 
     if (threadId)
         threadJoin(threadId, U64_MAX);
+
     ndspExit();
 }
 

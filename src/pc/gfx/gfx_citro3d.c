@@ -13,6 +13,7 @@
 #include "gfx_rendering_api.h"
 
 #include "gfx_citro3d.h"
+#include "color_conversion.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
@@ -82,11 +83,29 @@ static int s2DMode;
 float iodZ = 8.0f;
 float iodW = 16.0f;
 
-struct ScreenFlags3DS gfx_screen_clear_flags = {
-    VIEW_CLEAR_ON,      // top
-    VIEW_CLEAR_ON,      // right (overwritten in gfx_3ds_update_stereoscopy)
-    VIEW_CLEAR_ON_ONCE  // bottom
-};
+// Determines the clear mode for the viewports.
+union {
+    struct {
+        enum ViewportClearBuffer top;
+        enum ViewportClearBuffer bottom;
+    } struc;
+    enum ViewportClearBuffer array[3];
+} screen_clear_bufs = {{
+    VIEW_CLEAR_BUFFER_NONE,      // top
+    VIEW_CLEAR_BUFFER_NONE       // bottom
+}};
+
+// Determines the clear colors for the viewports
+union {
+    struct {
+        u32 top;
+        u32 bottom;
+    } struc;
+    u32 array[3];
+} screen_clear_colors = {{
+    COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // top: 0x000000FF
+    COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // bottom: 0x000000FF
+}};
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
 {
@@ -830,24 +849,25 @@ static void gfx_citro3d_start_frame(void)
         sCurrentGfx3DSMode = gGfx3DSMode;
     }
 
+    enum ViewportClearBuffer clear_top = screen_clear_bufs.struc.top;
+    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.struc.bottom;
+
     // Clear top screen
-    if (VIEWPORT_SHOULD_CLEAR(gfx_screen_clear_flags.top))
-        C3D_RenderTargetClear(gTarget, C3D_CLEAR_DEPTH, 0x000000FF, 0xFFFFFFFF);
+    if (clear_top)
+        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
         
-    // Clear right eye view
+    // Clear right-eye view
     // We check gGfx3DSMode because clearing in 800px modes causes a crash.
-    if (gfx_screen_clear_flags.right &&
-         (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_DEPTH, 0x000000FF, 0xFFFFFFFF);
+    if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
+        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
 
     // Clear bottom screen only if it needs re-rendering.
-    if (VIEWPORT_SHOULD_CLEAR(gfx_screen_clear_flags.bottom))
-        C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+    if (clear_bottom)
+        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
 
-    // Update clear flags
-    updateClearMode(&gfx_screen_clear_flags.top);
-    updateClearMode(&gfx_screen_clear_flags.right);
-    updateClearMode(&gfx_screen_clear_flags.bottom);
+    // Reset screen clear buffers
+    screen_clear_bufs.struc.top = 
+    screen_clear_bufs.struc.bottom = VIEW_CLEAR_BUFFER_NONE;
 
     // reset model view matrix
     Mtx_Identity(&modelView);
@@ -913,7 +933,22 @@ static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
 
 static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    fog_color = (a << 24) | (b << 16) | (g << 8) | r;
+    fog_color = (a << 24) | (b << 16) | (g << 8) | r; // Why is this reversed? Weird endianness?
+}
+
+void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    screen_clear_colors.array[viewport] = COLOR_RGBA_PARAMS_TO_RGBA32(r, g, b, a);
+}
+
+void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color)
+{
+    screen_clear_colors.array[viewport] = color;
+}
+
+void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
+{
+    screen_clear_bufs.array[viewport] |= mode;
 }
 
 struct GfxRenderingAPI gfx_citro3d_api = {

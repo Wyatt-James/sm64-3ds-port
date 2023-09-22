@@ -208,7 +208,13 @@ s32 gAudioErrorFlags = 0;
 #endif
 
 // Poor naming. A better option would be sAudioNeedsTick.
-s32 sGameLoopTicked = 0;
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+        volatile s32 sGameLoopTicked = 0;
+#endif
+#else
+        s32 sGameLoopTicked = 0;
+#endif
 
 // Dialog sounds
 // The US difference is the sound for DIALOG_037 ("I win! You lose! Ha ha ha ha!
@@ -872,11 +878,7 @@ struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-
-// On 3DS, we split this out for Thread synchronization reasons
-void update_game_sound_wrapper_3ds() {
+void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioFrameCount++;
 
     // Update the sound system's state
@@ -884,10 +886,6 @@ void update_game_sound_wrapper_3ds() {
         update_game_sound();
         sGameLoopTicked = 0;
     }
-}
-
-// 3DS version
-void create_next_audio_buffer(s16 *samples, u32 num_samples) {
 
     // Use the sound system state to synthesize audio
     s32 writtenCmds;
@@ -896,27 +894,6 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
     decrease_sample_dma_ttls();
 }
-#endif
-#else
-
-// Non-3DS version
-void create_next_audio_buffer(s16 *samples, u32 num_samples) {
-    gAudioFrameCount++;
-
-    // Update the sound system's state
-    if (sGameLoopTicked != 0) {
-        update_game_sound();
-        sGameLoopTicked = 0;
-    }
-
-    // Use the sound system state to synthesize audio
-    s32 writtenCmds;
-    synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
-
-    gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
-    decrease_sample_dma_ttls(); // Non-3DS only
-}
-#endif
 #endif
 #endif
 

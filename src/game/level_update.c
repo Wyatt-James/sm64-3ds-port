@@ -1159,7 +1159,7 @@ s32 update_level(void) {
     // it could cause a race condition.
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
-    s_thread5_wait_for_audio = changeLevel == 0 ? true : false;
+    s_wait_for_audio_thread_to_finish = changeLevel == 0 ? true : false;
 #endif
 #endif
 

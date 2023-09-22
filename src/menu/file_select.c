@@ -3283,7 +3283,7 @@ s32 lvl_update_obj_and_load_file_selected(UNUSED s32 arg, UNUSED s32 unused) {
 
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
-    s_thread5_wait_for_audio = sSelectedFileNum == 0 ? true : false;
+    s_wait_for_audio_thread_to_finish = sSelectedFileNum == 0 ? true : false;
 #endif
 #endif
 

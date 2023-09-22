@@ -21,6 +21,11 @@
 #include "thread6.h"
 #include <prevent_bss_reordering.h>
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/color_conversion.h"
+#include "src/pc/gfx/gfx_citro3d.h"
+#endif
+
 // FIXME: I'm not sure all of these variables belong in this file, but I don't
 // know of a good way to split them
 struct Controller gControllers[3];
@@ -114,7 +119,54 @@ void my_rsp_init(void) {
 #endif
 }
 
+/** Sets up the final framebuffer image. */
+void display_frame_buffer(void) {
+    gDPPipeSync(gDisplayListHead++);
+
+    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
+    gDPSetColorImage(gDisplayListHead++, G_IM_FMT_RGBA, G_IM_SIZ_16b, SCREEN_WIDTH,
+                     gPhysicalFrameBuffers[frameBufferIndex]);
+    gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, BORDER_HEIGHT, SCREEN_WIDTH,
+                  SCREEN_HEIGHT - BORDER_HEIGHT);
+}
+
+#ifdef TARGET_N3DS
+
+// 3DS version
+void clear_frame_buffer(s32 color) {
+    u32 color_3ds = COLOR_RGBA_S32_N64_TO_RGBA32_SCALED(color);
+
+    gfx_citro3d_set_clear_color_RGBA32(VIEW_MAIN_SCREEN, color_3ds);
+    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
+}
+
+// 3DS version
+void clear_z_buffer(void) {
+    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
+}
+
+#else
+
+/** Clears the framebuffer, allowing it to be overwritten. */
+// Non-3DS version
+void clear_frame_buffer(s32 color) {
+    gDPPipeSync(gDisplayListHead++);
+
+    gDPSetRenderMode(gDisplayListHead++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
+    gDPSetCycleType(gDisplayListHead++, G_CYC_FILL);
+
+    gDPSetFillColor(gDisplayListHead++, color);
+    gDPFillRectangle(gDisplayListHead++,
+                     GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(0), BORDER_HEIGHT,
+                     GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(0) - 1, SCREEN_HEIGHT - BORDER_HEIGHT - 1);
+
+    gDPPipeSync(gDisplayListHead++);
+
+    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
+}
+
 /** Clear the Z buffer. */
+// Unused on 3DS.
 void clear_z_buffer(void) {
     gDPPipeSync(gDisplayListHead++);
 
@@ -128,41 +180,7 @@ void clear_z_buffer(void) {
     gDPFillRectangle(gDisplayListHead++, 0, BORDER_HEIGHT, SCREEN_WIDTH - 1,
                      SCREEN_HEIGHT - 1 - BORDER_HEIGHT);
 }
-
-/** Sets up the final framebuffer image. */
-void display_frame_buffer(void) {
-    gDPPipeSync(gDisplayListHead++);
-
-    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
-    gDPSetColorImage(gDisplayListHead++, G_IM_FMT_RGBA, G_IM_SIZ_16b, SCREEN_WIDTH,
-                     gPhysicalFrameBuffers[frameBufferIndex]);
-    gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, BORDER_HEIGHT, SCREEN_WIDTH,
-                  SCREEN_HEIGHT - BORDER_HEIGHT);
-}
-
-/** Clears the framebuffer, allowing it to be overwritten. */
-void clear_frame_buffer(s32 color) {
-    gDPPipeSync(gDisplayListHead++);
-
-    gDPSetRenderMode(gDisplayListHead++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
-    gDPSetCycleType(gDisplayListHead++, G_CYC_FILL);
-
-    gDPSetFillColor(gDisplayListHead++, color);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 1);
 #endif
-    gDPFillRectangle(gDisplayListHead++,
-                     GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(0), BORDER_HEIGHT,
-                     GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(0) - 1, SCREEN_HEIGHT - BORDER_HEIGHT - 1);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 0);
-#endif
-    gDPPipeSync(gDisplayListHead++);
-
-    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
-}
 
 /** Clears and initializes the viewport. */
 void clear_viewport(Vp *viewport, s32 color) {
@@ -260,7 +278,10 @@ void init_render_image(void) {
     move_segment_table_to_dmem();
     my_rdp_init();
     my_rsp_init();
+
     clear_z_buffer();
+
+    // This could be disabled for most stages, but some scenes require it.
     display_frame_buffer();
 }
 
