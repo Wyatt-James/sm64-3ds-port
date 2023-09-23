@@ -16,6 +16,7 @@
 #endif
 
 #define N3DS_DSP_DMA_BUFFER_COUNT   4
+#define N3DS_DSP_DMA_BUFFER_SIZE   4096 * 4
 
 static bool is_new_n3ds()
 {
@@ -24,6 +25,9 @@ static bool is_new_n3ds()
 }
 
 extern void create_next_audio_buffer(s16 *samples, u32 num_samples);
+
+// Used by Thread5 exclusively
+bool s_wait_for_audio_thread_to_finish = true;
 
 static int sNextBuffer;
 static volatile ndspWaveBuf sDspBuffers[N3DS_DSP_DMA_BUFFER_COUNT];
@@ -45,35 +49,55 @@ static int audio_3ds_get_desired_buffered(void)
     return 1100;
 }
 
-static void audio_3ds_play(const uint8_t *buf, size_t len)
+// Returns true if the next buffer is FREE or DONE.
+static bool audio_3ds_next_buffer_is_ready()
 {
-    if (len > 4096 * 4)
+    u8 status = sDspBuffers[sNextBuffer].status;
+    return status == NDSP_WBUF_FREE || status == NDSP_WBUF_DONE;
+}
+
+// Copies len_to_copy bytes from src to the audio buffer, then submits len_total to play. 
+static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len_to_copy)
+{
+    if (len_total > N3DS_DSP_DMA_BUFFER_SIZE)
         return;
     
-    // If the next buffer hasn't yet been played, return.
-    if (sDspBuffers[sNextBuffer].status != NDSP_WBUF_FREE &&
-        sDspBuffers[sNextBuffer].status != NDSP_WBUF_DONE)
-        return;
+    // Wait for the next audio buffer to free. This avoids discarding
+    // buffers if we outrun the DSP slightly. The DSP should consume
+    // buffer at a constant rate, so waiting should be ok. This
+    // technically slows down synthesis slightly.
+    while (!audio_3ds_next_buffer_is_ready()) {
+            // Spin wait
+    }
         
-    sDspBuffers[sNextBuffer].nsamples = len / 4;
+    sDspBuffers[sNextBuffer].nsamples = len_total / 4;
     sDspBuffers[sNextBuffer].status = NDSP_WBUF_FREE;
-    ndspChnWaveBufAdd(0, &sDspBuffers[sNextBuffer]);
+    ndspChnWaveBufAdd(0, (ndspWaveBuf*) &sDspBuffers[sNextBuffer]);
 
     // Copy the data to be played
     s16* dst = (s16*)sDspBuffers[sNextBuffer].data_vaddr;
-    memcpy(dst, buf, len);
-    DSP_FlushDataCache(dst, len);
+
+    if (len_to_copy)
+        memcpy(dst, src, len_to_copy);
+
+    DSP_FlushDataCache(dst, len_total);
 
     sNextBuffer = (sNextBuffer + 1) % N3DS_DSP_DMA_BUFFER_COUNT;
 }
 
+// Plays len bytes from buf in sNextBuffer, if it is available.
+static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
+{
+    if (audio_3ds_next_buffer_is_ready())
+        audio_3ds_play_fast(buf, len, len);
+}
+
 static volatile bool running = true;
-bool s_wait_for_audio_thread_to_finish = true;
 volatile s32 s_audio_frames_queued = 0;
 
 static void audio_3ds_loop()
 {
-    // Statically allocate to improve performance
+    // Statically allocate 2 buffers of 2*SAMPLES_HIGH bytes to improve performance
     s16 audio_buffer[SAMPLES_HIGH * 2 * 2];
         
     while (running)
@@ -85,16 +109,29 @@ static void audio_3ds_loop()
             // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
             u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
 
+            size_t samples_to_copy = 0;
+            s16* direct_buf = (s16*)sDspBuffers[sNextBuffer].data_vaddr;
+
             // Update audio state and synthesize to our audio buffer
             for (int i = 0; i < 2; i++) {
-                create_next_audio_buffer(audio_buffer + i * (num_audio_samples * 2), num_audio_samples);
+                s16* base_addr;
+
+                // If the next buffer is ready, skip the intermediate copy for this chunk.
+                if (audio_3ds_next_buffer_is_ready()) {
+                    base_addr = direct_buf + i * (num_audio_samples * 2);
+                } else {
+                    base_addr = audio_buffer + i * (num_audio_samples * 2);
+                    samples_to_copy += num_audio_samples;
+                }
+
+                create_next_audio_buffer(base_addr, num_audio_samples);
             }
 
             // Note: this value might have been incremented by Thread5.
             AtomicDecrement(&s_audio_frames_queued);
 
             // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
-            audio_3ds_play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
+            audio_3ds_play_fast((u8 *)audio_buffer, 2 * num_audio_samples * 4, 2 * (samples_to_copy) * 4);
         }
     }
 
@@ -121,10 +158,10 @@ static bool audio_3ds_init()
     mix[1] = 1.0;
     ndspChnSetMix(0, mix);
 
-    u8* bufferData = linearAlloc(4096 * 4 * N3DS_DSP_DMA_BUFFER_COUNT);
+    u8* bufferData = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
     for (int i = 0; i < N3DS_DSP_DMA_BUFFER_COUNT; i++)
     {
-        sDspBuffers[i].data_vaddr = &bufferData[i * 4096 * 4];
+        sDspBuffers[i].data_vaddr = &bufferData[i * N3DS_DSP_DMA_BUFFER_SIZE];
         sDspBuffers[i].nsamples = 0;
         sDspBuffers[i].status = NDSP_WBUF_FREE;
     }
@@ -176,7 +213,7 @@ struct AudioAPI audio_3ds =
     audio_3ds_init,
     audio_3ds_buffered,
     audio_3ds_get_desired_buffered,
-    audio_3ds_play,
+    audio_3ds_play_ext,
     audio_3ds_stop
 };
 

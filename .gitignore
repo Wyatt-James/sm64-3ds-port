@@ -30,7 +30,13 @@
 
 # scripts and script support
 *.sh
-/build_flag_log.txt
+/build_flags.txt
+/build_scripts
+/build_scripts/*
+
+# logging
+/build_logs
+/build_logs/*
 
 # Debug files
 *.dSYM/
