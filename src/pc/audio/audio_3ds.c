@@ -26,7 +26,7 @@ static bool is_new_n3ds()
 extern void create_next_audio_buffer(s16 *samples, u32 num_samples);
 
 static int sNextBuffer;
-static ndspWaveBuf sDspBuffers[N3DS_DSP_DMA_BUFFER_COUNT];
+static volatile ndspWaveBuf sDspBuffers[N3DS_DSP_DMA_BUFFER_COUNT];
 
 static int audio_3ds_buffered(void)
 {
@@ -98,6 +98,7 @@ static void audio_3ds_loop()
         }
     }
 
+    // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_queued = -9999;
 }
 
