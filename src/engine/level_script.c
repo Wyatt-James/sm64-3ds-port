@@ -865,11 +865,12 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
 
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
 
-    // Wait for audio to finish, then wake it.
-    while (s_audio_frames_queued > 0) {} // WYATT_TODO Is this really necessary?
+    // Wait for the audio thread to update state, then queue another frame
+    while (!s_audio_has_updated_game_sound) {}
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
     AtomicIncrement(&s_audio_frames_queued);
 
+    
     init_render_image();
     render_game();
     end_master_display_list();

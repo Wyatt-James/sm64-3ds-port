@@ -208,6 +208,7 @@ s32 gAudioErrorFlags = 0;
 #endif
 
 // Poor naming. A better option would be sAudioNeedsTick.
+// Volatile only if 3DS + audio
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
         volatile s32 sGameLoopTicked = 0;
@@ -768,7 +769,7 @@ void func_eu_802e9bec(s32 player, s32 channel, s32 arg2) {
     func_802ad770(0x08000000 | (player & 0xff) << 16 | (channel & 0xff) << 8, (s8) arg2);
 }
 
-#else
+#else // VERSION_EU
 
 #ifdef TARGET_N64
 struct SPTask *create_next_audio_frame_task(void) {
@@ -873,10 +874,44 @@ struct SPTask *create_next_audio_frame_task(void) {
     decrease_sample_dma_ttls(); // N64 only
     return gAudioTask;
 }
-#else
+
+#else // TARGET_N64
+
 struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
+
+// At this point, we are non-N64, non-european
+
+// If we're on 3DS with audio enabled, use modified functions.
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+
+bool update_game_sound_wrapper_3ds() {
+    if (sGameLoopTicked != 0) {
+        update_game_sound();
+        sGameLoopTicked = 0;
+        return true;
+    }
+
+    return false;
+}
+
+// 3DS Version
+void create_next_audio_buffer(s16 *samples, u32 num_samples) {
+    gAudioFrameCount++;
+
+    // Use the sound system state to synthesize audio
+    s32 writtenCmds;
+    synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
+
+    gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
+    decrease_sample_dma_ttls();
+}
+
+// Else, if audio is disabled, or we aren't on 3DS, use stock PC functions.
+#endif // DISABLE_AUDIO
+#else  // TARGET_N3DS
 
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioFrameCount++;
@@ -894,8 +929,9 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
     decrease_sample_dma_ttls();
 }
-#endif
-#endif
+#endif // TARGET_N3DS_ELSE
+#endif // TARGET_N64_ELSE
+#endif // VERSION_EU_ELSE
 
 void play_sound(s32 soundBits, f32 *pos) {
     sSoundRequests[sSoundRequestCount].soundBits = soundBits;

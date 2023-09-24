@@ -3,6 +3,12 @@
 
 #include <PR/ultratypes.h>
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+#include <stdbool.h>
+#endif
+#endif
+
 #include "types.h"
 
 // Sequence arguments, passed to play_sequence. seqId may be bit-OR'ed with
@@ -61,6 +67,12 @@ void audio_init(void); // in load.c
 
 #ifdef VERSION_EU
 struct SPTask *unused_80321460(void);
+#endif
+
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+bool update_game_sound_wrapper_3ds();
+#endif
 #endif
 
 #endif // AUDIO_EXTERNAL_H
