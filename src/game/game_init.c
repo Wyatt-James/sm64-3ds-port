@@ -145,6 +145,21 @@ void clear_z_buffer(void) {
     gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
 }
 
+/** Clears and initializes the viewport. */
+void clear_viewport(Vp *viewport, s32 color) {
+    s16 vpUlx = (viewport->vp.vtrans[0] - viewport->vp.vscale[0]) / 4 + 1;
+    s16 vpUly = (viewport->vp.vtrans[1] - viewport->vp.vscale[1]) / 4 + 1;
+    s16 vpLrx = (viewport->vp.vtrans[0] + viewport->vp.vscale[0]) / 4 - 2;
+    s16 vpLry = (viewport->vp.vtrans[1] + viewport->vp.vscale[1]) / 4 - 2;
+
+#ifdef WIDESCREEN
+    vpUlx = GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(vpUlx);
+    vpLrx = GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(SCREEN_WIDTH - vpLrx);
+#endif
+
+    clear_frame_buffer(color);
+}
+
 #else
 
 /** Clears the framebuffer, allowing it to be overwritten. */
@@ -166,7 +181,7 @@ void clear_frame_buffer(s32 color) {
 }
 
 /** Clear the Z buffer. */
-// Unused on 3DS.
+// Non-3DS version
 void clear_z_buffer(void) {
     gDPPipeSync(gDisplayListHead++);
 
@@ -180,9 +195,9 @@ void clear_z_buffer(void) {
     gDPFillRectangle(gDisplayListHead++, 0, BORDER_HEIGHT, SCREEN_WIDTH - 1,
                      SCREEN_HEIGHT - 1 - BORDER_HEIGHT);
 }
-#endif
 
 /** Clears and initializes the viewport. */
+// Non-3DS version
 void clear_viewport(Vp *viewport, s32 color) {
     s16 vpUlx = (viewport->vp.vtrans[0] - viewport->vp.vscale[0]) / 4 + 1;
     s16 vpUly = (viewport->vp.vtrans[1] - viewport->vp.vscale[1]) / 4 + 1;
@@ -200,19 +215,12 @@ void clear_viewport(Vp *viewport, s32 color) {
     gDPSetCycleType(gDisplayListHead++, G_CYC_FILL);
 
     gDPSetFillColor(gDisplayListHead++, color);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 1);
-#endif
     gDPFillRectangle(gDisplayListHead++, vpUlx, vpUly, vpLrx, vpLry);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 0);
-#endif
     gDPPipeSync(gDisplayListHead++);
 
     gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
 }
+#endif
 
 /** Draws the horizontal screen borders */
 void draw_screen_borders(void) {
