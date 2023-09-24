@@ -913,6 +913,7 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
 #endif // DISABLE_AUDIO
 #else  // TARGET_N3DS
 
+// Non-3DS Version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioFrameCount++;
 
