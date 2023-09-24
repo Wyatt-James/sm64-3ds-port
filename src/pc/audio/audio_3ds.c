@@ -70,10 +70,6 @@ static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len
     while (!audio_3ds_next_buffer_is_ready()) {
             // Spin wait
     }
-        
-    sDspBuffers[sNextBuffer].nsamples = len_total / 4;
-    sDspBuffers[sNextBuffer].status = NDSP_WBUF_FREE;
-    ndspChnWaveBufAdd(0, (ndspWaveBuf*) &sDspBuffers[sNextBuffer]);
 
     // Copy the data to be played
     s16* dst = (s16*)sDspVAddrs[sNextBuffer];
@@ -82,6 +78,11 @@ static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len
         memcpy(dst, src, len_to_copy);
 
     DSP_FlushDataCache(dst, len_total);
+    
+    // Actually play the data
+    sDspBuffers[sNextBuffer].nsamples = len_total / 4;
+    sDspBuffers[sNextBuffer].status = NDSP_WBUF_FREE;
+    ndspChnWaveBufAdd(0, (ndspWaveBuf*) &sDspBuffers[sNextBuffer]);
 
     sNextBuffer = (sNextBuffer + 1) % N3DS_DSP_DMA_BUFFER_COUNT;
 }
