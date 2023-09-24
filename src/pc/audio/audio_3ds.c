@@ -31,6 +31,7 @@ bool s_wait_for_audio_thread_to_finish = true;
 
 static int sNextBuffer;
 static volatile ndspWaveBuf sDspBuffers[N3DS_DSP_DMA_BUFFER_COUNT];
+static void* sDspVAddrs[N3DS_DSP_DMA_BUFFER_COUNT];
 
 static int audio_3ds_buffered(void)
 {
@@ -75,7 +76,7 @@ static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len
     ndspChnWaveBufAdd(0, (ndspWaveBuf*) &sDspBuffers[sNextBuffer]);
 
     // Copy the data to be played
-    s16* dst = (s16*)sDspBuffers[sNextBuffer].data_vaddr;
+    s16* dst = (s16*)sDspVAddrs[sNextBuffer];
 
     if (len_to_copy)
         memcpy(dst, src, len_to_copy);
@@ -111,7 +112,7 @@ static void audio_3ds_loop()
             u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
 
             size_t samples_to_copy = 0;
-            s16* direct_buf = (s16*)sDspBuffers[sNextBuffer].data_vaddr;
+            s16* direct_buf = (s16*)sDspVAddrs[sNextBuffer];
             
             s_audio_has_updated_game_sound = update_game_sound_wrapper_3ds();
 
@@ -164,6 +165,7 @@ static bool audio_3ds_init()
     u8* bufferData = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
     for (int i = 0; i < N3DS_DSP_DMA_BUFFER_COUNT; i++)
     {
+        sDspVAddrs[i] = &bufferData[i * N3DS_DSP_DMA_BUFFER_SIZE];
         sDspBuffers[i].data_vaddr = &bufferData[i * N3DS_DSP_DMA_BUFFER_SIZE];
         sDspBuffers[i].nsamples = 0;
         sDspBuffers[i].status = NDSP_WBUF_FREE;
