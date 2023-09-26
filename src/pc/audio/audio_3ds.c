@@ -100,8 +100,9 @@ volatile bool s_audio_has_updated_game_sound = true;
 
 static void audio_3ds_loop()
 {
-    // Statically allocate 2 buffers of 2*SAMPLES_HIGH bytes to improve performance
-    s16 audio_buffer[SAMPLES_HIGH * 2 * 2];
+    const u8 nChannels = 2;
+    // Statically allocate 2 buffers of nChannels*SAMPLES_HIGH bytes to improve performance
+    s16 audio_buffer[SAMPLES_HIGH * 2 * nChannels];
         
     while (running)
     {
@@ -123,9 +124,9 @@ static void audio_3ds_loop()
 
                 // If the next buffer is ready, skip the intermediate copy for this chunk.
                 if (audio_3ds_next_buffer_is_ready()) {
-                    base_addr = direct_buf + i * (num_audio_samples * 2);
+                    base_addr = direct_buf + i * (num_audio_samples * nChannels);
                 } else {
-                    base_addr = audio_buffer + i * (num_audio_samples * 2);
+                    base_addr = audio_buffer + i * (num_audio_samples * nChannels);
                     samples_to_copy += num_audio_samples;
                 }
 
@@ -136,7 +137,7 @@ static void audio_3ds_loop()
             AtomicDecrement(&s_audio_frames_queued);
 
             // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
-            audio_3ds_play_fast((u8 *)audio_buffer, 2 * num_audio_samples * 4, 2 * (samples_to_copy) * 4);
+            audio_3ds_play_fast((u8 *)audio_buffer, nChannels * num_audio_samples * 4, nChannels * samples_to_copy * 4);
         }
     }
 
