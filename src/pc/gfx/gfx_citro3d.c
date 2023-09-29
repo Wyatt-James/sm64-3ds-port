@@ -83,20 +83,29 @@ static int s2DMode;
 float iodZ = 8.0f;
 float iodW = 16.0f;
 
-// Determines the clear mode for the viewports.
-union {
+// Data storage type for the screen clear buf configs
+union ScreenClearBufConfig3ds {
     struct {
         enum ViewportClearBuffer top;
         enum ViewportClearBuffer bottom;
     } struc;
     enum ViewportClearBuffer array[3];
-} screen_clear_bufs = {{
+};
+
+// Determines the clear mode for the viewports.
+static union ScreenClearBufConfig3ds screen_clear_bufs = {{
+    VIEW_CLEAR_BUFFER_NONE,      // top
+    VIEW_CLEAR_BUFFER_NONE       // bottom
+}};
+
+// Used for compatibility with 60fps patches
+static union ScreenClearBufConfig3ds saved_screen_clear_bufs = {{
     VIEW_CLEAR_BUFFER_NONE,      // top
     VIEW_CLEAR_BUFFER_NONE       // bottom
 }};
 
 // Determines the clear colors for the viewports
-union {
+static union {
     struct {
         u32 top;
         u32 bottom;
@@ -865,7 +874,7 @@ static void gfx_citro3d_start_frame(void)
     if (clear_bottom)
         C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
 
-    // Reset screen clear buffers
+    // Reset screen clear buffer flags
     screen_clear_bufs.struc.top = 
     screen_clear_bufs.struc.bottom = VIEW_CLEAR_BUFFER_NONE;
 
@@ -949,6 +958,18 @@ void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color)
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
 {
     screen_clear_bufs.array[viewport] |= mode;
+}
+
+// Save current screen clear buffer flags (used for 60fps patch compatibility)
+void gfx_citro3d_save_viewport_clear_buffer_flags()
+{
+    memcpy(saved_screen_clear_bufs.array, screen_clear_bufs.array, sizeof(saved_screen_clear_bufs.array));
+}
+
+// Restore saved screen clear buffer flags (used for 60fps patch compatibility)
+void gfx_citro3d_restore_viewport_clear_buffer_flags()
+{
+    memcpy(screen_clear_bufs.array, saved_screen_clear_bufs.array, sizeof(screen_clear_bufs.array));
 }
 
 struct GfxRenderingAPI gfx_citro3d_api = {
