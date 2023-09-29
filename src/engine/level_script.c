@@ -893,7 +893,6 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
 
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
     
-    // Out here to minimize blocking time for the audio thread
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
 
     init_render_image();
