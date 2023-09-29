@@ -155,6 +155,26 @@ void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
     }
 }
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+
+// 3DS Version
+void aInterleaveImpl(uint16_t left, uint16_t right) {
+    const int count = ROUND_UP_16(rspa.nbytes) / sizeof(int16_t) / 8;
+    int16_t *l = rspa.buf.as_s16 + left / sizeof(int16_t);
+    int16_t *r = rspa.buf.as_s16 + right / sizeof(int16_t);
+    int16_t *d = rspa.buf.as_s16 + rspa.out / sizeof(int16_t);
+
+    for (int i = count * 8; i != 0; i--) {
+        *d++ = *l++;
+        *d++ = *r++;
+    }
+}
+
+#endif
+#else
+
+// Non-3DS and 3DS-non-audio version
 void aInterleaveImpl(uint16_t left, uint16_t right) {
     int count = ROUND_UP_16(rspa.nbytes) / sizeof(int16_t) / 8;
     int16_t *l = rspa.buf.as_s16 + left / sizeof(int16_t);
@@ -197,6 +217,8 @@ void aInterleaveImpl(uint16_t left, uint16_t right) {
     }
 }
 
+#endif
+
 void aDMEMMoveImpl(uint16_t in_addr, uint16_t out_addr, int nbytes) {
     nbytes = ROUND_UP_16(nbytes);
     memmove(rspa.buf.as_u8 + out_addr, rspa.buf.as_u8 + in_addr, nbytes);
@@ -206,6 +228,7 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
     rspa.adpcm_loop_state = adpcm_loop_state;
 }
 
+// Decompresses ADPCM data
 void aADPCMdecImpl(uint8_t flags, ADPCM_STATE state) {
 #if HAS_SSE41
     const __m128i tblrev = _mm_setr_epi8(12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1, -1, -1);
