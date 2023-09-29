@@ -805,7 +805,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
 
 static void gfx_citro3d_init(void)
 {
-    sVShaderDvlb = DVLB_ParseFile((u32*)shader_shbin, shader_shbin_size);
+    sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader_shbin, shader_shbin_size);
     shaderProgramInit(&sShaderProgram);
     shaderProgramSetVsh(&sShaderProgram, &sVShaderDvlb->DVLE[0]);
     C3D_BindProgram(&sShaderProgram);
