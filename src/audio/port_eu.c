@@ -22,6 +22,12 @@ typedef u16 FadeT;
 typedef s32 FadeT;
 #endif
 
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+#include <stdbool.h>
+#endif
+#endif
+
 extern volatile u8 gAudioResetStatus;
 extern u8 gAudioResetPresetIdToLoad;
 extern OSMesgQueue *OSMesgQueues[];
@@ -135,6 +141,16 @@ struct SPTask *create_next_audio_frame_task(void) {
 struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
+
+#ifdef TARGET_N3DS
+#ifndef DISABLE_AUDIO
+
+// Stub on EU
+bool update_game_sound_wrapper_3ds() {
+    return true;
+}
+
+// 3DS Version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     s32 writtenCmds;
     OSMesg msg;
@@ -156,6 +172,34 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
     gAudioRandom = gAudioRandom + writtenCmds / 8;
 }
+
+// Else, if audio is disabled, or we aren't on 3DS, use stock PC functions.
+#endif // DISABLE_AUDIO
+#else  // TARGET_N3DS
+
+// (EU) Non-3DS and 3DS-non-audio version
+void create_next_audio_buffer(s16 *samples, u32 num_samples) {
+    s32 writtenCmds;
+    OSMesg msg;
+    gAudioFrameCount++;
+    decrease_sample_dma_ttls();
+    if (osRecvMesg(OSMesgQueues[2], &msg, 0) != -1) {
+        gAudioResetPresetIdToLoad = (u8) (s32) msg;
+        gAudioResetStatus = 5;
+    }
+
+    if (gAudioResetStatus != 0) {
+        audio_reset_session();
+        gAudioResetStatus = 0;
+    }
+    if (osRecvMesg(OSMesgQueues[1], &msg, OS_MESG_NOBLOCK) != -1) {
+        func_802ad7ec((u32) msg);
+    }
+    synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
+    gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
+    gAudioRandom = gAudioRandom + writtenCmds / 8;
+}
+#endif
 #endif
 
 void eu_process_audio_cmd(struct EuAudioCmd *cmd) {
