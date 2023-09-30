@@ -1819,7 +1819,7 @@ index 64ee411..4ac4321 100644
 +#include "pc/controller/controller_3ds.h"
  
  #ifdef TARGET_N3DS
- #ifndef DISABLE_AUDIO
+ #include "src/pc/gfx/color_conversion.h"
 @@ -629,6 +631,7 @@ void thread5_game_loop(UNUSED void *arg) {
  
      play_music(SEQ_PLAYER_SFX, SEQUENCE_ARGS(0, SEQ_SOUND_PLAYER), 0);

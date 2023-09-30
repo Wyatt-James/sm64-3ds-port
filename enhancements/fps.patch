@@ -33,8 +33,8 @@ index 64ee411..1887cfb 100644
   * Initializes the Reality Display Processor (RDP).
   * This function initializes settings such as texture filtering mode,
 @@ -670,7 +693,7 @@ void game_loop_one_iteration(void) {
- #endif
- #endif
+         levelCommandAddr = level_script_execute(levelCommandAddr);
+ 
          display_and_vsync();
 -
 +        render_fps();
