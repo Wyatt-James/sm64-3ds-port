@@ -10,6 +10,8 @@
 #include "audio_3ds.h"
 #include "src/audio/external.h"
 
+#include "src/pc/profiler_3ds.h"
+
 #ifdef VERSION_EU
 #define SAMPLES_HIGH 656
 #define SAMPLES_LOW 640
@@ -70,9 +72,8 @@ static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len
     // buffers if we outrun the DSP slightly. The DSP should consume
     // buffer at a constant rate, so waiting should be ok. This
     // technically slows down synthesis slightly.
-    while (!audio_3ds_next_buffer_is_ready()) {
-            // Spin wait
-    }
+    while (!audio_3ds_next_buffer_is_ready())
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
 
     // Copy the data to be played
     s16* dst = (s16*)sDspVAddrs[sNextBuffer];
@@ -110,9 +111,8 @@ static void audio_3ds_loop()
     while (running)
     {
         // Wait for Thread5 to give us a frame of audio
-        // Spin waits are acceptable on 3DS as this is what LightEvent_Wait did anyway. There is no sleep function.
         if (s_audio_frames_queued) {
-            
+
             // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
             u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
 
@@ -120,6 +120,8 @@ static void audio_3ds_loop()
             s16* direct_buf = (s16*)sDspVAddrs[sNextBuffer];
             
             s_audio_has_updated_game_sound = update_game_sound_wrapper_3ds();
+            
+            profiler_reset();
 
             // Update audio state and synthesize to our audio buffer
             for (int i = 0; i < 2; i++) {
@@ -135,12 +137,16 @@ static void audio_3ds_loop()
 
                 create_next_audio_buffer(base_addr, num_audio_samples);
             }
+            
+            profiler_snoop(0);
 
             // Note: this value might have been incremented by Thread5.
             AtomicDecrement(&s_audio_frames_queued);
 
             // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
             audio_3ds_play_fast((u8 *)audio_buffer, nChannels * num_audio_samples * 4, nChannels * samples_to_copy * 4);
+        } else {
+            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
         }
     }
 

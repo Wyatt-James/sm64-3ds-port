@@ -11,7 +11,7 @@
 
 // hack for redefinition of types in libctru
 // All 3DS includes must be done inside of an equivalent
-// #define/undef block to avoid type redefinition.
+// #define/undef block to avoid type redefinition issues.
 #define u64 __3ds_u64
 #define s64 __3ds_s64
 #define u32 __3ds_u32

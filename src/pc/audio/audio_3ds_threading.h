@@ -3,10 +3,12 @@
 #ifndef GFX_3DS_AUDIO_THREADING_H
 #define GFX_3DS_AUDIO_THREADING_H
 
+#define N3DS_AUDIO_ENABLE_SLEEP_FUNC 1
+
 // I hate this library
 // hack for redefinition of types in libctru
 // All 3DS includes must be done inside of an equivalent
-// #define/undef block to avoid type redefinition.
+// #define/undef block to avoid type redefinition issues.
 #define u64 __3ds_u64
 #define s64 __3ds_s64
 #define u32 __3ds_u32
@@ -19,6 +21,7 @@
 #define s8 __3ds_s8
 #include <3ds/types.h>
 #include <3ds.h>
+#include <3ds/svc.h>
 #undef u64
 #undef s64
 #undef u32
@@ -32,14 +35,24 @@
 
 // Currently, the maximum is 1, which allows for one frame to
 // be synthesizing and one frame to be ticking on Thread5.
-#define MAXIMUM_QUEUED_AUDIO_FRAMES 1
+#define N3DS_AUDIO_MAXIMUM_QUEUED_FRAMES 1
+
+// Audio sleep duration of 0.001ms. May sleep for longer.
+#define N3DS_AUDIO_SLEEP_DURATION_NANOS 1000
+
+// Allows us to conveniently replace 3DS sleep functions
+#if PROFILER_3DS_ENABLE == 1
+#define N3DS_AUDIO_SLEEP_FUNC(time) svcSleepThread(time)
+#else
+#define N3DS_AUDIO_SLEEP_FUNC(time) do {} while (0)
+#endif
 
 // Controls when Thread5 is allowed to skip waiting for the
 // 3DS audio thread.
 extern bool s_wait_for_audio_thread_to_finish;
 
 // This tracks how many audio frames are queued.
-// Always <= MAXIMUM_QUEUED_AUDIO_FRAMES.
+// Always <= N3DS_AUDIO_MAXIMUM_QUEUED_FRAMES.
 extern volatile __3ds_s32 s_audio_frames_queued;
 
 // Set to 1 when update_game_sound() is called
