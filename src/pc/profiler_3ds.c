@@ -41,17 +41,17 @@
 
 static TickCounter tick_counter;
 
-static volatile double all_times[PROFILER_TIMESTAMP_HISTORY_LENGTH + 1]; // Padded by 1
+static volatile double all_times[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH + 1]; // Padded by 1
 
 static volatile double* elapsed_times = all_times + 1; // each is time - startTime
-static volatile double durations[PROFILER_TIMESTAMP_HISTORY_LENGTH]; // each is time - prev
-static volatile double totals_per_id[PROFILER_TIME_LOG_MAX_ID]; // Cumulative addition of durations per-id
-static volatile unsigned int ids[PROFILER_TIMESTAMP_HISTORY_LENGTH]; // ID for each timestamp in elapsed_times
+static volatile double durations[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH]; // each is time - prev
+static volatile double totals_per_id[PROFILER_3DS_TIME_LOG_MAX_ID]; // Cumulative addition of durations per-id
+static volatile unsigned int ids[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH]; // ID for each timestamp in elapsed_times
 
 static volatile __3ds_u32 stamp_count = 0;
 
 static volatile __3ds_u8 snoop_interval = 8;
-static volatile __3ds_u8 snoop_counters[PROFILER_NUM_TRACKED_SNOOP_IDS];
+static volatile __3ds_u8 snoop_counters[PROFILER_3DS_NUM_TRACKED_SNOOP_IDS];
 
 // libctru's osTickCounterUpdate measures time between updates. We want time since last reset.
 static void tick_counter_update() {
@@ -59,13 +59,13 @@ static void tick_counter_update() {
 }
 
 // Logs a time with the given ID.
-void profiler_log_time_impl(const unsigned int id) {
+void profiler_3ds_log_time_impl(const unsigned int id) {
     tick_counter_update();
     volatile double curTime = osTickCounterRead(&tick_counter);
     volatile double lastTime = elapsed_times[stamp_count - 1];
     volatile double duration = curTime - lastTime;
 
-    if (stamp_count < PROFILER_TIMESTAMP_HISTORY_LENGTH && id <= PROFILER_TIME_LOG_MAX_ID) {
+    if (stamp_count < PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH && id <= PROFILER_3DS_TIME_LOG_MAX_ID) {
         elapsed_times[stamp_count] = curTime;
         durations[stamp_count] = duration;
         totals_per_id[id] += duration;
@@ -76,12 +76,12 @@ void profiler_log_time_impl(const unsigned int id) {
 }
 
 // Logs the start time, from which deltas and relative times are computed.
-void profiler_log_start_time_impl() {
+void profiler_3ds_log_start_time_impl() {
     osTickCounterStart(&tick_counter);
 }
 
 // Computes some useful information for the timestamps. Intended for debugger use.
-void profiler_snoop_impl(UNUSED volatile unsigned int snoop_id) {
+void profiler_3ds_snoop_impl(UNUSED volatile unsigned int snoop_id) {
 
     // Useful GDB prints:
     // p/f *totals_per_id@11
@@ -115,7 +115,7 @@ void profiler_snoop_impl(UNUSED volatile unsigned int snoop_id) {
     i++;
 
     // Use to break after some number of iterations
-    if (snoop_id < PROFILER_NUM_TRACKED_SNOOP_IDS) {
+    if (snoop_id < PROFILER_3DS_NUM_TRACKED_SNOOP_IDS) {
         if (--snoop_counters[snoop_id] == 0)
             snoop_counters[snoop_id] = snoop_interval;
     }
@@ -128,13 +128,13 @@ void profiler_snoop_impl(UNUSED volatile unsigned int snoop_id) {
 }
 
 // Returns the total elapsed time in milliseconds
-double profiler_elapsed_time_impl()
+double profiler_3ds_elapsed_time_impl()
 {
     return elapsed_times[stamp_count - 1];
 }
 
 // Resets all parameters and logs the start time.
-void profiler_reset_impl() {
+void profiler_3ds_reset_impl() {
     tick_counter.elapsed = 0;
     tick_counter.reference = 0;
     all_times[0] = 0.0;
@@ -143,10 +143,10 @@ void profiler_reset_impl() {
     for (int i = 0; i < TIMESTAMP_ARRAY_COUNT(totals_per_id); i++)
         totals_per_id[i] = 0.0;
 
-    profiler_log_start_time_impl();
+    profiler_3ds_log_start_time_impl();
 }
 
-void profiler_init() {
+void profiler_3ds_init() {
     bzero((void*) snoop_counters, sizeof(snoop_counters));
-    profiler_reset_impl();
+    profiler_3ds_reset_impl();
 }

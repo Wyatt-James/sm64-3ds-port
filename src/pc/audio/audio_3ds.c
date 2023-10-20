@@ -55,10 +55,10 @@ static int audio_3ds_get_desired_buffered(void)
     return 1100;
 }
 
-// Returns true if the next buffer is FREE or DONE.
-static bool audio_3ds_next_buffer_is_ready()
+// Returns true if the next buffer is FREE or DONE. Available in audio_3ds.h.
+bool audio_3ds_next_buffer_is_ready()
 {
-    u8 status = sDspBuffers[sNextBuffer].status;
+    const u8 status = sDspBuffers[sNextBuffer].status;
     return status == NDSP_WBUF_FREE || status == NDSP_WBUF_DONE;
 }
 
@@ -78,7 +78,7 @@ static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len
     // Copy the data to be played
     s16* dst = (s16*)sDspVAddrs[sNextBuffer];
 
-    if (len_to_copy)
+    if (len_to_copy != 0)
         memcpy(dst, src, len_to_copy);
 
     DSP_FlushDataCache(dst, len_total);
@@ -101,55 +101,53 @@ static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
 static volatile bool running = true;
 volatile __3ds_s32 s_audio_frames_queued = 0;
 
+// Used in synthesis.c to avoid intermediate copies when possible
+size_t samples_to_copy;
+int16_t* copy_buf;
+int16_t* direct_buf;
+
+static int dcounter = 8;
+
 static void audio_3ds_loop()
 {
+    // Statically allocate to improve performance
     const u8 nChannels = 2;
-    // Statically allocate 2 buffers of nChannels*SAMPLES_HIGH bytes to improve performance
-    s16 audio_buffer[SAMPLES_HIGH * 2 * nChannels];
+    s16 audio_buffer[2 * SAMPLES_HIGH * nChannels];
         
     while (running)
     {
         // Wait for Thread5 to give us a frame of audio
         if (s_audio_frames_queued) {
             
-            profiler_reset();
+            profiler_3ds_reset();
 
             // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
             u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
 
-            size_t samples_to_copy = 0;
-            s16* direct_buf = (s16*)sDspVAddrs[sNextBuffer];
+            samples_to_copy = 0;
+            s16* direct_buf_t = (s16*) sDspVAddrs[sNextBuffer];
             
             // Update audio state once per Thread5 frame, then let Thread5 continue
             update_game_sound_wrapper_3ds();
-            profiler_log_time(0);
+            profiler_3ds_log_time(0);
 
             // Synthesize to our audio buffer
             for (int i = 0; i < 2; i++) {
-                s16* base_addr;
+                copy_buf = audio_buffer + i * (num_audio_samples * nChannels);
+                direct_buf = direct_buf_t + i * (num_audio_samples * nChannels);
 
-                // If the next buffer is ready, skip the intermediate copy for this chunk.
-                if (audio_3ds_next_buffer_is_ready()) {
-                    base_addr = direct_buf + i * (num_audio_samples * nChannels);
-                } else {
-                    base_addr = audio_buffer + i * (num_audio_samples * nChannels);
-                    samples_to_copy += num_audio_samples;
-                }
-
-                create_next_audio_buffer(base_addr, num_audio_samples);
+                create_next_audio_buffer(copy_buf, num_audio_samples);
             }
-            
 
             // Note: this value might have been incremented by Thread5.
             AtomicDecrement(&s_audio_frames_queued);
 
-
             // Play our audio buffer. If we outrun the DSP, we wait until the DSP is ready.
-            profiler_log_time(0);
+            profiler_3ds_log_time(0);
             audio_3ds_play_fast((u8 *)audio_buffer, nChannels * num_audio_samples * 4, nChannels * samples_to_copy * 4);
-            profiler_log_time(17); // 3DS export to DSP 
+            profiler_3ds_log_time(17); // 3DS export to DSP 
 
-            profiler_snoop(0);
+            profiler_3ds_snoop(0);
         } else {
             N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
         }
