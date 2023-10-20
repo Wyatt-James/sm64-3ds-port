@@ -1,3 +1,5 @@
+#ifdef __ARM_NEON // Useful for debugging
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -477,4 +479,5 @@ void aMixImpl(int16_t gain, uint16_t in_addr, uint16_t out_addr) {
         nbytes -= 16 * sizeof(int16_t);
     }
 }
-#endif // Whole file left blank if NEON is not present
+
+#endif

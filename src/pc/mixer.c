@@ -3,8 +3,14 @@
  * in the mixer_implementations directory.
  * 
  *               ----- Important -----
- *  These files must not be included in the build path!
- *  If they are present, compilation errors will abound.
+ * These files must not be included in the build path!
+ * If they are present, compilation errors will abound.
+ * 
+ *            ----- Developer Note -----
+ * If you need to view ASM, you can add specific files
+ * to the build path. This may increase code size with
+ * lesser compilers, so it should be disabled for
+ * release.
  */
 
 
@@ -22,7 +28,17 @@
 
 // Optimized for N3DS, supports ENHANCED_RSPA_EMULATION.
 #elif defined TARGET_N3DS
+
+// SIMD32 enhancements allow for much faster operations
+// on audio code. Unfortunately, it seems like the 3DS
+// SIMD32 instructions aren't actually that useful.
+#if __ARM_FEATURE_SIMD32 == 1
+#include "src/pc/mixer_implementations/mixer_3ds_simd32.c"
+
+// If ARM SIMD32 is disabled, use the standard implementation.
+#else
 #include "src/pc/mixer_implementations/mixer_3ds.c"
+#endif
 
 // Fall back to reference RSPA if no special versions are available.
 #else
