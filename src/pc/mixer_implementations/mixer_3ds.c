@@ -142,7 +142,7 @@ static inline int64_t clamp32_lower_t(const int64_t v, const int64_t thresh) {
     return v;
 }
 
-// Clamps an int32_t on the positive end, with threshold CLAMP16_LOWER_T.
+// Clamps an int32_t on the positive end, with threshold CLAMP16_UPPER_T.
 // Do not forget to cast after using both clamping functions!
 static inline int32_t clamp16_upper(const int32_t v) {
     return clamp16_upper_t(v, CLAMP16_UPPER_T);
@@ -155,7 +155,7 @@ static inline int32_t clamp16_lower(const int32_t v) {
 }
 
 
-// Clamps an int64_t on the positive end, with threshold CLAMP32_LOWER_T.
+// Clamps an int64_t on the positive end, with threshold CLAMP32_UPPER_T.
 // Do not forget to cast after using both clamping functions!
 static inline int64_t clamp32_upper(const int64_t v) {
     return clamp32_upper_t(v, CLAMP32_UPPER_T);
