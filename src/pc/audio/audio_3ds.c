@@ -112,6 +112,8 @@ static void audio_3ds_loop()
     {
         // Wait for Thread5 to give us a frame of audio
         if (s_audio_frames_queued) {
+            
+            profiler_reset();
 
             // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
             u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
@@ -120,8 +122,8 @@ static void audio_3ds_loop()
             s16* direct_buf = (s16*)sDspVAddrs[sNextBuffer];
             
             s_audio_has_updated_game_sound = update_game_sound_wrapper_3ds();
-            
-            profiler_reset();
+
+            profiler_log_time(0);
 
             // Update audio state and synthesize to our audio buffer
             for (int i = 0; i < 2; i++) {
@@ -138,13 +140,17 @@ static void audio_3ds_loop()
                 create_next_audio_buffer(base_addr, num_audio_samples);
             }
             
-            profiler_snoop(0);
 
             // Note: this value might have been incremented by Thread5.
             AtomicDecrement(&s_audio_frames_queued);
 
-            // Play our audio buffer. If we outrun the 3DS buffer, we waste the buffer.
+
+            // Play our audio buffer. If we outrun the DSP, we wait until the DSP is ready.
+            profiler_log_time(0);
             audio_3ds_play_fast((u8 *)audio_buffer, nChannels * num_audio_samples * 4, nChannels * samples_to_copy * 4);
+            profiler_log_time(17); // 3DS export to DSP 
+
+            profiler_snoop(0);
         } else {
             N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
         }

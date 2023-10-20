@@ -104,6 +104,7 @@ void profiler_snoop_impl(UNUSED volatile unsigned int snoop_id) {
     // 14: Mix Reverb
     // 15: EnvMixer Non-Reverb
     // 16: Mix Non-Reverb
+    // 17: 3DS export to DSP
 
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;
