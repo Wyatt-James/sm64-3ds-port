@@ -701,7 +701,6 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
             }
         }
 
-        // WYATT_TODO disable this on o3DS? Maybe only render Mario's shadow?
         shadowList = create_shadow_below_xyz(shadowPos[0], shadowPos[1], shadowPos[2], shadowScale,
                                              node->shadowSolidity, node->shadowType);
         if (shadowList != NULL) {
