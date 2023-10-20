@@ -276,6 +276,7 @@ u64 *synthesis_execute(u64 *cmdBuf, s32 *writtenCmds, s16 *aiBuf, s32 bufLen) {
     u64 *cmd = cmdBuf;
     s32 chunkLen;
     s32 nextVolRampTable;
+    DO_3DS(sCurAiBufBasePtr = aiBuf;);
 
     for (i = gAudioBufferParameters.updatesPerFrame; i > 0; i--) {
         process_sequences(i - 1);
@@ -505,12 +506,41 @@ u64 *synthesis_do_one_audio_update(s16 *aiBuf, s32 bufLen, u64 *cmd, u32 updateI
     }
 
     temp = bufLen * 2;
+
+// If possible, interleave directly into the output buf and skip the discrete copy.
+#ifdef ENHANCED_RSPA_EMULATION
+    aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, temp);
+
+    // Avoid redundant copy on 3DS when possible
+    DO_3DS(
+        if (audio_3ds_next_buffer_is_ready())
+            aiBuf = direct_buf + (aiBuf - sCurAiBufBasePtr);
+        else
+            samples_to_copy += bufLen;
+    );
+
+    aInterleaveAndCopy(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH, aiBuf);
+
+// Else if enhanced RSPA Emulation is disabled, move to the copy buf.
+#else
     aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, temp);
     aInterleave(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH);
     aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, temp * 2);
+
+    // Avoid redundant copy on 3DS when possible
+    DO_3DS(
+        if (audio_3ds_next_buffer_is_ready())
+            aiBuf = direct_buf + (aiBuf - sCurAiBufBasePtr);
+        else
+            samples_to_copy += bufLen;
+    );
+
     aSaveBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(aiBuf));
+#endif
+
     return cmd;
 }
+
 #else
 u64 *synthesis_do_one_audio_update(s16 *aiBuf, s32 bufLen, u64 *cmd, u32 updateIndex) {
     UNUSED s32 pad1[1];
@@ -1572,6 +1602,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                         const s32 nSamplesInThisIteration = nUncompressedSamplesThisIteration + samplesSkippedThisIteration - s3;
 
                         profiler_3ds_log_time(0);
+
 #ifdef ENHANCED_RSPA_EMULATION
                         
                         // Decode some data
@@ -1774,7 +1805,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
     aInterleaveAndCopy(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH, aiBuf);
     profiler_3ds_log_time(9); // Interleave
 
-// Else if enhanced RSPA Emulation is disabled
+// Else if enhanced RSPA Emulation is disabled, move to the copy buf.
 #else
     profiler_3ds_log_time(0);
     const s32 outputBufLen = bufLen * 2;

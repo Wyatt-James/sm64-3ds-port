@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <ultra64.h>
 
+// This file is ignored completely on N64.
+
 #undef aSegment
 #undef aClearBuffer
 #undef aSetBuffer
@@ -56,6 +58,7 @@ void aMixImpl(int16_t gain, uint16_t in_addr, uint16_t out_addr);
 // Enhanced RSPA emulation allows us to break the rules of
 // RSPA emulation a little bit for better performance.
 // Should be disabled when using reference implementation.
+// This file is ignored completely on N64.
 #ifdef RSPA_USE_ENHANCEMENTS
 #ifndef RSPA_USE_REFERENCE_IMPLEMENTATION
 

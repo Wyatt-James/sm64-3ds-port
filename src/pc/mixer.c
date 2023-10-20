@@ -11,6 +11,8 @@
  * to the build path. This may increase code size with
  * lesser compilers, so it should be disabled for
  * release. See Makefile line 242.
+ * 
+ * This file is ignored completely on N64.
  */
 
 
