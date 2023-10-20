@@ -239,6 +239,8 @@ ifeq ($(TARGET_N64),1)
   ASM_DIRS := asm $(ASM_DIRS)
 else
   SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/audio src/pc/controller
+  # If this is enabled, you can do ASM debugging on these files.
+  # SRC_DIRS := $(SRC_DIRS) src/pc/mixer_implementations
   ASM_DIRS :=
 endif
 BIN_DIRS := bin bin/$(VERSION)

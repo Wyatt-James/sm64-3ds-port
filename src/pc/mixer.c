@@ -10,7 +10,7 @@
  * If you need to view ASM, you can add specific files
  * to the build path. This may increase code size with
  * lesser compilers, so it should be disabled for
- * release.
+ * release. See Makefile line 242.
  */
 
 
@@ -32,7 +32,7 @@
 // SIMD32 enhancements allow for much faster operations
 // on audio code. Unfortunately, it seems like the 3DS
 // SIMD32 instructions aren't actually that useful.
-#if __ARM_FEATURE_SIMD32 == 1
+#if __ARM_FEATURE_SIMD32 == 1 && __ARM_FEATURE_SAT == 1
 #include "src/pc/mixer_implementations/mixer_3ds_simd32.c"
 
 // If ARM SIMD32 is disabled, use the standard implementation.
