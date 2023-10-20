@@ -451,11 +451,12 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             
             {
                 // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
-                //               vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
+                // Only clamping on the upper end seems to work for volume, but I'll leave both ends on for now.
+                const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
+                              vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
 
-                vols_0[index] = (int32_t) clamp32_upper(((int64_t) volume_0 * rate_0) >> 16);
-                vols_1[index] = (int32_t) clamp32_upper(((int64_t) volume_1 * rate_1) >> 16);
+                vols_0[index] = (int32_t) clamp32_upper(vol_0_temp);
+                vols_1[index] = (int32_t) clamp32_upper(vol_1_temp);
             }
 
             const int32_t volume_0_s = volume_0 >> 16,
@@ -486,11 +487,12 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             
             {
                 // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
-                //               vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
+                // Only clamping on the upper end seems to work for volume, but I'll leave both ends on for now.
+                const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
+                              vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
 
-                vols_0[index] = (int32_t) clamp32_upper(((int64_t) volume_0 * rate_0) >> 16);
-                vols_1[index] = (int32_t) clamp32_upper(((int64_t) volume_1 * rate_1) >> 16);
+                vols_0[index] = (int32_t) clamp32_upper(vol_0_temp);
+                vols_1[index] = (int32_t) clamp32_upper(vol_1_temp);
             }
 
             const int32_t volume_0_s = volume_0 >> 16,
