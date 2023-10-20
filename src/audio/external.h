@@ -71,7 +71,8 @@ struct SPTask *unused_80321460(void);
 
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
-bool update_game_sound_wrapper_3ds();
+void update_game_sound_wrapper_3ds();
+extern volatile s32 sGameLoopTicked;
 #endif
 #endif
 

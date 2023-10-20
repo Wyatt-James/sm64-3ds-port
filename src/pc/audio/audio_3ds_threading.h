@@ -55,8 +55,5 @@ extern bool s_wait_for_audio_thread_to_finish;
 // Always <= N3DS_AUDIO_MAXIMUM_QUEUED_FRAMES.
 extern volatile __3ds_s32 s_audio_frames_queued;
 
-// Set to 1 when update_game_sound() is called
-extern volatile bool s_audio_has_updated_game_sound;
-
 #endif
 #endif

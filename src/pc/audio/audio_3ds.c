@@ -100,7 +100,6 @@ static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
 
 static volatile bool running = true;
 volatile __3ds_s32 s_audio_frames_queued = 0;
-volatile bool s_audio_has_updated_game_sound = true;
 
 static void audio_3ds_loop()
 {
@@ -121,11 +120,11 @@ static void audio_3ds_loop()
             size_t samples_to_copy = 0;
             s16* direct_buf = (s16*)sDspVAddrs[sNextBuffer];
             
-            s_audio_has_updated_game_sound = update_game_sound_wrapper_3ds();
-
+            // Update audio state once per Thread5 frame, then let Thread5 continue
+            update_game_sound_wrapper_3ds();
             profiler_log_time(0);
 
-            // Update audio state and synthesize to our audio buffer
+            // Synthesize to our audio buffer
             for (int i = 0; i < 2; i++) {
                 s16* base_addr;
 

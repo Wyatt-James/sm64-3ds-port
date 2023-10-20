@@ -11,6 +11,10 @@
 #include "../pc/mixer.h"
 #endif
 
+#ifdef TARGET_N3DS
+#include "src/pc/profiler_3ds.h"
+#endif
+
 #define DMEM_ADDR_TEMP 0x0
 #define DMEM_ADDR_RESAMPLED 0x20
 #define DMEM_ADDR_RESAMPLED2 0x160
@@ -1377,8 +1381,6 @@ u64 *synthesis_process_note(struct Note *note, struct NoteSubEu *noteSubEu, stru
 
 // US and JP Non-N64 versions
 #else
-
-#include "src/pc/profiler_3ds.h"
 
 // Cleaned up and somewhat optimized version
 u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {

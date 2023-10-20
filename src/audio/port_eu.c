@@ -146,9 +146,7 @@ struct SPTask *create_next_audio_frame_task(void) {
 #ifndef DISABLE_AUDIO
 
 // Stub on EU
-bool update_game_sound_wrapper_3ds() {
-    return true;
-}
+void update_game_sound_wrapper_3ds() {}
 
 // 3DS Version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {

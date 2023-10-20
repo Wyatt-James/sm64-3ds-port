@@ -887,14 +887,9 @@ struct SPTask *create_next_audio_frame_task(void) {
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
 
-bool update_game_sound_wrapper_3ds() {
-    if (sGameLoopTicked != 0) {
-        update_game_sound();
-        sGameLoopTicked = 0;
-        return true;
-    }
-
-    return false;
+void update_game_sound_wrapper_3ds() {
+    update_game_sound();
+    sGameLoopTicked = 0;
 }
 
 // 3DS Version

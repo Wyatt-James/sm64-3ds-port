@@ -842,12 +842,12 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     // Wait for the audio thread to finish if we need to.
     if(s_wait_for_audio_thread_to_finish)
         while (s_audio_frames_queued > 0) {
-            // N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
         }
 
     // Wait for audio to be ready for a frame
     while (s_audio_frames_queued >= N3DS_AUDIO_MAXIMUM_QUEUED_FRAMES) {
-        // N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
     }
 
     // Execute the script
@@ -857,7 +857,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
         // Wait for the audio thread to finish if we need to.
         if (s_wait_for_audio_thread_to_finish) {
             while (s_audio_frames_queued > 0) {
-                // N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+                N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
             }
             break;
         }
@@ -871,8 +871,8 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
 
     // Wait for the audio thread to update state, then queue another frame
-    while (!s_audio_has_updated_game_sound) {
-        // N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+    while (sGameLoopTicked != 0) {
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
     }
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
     AtomicIncrement(&s_audio_frames_queued);
