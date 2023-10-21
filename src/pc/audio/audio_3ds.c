@@ -190,8 +190,7 @@ static bool audio_3ds_init()
     }
 
     sNextBuffer = 0;
-    volatile int cpu;
-
+    int cpu;
     
     if (is_new_n3ds())
         cpu = 2; // n3ds 3rd core]
