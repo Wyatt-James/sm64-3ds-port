@@ -106,8 +106,6 @@ size_t samples_to_copy;
 int16_t* copy_buf;
 int16_t* direct_buf;
 
-static int dcounter = 8;
-
 static void audio_3ds_loop()
 {
     // Statically allocate to improve performance
