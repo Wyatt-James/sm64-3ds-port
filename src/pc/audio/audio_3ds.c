@@ -22,6 +22,24 @@
 
 #define N3DS_DSP_DMA_BUFFER_COUNT   4
 #define N3DS_DSP_DMA_BUFFER_SIZE   4096 * 4
+#define N3DS_DSP_N_CHANNELS 2
+
+// Used by Thread5 exclusively
+bool s_wait_for_audio_thread_to_finish = true;
+bool s_do_audio_on_thread5 = false;
+
+// Incremented by level_script, decremented here
+volatile __3ds_s32 s_audio_frames_queued = 0;
+
+// Statically allocate to improve performance
+static s16 audio_buffer [2 * SAMPLES_HIGH * N3DS_DSP_N_CHANNELS];
+
+// Used in synthesis.c to avoid intermediate copies when possible
+size_t samples_to_copy;
+int16_t* copy_buf;
+int16_t* direct_buf;
+
+static volatile bool running = true;
 
 static bool is_new_n3ds()
 {
@@ -30,9 +48,6 @@ static bool is_new_n3ds()
 }
 
 extern void create_next_audio_buffer(s16 *samples, u32 num_samples);
-
-// Used by Thread5 exclusively
-bool s_wait_for_audio_thread_to_finish = true;
 
 static int sNextBuffer;
 static volatile ndspWaveBuf sDspBuffers[N3DS_DSP_DMA_BUFFER_COUNT];
@@ -98,24 +113,7 @@ static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
         audio_3ds_play_fast(buf, len, len);
 }
 
-static volatile bool running = true;
-volatile __3ds_s32 s_audio_frames_queued = 0;
-
-// Used in synthesis.c to avoid intermediate copies when possible
-size_t samples_to_copy;
-int16_t* copy_buf;
-int16_t* direct_buf;
-
-static void audio_3ds_loop()
-{
-    // Statically allocate to improve performance
-    const u8 nChannels = 2;
-    s16 audio_buffer[2 * SAMPLES_HIGH * nChannels];
-        
-    while (running)
-    {
-        // Wait for Thread5 to give us a frame of audio
-        if (s_audio_frames_queued) {
+inline void audio_3ds_run_one_frame() {
             
             profiler_3ds_reset();
 
@@ -131,8 +129,8 @@ static void audio_3ds_loop()
 
             // Synthesize to our audio buffer
             for (int i = 0; i < 2; i++) {
-                copy_buf = audio_buffer + i * (num_audio_samples * nChannels);
-                direct_buf = direct_buf_t + i * (num_audio_samples * nChannels);
+                copy_buf = audio_buffer + i * (num_audio_samples * N3DS_DSP_N_CHANNELS);
+                direct_buf = direct_buf_t + i * (num_audio_samples * N3DS_DSP_N_CHANNELS);
 
                 create_next_audio_buffer(copy_buf, num_audio_samples);
             }
@@ -142,13 +140,21 @@ static void audio_3ds_loop()
 
             // Play our audio buffer. If we outrun the DSP, we wait until the DSP is ready.
             profiler_3ds_log_time(0);
-            audio_3ds_play_fast((u8 *)audio_buffer, nChannels * num_audio_samples * 4, nChannels * samples_to_copy * 4);
+            audio_3ds_play_fast((u8 *)audio_buffer, N3DS_DSP_N_CHANNELS * num_audio_samples * 4, N3DS_DSP_N_CHANNELS * samples_to_copy * 4);
             profiler_3ds_log_time(17); // 3DS export to DSP 
 
             profiler_3ds_snoop(0);
-        } else {
+}
+
+static void audio_3ds_loop()
+{
+    while (running)
+    {
+        // Wait for Thread5 to give us a frame of audio
+        if (s_audio_frames_queued)
+            audio_3ds_run_one_frame();
+        else
             N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-        }
     }
 
     // Set to a negative value to ensure that the game loop does not deadlock.
@@ -184,34 +190,37 @@ static bool audio_3ds_init()
     }
 
     sNextBuffer = 0;
+    volatile int cpu;
 
-    s32 prio = 0;
-
-    int cpu;
     if (is_new_n3ds())
     {
         cpu = 2; // n3ds 3rd core
-        prio = 0x18;
     }
     else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(80)))
     {
         cpu = 1; // o3ds 2nd core (system)
-        prio = 0x18;
     }
     else
     {
-        cpu = 0; // better to have choppy sound than no sound?
-        prio = 0x19;
+        cpu = 0;
     }
 
-    threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, prio, cpu, true);
+    if (cpu != 0) {
+        threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, 0x18, cpu, true);
 
-    if (threadId)
-        printf("Created audio thread on core %i\n", cpu);
-    else
-        printf("Failed to create audio thread\n");
+        if (threadId != NULL) {
+            s_do_audio_on_thread5 = false;
+            printf("Created audio thread on core %i\n", cpu);
+        } else {
+            s_do_audio_on_thread5 = true;
+            printf("Failed to create audio thread. Using Thread5.\n");
+        }
+    } else {
+        s_do_audio_on_thread5 = true;
+        printf("Using Thread5 for audio, as program CPU time limit failed.\n");
+    }
 
-    return threadId != NULL;
+    return true;
 }
 
 // Stops the audio thread and waits for it to exit.

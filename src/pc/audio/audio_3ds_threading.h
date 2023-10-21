@@ -55,5 +55,7 @@ extern bool s_wait_for_audio_thread_to_finish;
 // Always <= N3DS_AUDIO_MAXIMUM_QUEUED_FRAMES.
 extern volatile __3ds_s32 s_audio_frames_queued;
 
+extern bool s_do_audio_on_thread5;
+
 #endif
 #endif

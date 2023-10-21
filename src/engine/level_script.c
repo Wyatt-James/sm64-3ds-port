@@ -28,6 +28,7 @@
 #ifdef TARGET_N3DS
 #ifndef DISABLE_AUDIO
 #include "pc/audio/audio_3ds_threading.h"
+#include "pc/audio/audio_3ds.h"
 #endif
 #endif
 
@@ -876,6 +877,10 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     }
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
     AtomicIncrement(&s_audio_frames_queued);
+
+    if (s_do_audio_on_thread5) {
+        audio_3ds_run_one_frame();
+    }
 
     init_render_image();
     render_game();
