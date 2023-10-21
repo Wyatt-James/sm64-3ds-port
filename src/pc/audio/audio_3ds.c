@@ -192,18 +192,15 @@ static bool audio_3ds_init()
     sNextBuffer = 0;
     volatile int cpu;
 
+    
     if (is_new_n3ds())
-    {
-        cpu = 2; // n3ds 3rd core
-    }
+        cpu = 2; // n3ds 3rd core]
+
     else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(80)))
-    {
         cpu = 1; // o3ds 2nd core (system)
-    }
+
     else
-    {
-        cpu = 0;
-    }
+        cpu = 0; // Run in Thread5
 
     if (cpu != 0) {
         threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, 0x18, cpu, true);
