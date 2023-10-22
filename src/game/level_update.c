@@ -1156,7 +1156,7 @@ s32 update_level(void) {
     // level. If it were instead called alone, and we did not change level,
     // it could cause a race condition.
 #if defined TARGET_N3DS && !defined DISABLE_AUDIO
-    s_wait_for_audio_thread_to_finish = changeLevel == 0 ? true : false;
+    s_thread5_wait_for_audio_to_finish = changeLevel == 0 ? true : false;
 #endif
 
     if (changeLevel) {

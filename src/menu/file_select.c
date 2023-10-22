@@ -3280,7 +3280,7 @@ s32 lvl_update_obj_and_load_file_selected(UNUSED s32 arg, UNUSED s32 unused) {
     area_update_objects();
 
 #if defined TARGET_N3DS && !defined DISABLE_AUDIO
-    s_wait_for_audio_thread_to_finish = sSelectedFileNum == 0 ? true : false;
+    s_thread5_wait_for_audio_to_finish = sSelectedFileNum == 0 ? true : false;
 #endif
 
     return sSelectedFileNum;

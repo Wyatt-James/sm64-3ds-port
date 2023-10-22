@@ -213,7 +213,7 @@ s32 lvl_intro_update(s16 arg1, UNUSED s32 arg2) {
     }
 
 #if defined TARGET_N3DS && !defined DISABLE_AUDIO
-    s_wait_for_audio_thread_to_finish = retVar == 0 ? true : false;
+    s_thread5_wait_for_audio_to_finish = retVar == 0 ? true : false;
 #endif
 
     return retVar;

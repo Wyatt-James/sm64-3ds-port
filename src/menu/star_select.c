@@ -456,7 +456,7 @@ s32 lvl_update_obj_and_load_act_button_actions(UNUSED s32 arg, UNUSED s32 unused
 
 
 #if defined TARGET_N3DS && !defined DISABLE_AUDIO
-    s_wait_for_audio_thread_to_finish = sLoadedActNum == 0 ? true : false;
+    s_thread5_wait_for_audio_to_finish = sLoadedActNum == 0 ? true : false;
 #endif
 
     return sLoadedActNum;

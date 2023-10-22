@@ -833,30 +833,28 @@ static void (*LevelScriptJumpTable[])(void) = {
 
 #if defined TARGET_N3DS && !defined DISABLE_AUDIO
 
+static inline void waitForSynchronizationVar(volatile __3ds_s32* const ptr) {
+    while(*ptr > 0)
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+}
+
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
     sCurrentCmd = cmd;
 
-    // Wait for the audio thread to finish if we need to.
-    if(s_wait_for_audio_thread_to_finish)
-        while (s_audio_frames_queued > 0) {
-            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-        }
-
-    // Wait for audio to be ready for a frame
-    while (s_audio_frames_queued >= N3DS_AUDIO_MAXIMUM_QUEUED_FRAMES) {
-        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-    }
+    // Either wait for synthesis or tick
+    if (s_thread5_wait_for_audio_to_finish)
+        waitForSynchronizationVar(&s_audio_frames_to_process);
+    else
+        waitForSynchronizationVar(&s_audio_frames_to_tick);
 
     // Execute the script
     while (sScriptStatus == SCRIPT_RUNNING) {
         LevelScriptJumpTable[sCurrentCmd->type]();
 
-        // Wait for the audio thread to finish if we need to.
-        if (s_wait_for_audio_thread_to_finish) {
-            while (s_audio_frames_queued > 0) {
-                N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-            }
+        // If we need to wait for synthesis to finish, wait and break
+        if (s_thread5_wait_for_audio_to_finish) {
+            waitForSynchronizationVar(&s_audio_frames_to_process);
             break;
         }
     }
@@ -867,17 +865,14 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     }
 
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
-
-    // Wait for the audio thread to update state, then queue another frame
-    while (sGameLoopTicked != 0) {
-        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-    }
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
-    AtomicIncrement(&s_audio_frames_queued);
 
-    if (s_do_audio_on_thread5) {
+    // Notify audio thread that a frame is ready. Maintain this order.
+    AtomicIncrement(&s_audio_frames_to_tick);
+    AtomicIncrement(&s_audio_frames_to_process);
+
+    if (s_thread5_does_audio)
         audio_3ds_run_one_frame();
-    }
 
     init_render_image();
     render_game();
