@@ -194,13 +194,13 @@ void main_func(void) {
         audio_api = &audio_sdl;
     }
 #endif
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     if (audio_api == NULL && audio_3ds.init()) {
         audio_api = &audio_3ds;
     }
 #endif
-#endif
+
     if (audio_api == NULL) {
         audio_api = &audio_null;
     }

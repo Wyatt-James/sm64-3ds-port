@@ -20,10 +20,8 @@
 #include "text_strings.h"
 #include "prevent_bss_reordering.h"
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     #include "src/pc/audio/audio_3ds_threading.h"
-#endif
 #endif
 
 /**
@@ -456,10 +454,9 @@ s32 lvl_update_obj_and_load_act_button_actions(UNUSED s32 arg, UNUSED s32 unused
     area_update_objects();
     sActSelectorMenuTimer++;
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     s_wait_for_audio_thread_to_finish = sLoadedActNum == 0 ? true : false;
-#endif
 #endif
 
     return sLoadedActNum;

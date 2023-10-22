@@ -20,6 +20,10 @@
 #if defined RSPA_USE_REFERENCE_IMPLEMENTATION
 #include "src/pc/mixer_implementations/mixer_reference.c"
 
+// Empty to save on file size
+#elif defined DISABLE_AUDIO
+#include "src/pc/mixer_implementations/mixer_null.c"
+
 // x86 SSE4.1 support
 #elif defined __SSE4_1__
 #include "src/pc/mixer_implementations/mixer_sse41.c"

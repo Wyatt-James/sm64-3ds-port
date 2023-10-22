@@ -25,11 +25,9 @@
 #include "surface_collision.h"
 #include "surface_load.h"
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS
 #include "pc/audio/audio_3ds_threading.h"
 #include "pc/audio/audio_3ds.h"
-#endif
 #endif
 
 #define CMD_GET(type, offset) (*(type *) (CMD_PROCESS_OFFSET(offset) + (u8 *) sCurrentCmd))
@@ -833,8 +831,7 @@ static void (*LevelScriptJumpTable[])(void) = {
     /*3C*/ level_cmd_get_or_set_var,                // Sound: UNKNOWN
 };
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
 
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
@@ -890,7 +887,6 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     return sCurrentCmd;
 }
 
-#endif
 #else
 
 // Non-3DS and 3DS-non-audio

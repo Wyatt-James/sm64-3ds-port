@@ -29,10 +29,8 @@
 #include "course_table.h"
 #include "thread6.h"
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     #include "src/pc/audio/audio_3ds_threading.h"
-#endif
 #endif
 
 #define PLAY_MODE_NORMAL 0
@@ -1157,10 +1155,8 @@ s32 update_level(void) {
     // from within a CALL_LOOP, from which the only way to exit is to change
     // level. If it were instead called alone, and we did not change level,
     // it could cause a race condition.
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     s_wait_for_audio_thread_to_finish = changeLevel == 0 ? true : false;
-#endif
 #endif
 
     if (changeLevel) {

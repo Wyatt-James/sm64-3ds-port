@@ -208,11 +208,8 @@ s32 gAudioErrorFlags = 0;
 #endif
 
 // Poor naming. A better option would be sAudioNeedsTick.
-// Volatile only if 3DS + audio
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
         volatile s32 sGameLoopTicked = 0;
-#endif
 #else
         s32 sGameLoopTicked = 0;
 #endif
@@ -883,9 +880,8 @@ struct SPTask *create_next_audio_frame_task(void) {
 
 // At this point, we are non-N64, non-european
 
-// If we're on 3DS with audio enabled, use modified functions.
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+// If we're on 3DS, use modified functions.
+#if defined TARGET_N3DS
 
 void update_game_sound_wrapper_3ds() {
     update_game_sound();
@@ -904,9 +900,7 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     decrease_sample_dma_ttls();
 }
 
-// Else, if audio is disabled, or we aren't on 3DS, use stock PC functions.
-#endif // DISABLE_AUDIO
-#else  // TARGET_N3DS
+#else
 
 // Non-3DS Version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
@@ -925,7 +919,7 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
     decrease_sample_dma_ttls();
 }
-#endif // TARGET_N3DS_ELSE
+#endif // TARGET_N3DS ELSE
 #endif // TARGET_N64_ELSE
 #endif // VERSION_EU_ELSE
 

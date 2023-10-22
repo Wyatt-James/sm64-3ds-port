@@ -22,12 +22,6 @@ typedef u16 FadeT;
 typedef s32 FadeT;
 #endif
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-#include <stdbool.h>
-#endif
-#endif
-
 extern volatile u8 gAudioResetStatus;
 extern u8 gAudioResetPresetIdToLoad;
 extern OSMesgQueue *OSMesgQueues[];
@@ -142,8 +136,7 @@ struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS
 
 // Stub on EU
 void update_game_sound_wrapper_3ds() {}
@@ -171,9 +164,8 @@ void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioRandom = gAudioRandom + writtenCmds / 8;
 }
 
-// Else, if audio is disabled, or we aren't on 3DS, use stock PC functions.
-#endif // DISABLE_AUDIO
-#else  // TARGET_N3DS
+// Else, if we aren't on 3DS, use stock PC functions.
+#else
 
 // (EU) Non-3DS and 3DS-non-audio version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {

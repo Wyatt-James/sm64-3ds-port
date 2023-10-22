@@ -14,10 +14,8 @@
 #include "seq_ids.h"
 #include "sm64.h"
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     #include "src/pc/audio/audio_3ds_threading.h"
-#endif
 #endif
 
 #define PRESS_START_DEMO_TIMER 800
@@ -214,10 +212,8 @@ s32 lvl_intro_update(s16 arg1, UNUSED s32 arg2) {
             break;
     }
 
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     s_wait_for_audio_thread_to_finish = retVar == 0 ? true : false;
-#endif
 #endif
 
     return retVar;

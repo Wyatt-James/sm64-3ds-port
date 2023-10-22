@@ -59,12 +59,11 @@ void aMixImpl(int16_t gain, uint16_t in_addr, uint16_t out_addr);
 // RSPA emulation a little bit for better performance.
 // Should be disabled when using reference implementation.
 // This file is ignored completely on N64.
-#ifdef RSPA_USE_ENHANCEMENTS
-#ifndef RSPA_USE_REFERENCE_IMPLEMENTATION
+#if defined RSPA_USE_ENHANCEMENTS && !defined RSPA_USE_REFERENCE_IMPLEMENTATION && !defined DISABLE_AUDIO
 
 #define ENHANCED_RSPA_EMULATION
 
-// Snoop contents of the emulated RSPA. For debugging.
+// Snoop contents of the emulated RSPA for debugging.
 void aSnoop(volatile int snoopTag);
 
 void aADPCMdecDirectImpl(uint8_t flags, ADPCM_STATE state, uint8_t* source);
@@ -73,7 +72,6 @@ void aInterleaveAndCopyImpl(uint16_t left, uint16_t right, int16_t *dest_addr);
 #define aADPCMdecDirect(pkt, f, s, src) aADPCMdecDirectImpl(f, s, src) // ADPCM Decode directly from external address
 #define aInterleaveAndCopy(pkt, l, r, dest) aInterleaveAndCopyImpl(l, r, dest) // Interleave directly to external address
 
-#endif
 #endif
 
 #endif // MIXER_H
