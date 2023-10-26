@@ -90,18 +90,6 @@ static inline int16_t clamp16(int32_t v) {
     return (int16_t) __ssat(v, 16);
 }
 
-// clamps an int64_t to an int32_t. Unfortunately, 3DS lacks a 64-bit saturation instruction.
-static inline int32_t clamp32(int64_t v) {
-    if (v < CLAMP32_LOWER_T)
-        return CLAMP32_LOWER_T;
-
-    else if (v > CLAMP32_UPPER_T)
-        return CLAMP32_UPPER_T;
-
-    return (int32_t)v;
-}
-
-
 // Clamps an int64_t on the positive end, with threshold CLAMP32_UPPER_T.
 // Unfortunately, 3DS lacks a 64-bit saturation instruction.
 // Do not forget to cast after using both clamping functions!
@@ -120,6 +108,12 @@ static inline int64_t clamp32_lower(const int64_t v) {
         return CLAMP32_LOWER_T;
 
     return v;
+}
+
+// clamps an int64_t to an int32_t. Unfortunately, 3DS lacks a 64-bit saturation instruction.
+// Doing it this way tricks the compiler into using conditional logic, which is faster than conditional branches.
+static inline int32_t clamp32(int64_t v) {
+    return (int32_t) clamp32_upper(clamp32_lower(v));
 }
 
 void aClearBufferImpl(uint16_t addr, int nbytes) {
@@ -223,7 +217,6 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
 */
 static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int16_t* out, int nbytes) {
 
-
     // Write the initial state
     if (flags & A_INIT) {
         memset(out, 0, 16 * sizeof(int16_t));
@@ -233,7 +226,6 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
         memcpy(out, state, 16 * sizeof(int16_t));
     }
     out += 16;
-
 
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
@@ -248,17 +240,20 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
             const int16_t prev2 = out[-2];
 
             // Load 4 bytes from *in (total of 8)
-            for (int j = 0; j < 4; j++) {
-                ins[j * 2] = (((*in >> 4) << 28) >> 28) << shift;
-                ins[j * 2 + 1] = (((*in++ & 0xf) << 28) >> 28) << shift;
+            for (int j = 0; j < 8; j += 2, in++) {
+                const uint8_t in_val = *in;
+                ins[j] =     (((in_val >> 4) << 28) >> 28) << shift;
+                ins[j + 1] = (((in_val & 0xf) << 28) >> 28) << shift;
             }
 
+            // Synthesize 8 samples
             for (int j = 0; j < 8; j++, out++) {
                 int32_t acc = tbl[0][j] * prev2 + tbl[1][j] * prev1 + (ins[j] << 11);
 
-                for (int k = 0; k < j; k++) {
+                // Iterate tbl in descending order from [j-1, 0]
+                // Iterate ins in ascending  order from [0, j-1]
+                for (int k = 0; k < j; k++)
                     acc += tbl[1][((j - k) - 1)] * ins[k];
-                }
 
                 *out = clamp16(acc >> 11);
             }
@@ -334,21 +329,18 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     memcpy(state + 8, in, 8 * sizeof(int16_t));
 }
 
+// Prevents volume from over/under-shooting its target
 static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int16_t target) {
 
     // Increasing volume
     if ((rate >> 16) > 0) {
-        if ((volume >> 16) > target) {
+        if ((volume >> 16) > target)
             return target << 16;
-        }
     }
     
     // Decreasing volume
-    else {
-        if ((volume >> 16) < target) {
+    else  if ((volume >> 16) < target)
             return target << 16;
-        }
-    }
 
     return volume;
 }
@@ -398,61 +390,46 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     // If we have the AUX flag set, use both the wet and dry channels.
     if (flags & A_AUX) {
         for (int i = 0, index = 0; i < nSamples; i++, in++, wet_0++, wet_1++, dry_0++, dry_1++, index = i & 7) {
-            const int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
-                          volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+
+            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
+                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+
+            vols_0[index] = clamp32((((int64_t) volume_0) * rate_0) >> 16);
+            vols_1[index] = clamp32((((int64_t) volume_1) * rate_1) >> 16);
             
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Only clamping on the upper end seems to work for volume, but I'll leave both ends on for now.
-                const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
-                              vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
+            volume_0 >>= 16;
+            volume_1 >>= 16;
 
-                vols_0[index] = (int32_t) clamp32_upper(vol_0_temp);
-                vols_1[index] = (int32_t) clamp32_upper(vol_1_temp);
-            }
-
-            const int32_t volume_0_s = volume_0 >> 16,
-                          volume_1_s = volume_1 >> 16;
-
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Thanks to michi for optimizing the underlying math here.
-                const int16_t in_val = *in;
-                
-                *dry_0 =  clamp16((((*dry_0 << 15) - *dry_0 + in_val * ((volume_0_s * vol_dry) >> 15) + 1) >> 15) + 1);
-                *dry_1 =  clamp16((((*dry_1 << 15) - *dry_1 + in_val * ((volume_1_s * vol_dry) >> 15) + 1) >> 15) + 1);
-                *wet_0 =  clamp16((((*wet_0 << 15) - *wet_0 + in_val * ((volume_0_s * vol_wet) >> 15) + 1) >> 15) + 1);
-                *wet_1 =  clamp16((((*wet_1 << 15) - *wet_1 + in_val * ((volume_1_s * vol_wet) >> 15) + 1) >> 15) + 1);
-            }
+            const int16_t in_val = *in;
+            
+            // Thanks to michi for help in optimizing the underlying math here.
+            // I have assumed that overflows will never occur, as that would give garbage anyway.
+            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * ((volume_0 * vol_dry) >> 15) + 32769) >> 15);
+            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * ((volume_1 * vol_dry) >> 15) + 32769) >> 15);
+            *wet_0 = clamp16(((*wet_0 << 15) - *wet_0 + in_val * ((volume_0 * vol_wet) >> 15) + 32769) >> 15);
+            *wet_1 = clamp16(((*wet_1 << 15) - *wet_1 + in_val * ((volume_1 * vol_wet) >> 15) + 32769) >> 15);
         }
     }
     
     // Else if we do NOT have the AUX flag set, use only the dry channel
     else {
         for (int i = 0, index = 0; i < nSamples; i++, in++, dry_0++, dry_1++, index = i & 7) {
-            const int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
-                          volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+
+            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
+                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+
+            vols_0[index] = clamp32((((int64_t) volume_0) * rate_0) >> 16);
+            vols_1[index] = clamp32((((int64_t) volume_1) * rate_1) >> 16);
             
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Only clamping on the upper end seems to work for volume, but I'll leave both ends on for now.
-                const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
-                              vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
+            volume_0 >>= 16;
+            volume_1 >>= 16;
 
-                vols_0[index] = (int32_t) clamp32_upper(vol_0_temp);
-                vols_1[index] = (int32_t) clamp32_upper(vol_1_temp);
-            }
+            const int16_t in_val = *in;
 
-            const int32_t volume_0_s = volume_0 >> 16,
-                          volume_1_s = volume_1 >> 16;
-
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Thanks to michi for optimizing the underlying math here.
-                const int16_t in_val = *in;
-                *dry_0 =  clamp16((((*dry_0 << 15) - *dry_0 + in_val * ((volume_0_s * vol_dry) >> 15) + 1) >> 15) + 1);
-                *dry_1 =  clamp16((((*dry_1 << 15) - *dry_1 + in_val * ((volume_1_s * vol_dry) >> 15) + 1) >> 15) + 1);
-            }
+            // Thanks to michi for help in optimizing the underlying math here.
+            // I have assumed that overflows will never occur, as that would give garbage anyway.
+            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * ((volume_0 * vol_dry) >> 15) + 32769) >> 15);
+            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * ((volume_1 * vol_dry) >> 15) + 32769) >> 15);
         }
     }
 
