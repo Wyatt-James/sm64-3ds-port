@@ -306,11 +306,12 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     for (int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t)); nSamples != 0; nSamples--, out++) {
         const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
 
-        *out = clamp16(((in[0] * tbl[0] + 0x4000) >> 15) +
-                       ((in[1] * tbl[1] + 0x4000) >> 15) +
-                       ((in[2] * tbl[2] + 0x4000) >> 15) +
-                       ((in[3] * tbl[3] + 0x4000) >> 15));
-
+        // I don't believe that this will overflow, so this saves 3 additions and 3 rightshifts.
+        *out = clamp16((in[0] * tbl[0] +
+                        in[1] * tbl[1] +
+                        in[2] * tbl[2] +
+                        in[3] * tbl[3] + 0x10000) >> 15);
+        
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
         pitch_accumulator %= 0x10000;
@@ -457,15 +458,8 @@ void aMixImpl(const int16_t gain, const uint16_t in_addr, const uint16_t out_add
     
     // Else, use full logic
     else
-        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples --, in ++, out ++) {
-            *out = (int16_t) clamp16(((*out * 0x7fff + *in * gain) + 0x4000) >> 15);
-            // const int32_t part1 = *out * 0x7fff;
-            // const int32_t part2 = *in * gain;
-            // const int32_t part3 = part1 + part2;
-            // const int32_t part4 = part3 + 0x4000;
-            // const int32_t part5 = part4 >> 15;
-
-            // *out = (int16_t) clamp16(part5);
+        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++) {
+            *out = (int16_t) clamp16((((*out << 15) - *out + *in * gain) + 0x4000) >> 15);
         }
 }
 
