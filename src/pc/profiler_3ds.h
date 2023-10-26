@@ -25,6 +25,7 @@ void profiler_3ds_log_start_time_impl();
 void profiler_3ds_snoop_impl(volatile unsigned int snoop_id);
 double profiler_3ds_elapsed_time_impl();
 void profiler_3ds_reset_impl();
+void profiler_3ds_init_impl();
 
 // Macros
 #define profiler_3ds_log_time(id)     PROFILER_3DS_DO(profiler_3ds_log_time_impl(id)) // Logs a time with the given ID.
@@ -32,5 +33,6 @@ void profiler_3ds_reset_impl();
 #define profiler_3ds_snoop(snoop_id)  PROFILER_3DS_DO(profiler_3ds_snoop_impl(snoop_id)) // Computes some useful information for the timestamps. Intended for debugger use.
 #define profiler_3ds_elapsed_time()   PROFILER_3DS_DO(profiler_3ds_elapsed_time_impl()) // Returns the total elapsed time in milliseconds.
 #define profiler_3ds_reset()          PROFILER_3DS_DO(profiler_3ds_reset_impl()) // Resets all parameters and logs the start time.
+#define profiler_3ds_init()           PROFILER_3DS_DO(profiler_3ds_init_impl()) // Initializes all snoop counters and resets the profiler.
 
 #endif

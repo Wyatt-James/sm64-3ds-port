@@ -50,7 +50,7 @@ static volatile unsigned int ids[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH]; // ID f
 
 static volatile __3ds_u32 stamp_count = 0;
 
-static volatile __3ds_u8 snoop_interval = 8;
+static volatile __3ds_u8 snoop_interval = 32;
 static volatile __3ds_u8 snoop_counters[PROFILER_3DS_NUM_TRACKED_SNOOP_IDS];
 
 // libctru's osTickCounterUpdate measures time between updates. We want time since last reset.
@@ -84,7 +84,7 @@ void profiler_3ds_log_start_time_impl() {
 void profiler_3ds_snoop_impl(UNUSED volatile unsigned int snoop_id) {
 
     // Useful GDB prints:
-    // p/f *totals_per_id@11
+    // p/f *totals_per_id@18
 
     // IDs:
     // 0:  mixed
@@ -146,7 +146,9 @@ void profiler_3ds_reset_impl() {
     profiler_3ds_log_start_time_impl();
 }
 
-void profiler_3ds_init() {
-    bzero((void*) snoop_counters, sizeof(snoop_counters));
+void profiler_3ds_init_impl() {
+    for (int i = 0; i < ARRAY_COUNT(snoop_counters); i++)
+        snoop_counters[i] = snoop_interval;
+        
     profiler_3ds_reset_impl();
 }

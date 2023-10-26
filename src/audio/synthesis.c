@@ -2022,6 +2022,7 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
         aEnvMixer(cmd++, mixerFlags | A_AUX,
                   VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->mixEnvelopeState));
 #endif
+        profiler_3ds_log_time(13); // EnvMixer Reverb
         if (note->stereoStrongRight) {
             aSetBuffer(cmd++, 0, 0, 0, nSamples * 2);
             // 0x8000 is -100%, so subtract sound instead of adding...

@@ -147,6 +147,8 @@ inline void audio_3ds_run_one_frame() {
 
 static void audio_3ds_loop()
 {
+    profiler_3ds_init();
+    
     while (running)
     {
         if (s_audio_frames_to_process > 0)
