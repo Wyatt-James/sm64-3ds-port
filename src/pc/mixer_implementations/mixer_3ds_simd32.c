@@ -13,6 +13,11 @@
 
  * Enhanced RSPA emulation allows us to break the rules of
  * RSPA emulation a little bit for better performance.
+ * 
+ * 3DS cache line length is 8 words (32 bytes)
+ * 
+ * Thanks to michi and Wuerfel_21 for help in optimizing
+ * some math and compiler nonsense.
  */
 
 #pragma GCC optimize ("unroll-loops")
@@ -20,6 +25,8 @@
 #define ROUND_UP_32(v) (((v) + 31) & ~31)
 #define ROUND_UP_16(v) (((v) + 15) & ~15)
 #define ROUND_UP_8(v) (((v) + 7) & ~7)
+
+#define INT16x2_LOAD(upper, lower) (int16x2_t) ((upper << 16) | ((uint16_t) lower))
 
 static struct {
     uint16_t in;
@@ -86,9 +93,7 @@ static int16_t resample_table[64][4] = {
 #define CLAMP32_UPPER_T 0x7fffffff
 
 // clamps an int32_t to an int16_t
-static inline int16_t clamp16(int32_t v) {
-    return (int16_t) __ssat(v, 16);
-}
+#define clamp16(v) ((int16_t) __ssat(v, 16))
 
 // Clamps an int64_t on the positive end, with threshold CLAMP32_UPPER_T.
 // Unfortunately, 3DS lacks a 64-bit saturation instruction.
@@ -229,34 +234,76 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
 
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
-        const int shift = *in >> 4; // should be in 0..12
-        const int table_index = *in++ & 0xf; // should be in 0..7
-        int16_t (*tbl)[8] = rspa.adpcm_table[table_index];
+        const uint8_t shift = *in >> 4; // should be in 0..12
+        const uint8_t table_index = *in++ & 0xf; // should be in 0..7
+        const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
+        const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
+        const int16x2_t* const tbl_simd = (int16x2_t*) tbl_1;
 
-        // Decompress 16 PCM samples from 9 bytes ADPCM
+        // Decompress 8 PCM samples twice
         for (int i = 0; i < 2; i++) {
+            const int16x2_t prev = *((int16x2_t*) (out - 2)); // Loaded in reverse order due to endianness
             int16_t ins[8];
-            const int16_t prev1 = out[-1];
-            const int16_t prev2 = out[-2];
+            int32_t acc_tbl[8];
 
-            // Load 4 bytes from *in (total of 8)
+            // Load 4 bytes from *in (total of 8) and calculate initial values
+            #pragma GCC unroll 4
             for (int j = 0; j < 8; j += 2, in++) {
-                const uint8_t in_val = *in;
-                ins[j] =     (((in_val >> 4) << 28) >> 28) << shift;
-                ins[j + 1] = (((in_val & 0xf) << 28) >> 28) << shift;
+                ins[j] =     (((*in >> 4) << 28) >> 28) << shift;
+                acc_tbl[j] = __smlad(INT16x2_LOAD(tbl_1[j], tbl_0[j]), prev, ins[j] << 11);
+                
+                ins[j + 1] = (((*in & 0xf) << 28) >> 28) << shift;
+                acc_tbl[j + 1] = __smlad(INT16x2_LOAD(tbl_1[j + 1], tbl_0[j + 1]), prev, ins[j + 1] << 11);
             }
 
-            // Synthesize 8 samples
-            for (int j = 0; j < 8; j++, out++) {
-                int32_t acc = tbl[0][j] * prev2 + tbl[1][j] * prev1 + (ins[j] << 11);
+            int16x2_t ins_val = INT16x2_LOAD(ins[0], ins[1]);
 
-                // Iterate tbl in descending order from [j-1, 0]
-                // Iterate ins in ascending  order from [0, j-1]
-                for (int k = 0; k < j; k++)
-                    acc += tbl[1][((j - k) - 1)] * ins[k];
+            // Meat and potatoes
+            // Touch the funny numbers and you shall surely perish
+            acc_tbl[2] = __smlad(tbl_simd[0],  ins_val,                                  acc_tbl[2]); // tbl = 1,0
+            acc_tbl[4] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[4]); // tbl = 3,2
+            acc_tbl[6] = __smlad(tbl_simd[2],  ins_val,                                  acc_tbl[6]); // tbl = 5,4
+            acc_tbl[3] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[2])), acc_tbl[3]); // tbl = 1,0
+            acc_tbl[5] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[5]); // tbl = 3,2
+            acc_tbl[7] = __smlad(tbl_simd[2],  ins_val,                                  acc_tbl[7]); // tbl = 5,4
+            acc_tbl[4] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[3])), acc_tbl[4]); // tbl = 1,0
+            acc_tbl[6] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[6]); // tbl = 3,2
+            acc_tbl[5] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[4])), acc_tbl[5]); // tbl = 1,0
+            acc_tbl[7] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[7]); // tbl = 3,2
+            acc_tbl[6] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[5])), acc_tbl[6]); // tbl = 1,0
+            acc_tbl[7] = __smlad(tbl_simd[0],            INT16x2_LOAD(ins_val, ins[6]),  acc_tbl[7]); // tbl = 1,0
+            
+            // Add the stragglers
+            acc_tbl[1] += tbl_1[0] * ins[0];
+            acc_tbl[3] += tbl_1[2] * ins[0];
+            acc_tbl[5] += tbl_1[4] * ins[0];
+            acc_tbl[7] += tbl_1[6] * ins[0];
+            
+            // Output
+            #pragma GCC unroll 8
+            for (int j = 0; j < 8; j++, out++)
+                *out = clamp16(acc_tbl[j] >> 11);
+            
+            // Old way
+            // Load 4 bytes from *in (total of 8)
+            // for (int j = 0; j < 8; j += 2, in++) {
+            //     const uint8_t in_val = *in;
+            //     ins[j] =     (((in_val >> 4) << 28) >> 28) << shift;
+            //     ins[j + 1] = (((in_val & 0xf) << 28) >> 28) << shift;
+            // }
 
-                *out = clamp16(acc >> 11);
-            }
+            // #pragma GCC unroll 8
+            // for (int j = 0; j < 8; j++, out++) {
+            //     // int32_t acc = tbl_0[j] * prev2 + tbl_1[j] * prev1 + (ins[j] << 11);
+            //     int32_t acc = __smlad(INT16x2_LOAD(tbl_1[j], tbl_0[j]), prev, ins[j] << 11);
+
+            //     // Iterate tbl in descending order from [j-1, 0]
+            //     // Iterate ins in ascending order from  [0, j-1]
+            //     for (int k = 0; k < j; k++)
+            //         acc += tbl_1[(j - k) - 1] * ins[k];
+                
+            //     *out = clamp16(acc >> 11);
+            // }
         }
         nbytes -= 16 * sizeof(int16_t);
     }
@@ -304,14 +351,18 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     
     // Round up, and divide by 2 for byte count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
     for (int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t)); nSamples != 0; nSamples--, out++) {
-        const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
 
-        // I don't believe that this will overflow, so this saves 3 additions and 3 rightshifts.
-        *out = clamp16((in[0] * tbl[0] +
-                        in[1] * tbl[1] +
-                        in[2] * tbl[2] +
-                        in[3] * tbl[3] + 0x10000) >> 15);
-        
+        // Inaccurate rounding
+        const int32_t* const tbl = (const int32_t* const) resample_table[(pitch_accumulator << 6) >> 16];
+        const int32_t* const in_tmp = (const int32_t* const) in;
+        *out = clamp16((__smlad(tbl[1], in_tmp[1], __smlad(tbl[0], in_tmp[0], 0x10000))) >> 15);
+
+        // const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
+        // *out = clamp16((in[0] * tbl[0] +
+        //         in[1] * tbl[1] +
+        //         in[2] * tbl[2] +
+        //         in[3] * tbl[3] + 0x10000) >> 15);
+
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
         pitch_accumulator %= 0x10000;
@@ -340,7 +391,7 @@ static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume
     }
     
     // Decreasing volume
-    else  if ((volume >> 16) < target)
+    else if ((volume >> 16) < target)
             return target << 16;
 
     return volume;
@@ -390,6 +441,7 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
     // If we have the AUX flag set, use both the wet and dry channels.
     if (flags & A_AUX) {
+        #pragma GCC unroll 8
         for (int i = 0, index = 0; i < nSamples; i++, in++, wet_0++, wet_1++, dry_0++, dry_1++, index = i & 7) {
 
             int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
@@ -403,17 +455,17 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
             const int16_t in_val = *in;
             
-            // Thanks to michi for help in optimizing the underlying math here.
-            // I have assumed that overflows will never occur, as that would give garbage anyway.
-            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * ((volume_0 * vol_dry) >> 15) + 32769) >> 15);
-            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * ((volume_1 * vol_dry) >> 15) + 32769) >> 15);
-            *wet_0 = clamp16(((*wet_0 << 15) - *wet_0 + in_val * ((volume_0 * vol_wet) >> 15) + 32769) >> 15);
-            *wet_1 = clamp16(((*wet_1 << 15) - *wet_1 + in_val * ((volume_1 * vol_wet) >> 15) + 32769) >> 15);
+            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+            *dry_0 = clamp16(*dry_0 + ((in_val * ((volume_0 * vol_dry) >> 15)) >> 15));
+            *dry_1 = clamp16(*dry_1 + ((in_val * ((volume_1 * vol_dry) >> 15)) >> 15));
+            *wet_0 = clamp16(*wet_0 + ((in_val * ((volume_0 * vol_wet) >> 15)) >> 15));
+            *wet_1 = clamp16(*wet_1 + ((in_val * ((volume_1 * vol_wet) >> 15)) >> 15));
         }
     }
     
     // Else if we do NOT have the AUX flag set, use only the dry channel
     else {
+        #pragma GCC unroll 8
         for (int i = 0, index = 0; i < nSamples; i++, in++, dry_0++, dry_1++, index = i & 7) {
 
             int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
@@ -427,10 +479,9 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
             const int16_t in_val = *in;
 
-            // Thanks to michi for help in optimizing the underlying math here.
-            // I have assumed that overflows will never occur, as that would give garbage anyway.
-            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * ((volume_0 * vol_dry) >> 15) + 32769) >> 15);
-            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * ((volume_1 * vol_dry) >> 15) + 32769) >> 15);
+            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+            *dry_0 = clamp16(*dry_0 + ((in_val * ((volume_0 * vol_dry) >> 15)) >> 15));
+            *dry_1 = clamp16(*dry_1 + ((in_val * ((volume_1 * vol_dry) >> 15)) >> 15));
         }
     }
 
@@ -452,15 +503,13 @@ void aMixImpl(const int16_t gain, const uint16_t in_addr, const uint16_t out_add
 
     // If gain is a specific value, use simplified logic
     if (gain == -0x8000)
-        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++) {
+        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++)
             *out = (int16_t) clamp16(*out - *in);
-        }
     
     // Else, use full logic
     else
-        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++) {
-            *out = (int16_t) clamp16((((*out << 15) - *out + *in * gain) + 0x4000) >> 15);
-        }
+        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++)
+            *out = (int16_t) clamp16(*out + ((*in * gain) >> 15));
 }
 
 // Enables one to inspect the contents of the Emulated RSPA via debugger.
