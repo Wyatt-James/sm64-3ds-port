@@ -7,6 +7,29 @@
 
 #include "multi_viewport/multi_viewport.h"
 #include "gfx_citro3d.h"
+#include "src/pc/audio/audio_3ds_threading.h"
+
+#define u64 __3ds_u64
+#define s64 __3ds_s64
+#define u32 __3ds_u32
+#define vu32 __3ds_vu32
+#define vs32 __3ds_vs32
+#define s32 __3ds_s32
+#define u16 __3ds_u16
+#define s16 __3ds_s16
+#define u8 __3ds_u8
+#define s8 __3ds_s8
+#include <3ds/services/apt.h>
+#undef u64
+#undef s64
+#undef u32
+#undef vu32
+#undef vs32
+#undef s32
+#undef u16
+#undef s16
+#undef u8
+#undef s8
 
 C3D_RenderTarget *gTarget;
 C3D_RenderTarget *gTargetRight;
@@ -24,6 +47,9 @@ bool gGfx3DEnabled;
 bool gShowConfigMenu = false;
 bool gShouldRun = true;
 bool gUpdateSliderFlag = false;
+volatile __3ds_s32 gAppSuspendCounter = 0; // > 0 when the 3DS lid is closed or home button is pressed
+
+aptHookCookie apt_hook_cookie;
 
 static u8 n3ds_model = 0;
 
@@ -172,6 +198,37 @@ static void gfx_3ds_handle_touch() {
     }
 }
 
+// Called whenever a 3DS OS event is fired.
+static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
+{
+    if (s_audio_cpu != OLD_CORE_1)
+        return;
+
+    switch (hook) {
+        case APTHOOK_ONSLEEP: // Lid closed
+        case APTHOOK_ONSUSPEND: // Home menu opened
+            while (s_audio_frames_to_process > 0)
+                svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+
+            AtomicIncrement(&gAppSuspendCounter);
+            APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT_IDLE);
+            break;
+
+        case APTHOOK_ONWAKEUP: // Lid opened
+        case APTHOOK_ONRESTORE: // Home menu closed
+            APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT);
+            AtomicDecrement(&gAppSuspendCounter);
+            break;
+
+        case APTHOOK_ONEXIT: // Application exit
+            APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT_IDLE);
+            break;
+        
+        case APTHOOK_COUNT: // Unused
+            break;
+    }
+}
+
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)
 {
     if (checkN3DS())
@@ -216,11 +273,20 @@ static void gfx_set_fullscreen(UNUSED bool enable)
 
 static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
 {
+    aptHook(&apt_hook_cookie, gfx_3ds_apt_hook, NULL);
+    aptSetSleepAllowed(true);
+
     while (aptMainLoop() && gShouldRun)
     {
-        run_one_game_iter();
+        if (gAppSuspendCounter == 0)
+            run_one_game_iter();
+        else
+            svcSleepThread(N3DS_AUDIO_MILLIS_TO_NANOS(33));
     }
 
+    aptSetSleepAllowed(false);
+    aptUnhook(&apt_hook_cookie);
+    gAppSuspendCounter = 0;
     C3D_Fini();
     gfxExit();
 }

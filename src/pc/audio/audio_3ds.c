@@ -27,6 +27,7 @@
 // Instructions for Thread5
 bool s_thread5_wait_for_audio_to_finish = true;
 bool s_thread5_does_audio = false;
+enum N3dsCpu s_audio_cpu = OLD_CORE_0;
 
 volatile __3ds_s32 s_audio_frames_to_tick = 0;
 volatile __3ds_s32 s_audio_frames_to_process = 0;
@@ -115,7 +116,8 @@ static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
 }
 
 inline void audio_3ds_run_one_frame() {
-    profiler_3ds_reset();
+    profiler_3ds_linear_reset();
+    profiler_3ds_circular_advance_frame();
 
     // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
     u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
@@ -140,7 +142,11 @@ inline void audio_3ds_run_one_frame() {
     // Play our audio buffer. If we outrun the DSP, we wait until the DSP is ready.
     profiler_3ds_log_time(0);
     audio_3ds_play_fast((u8 *)audio_buffer, N3DS_DSP_N_CHANNELS * num_audio_samples * 4, N3DS_DSP_N_CHANNELS * samples_to_copy * 4);
-    profiler_3ds_log_time(17); // 3DS export to DSP 
+    profiler_3ds_log_time(17); // 3DS export to DSP
+
+    // profiler_3ds_log_time(0);
+    // N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(10));
+    // profiler_3ds_log_time(18);
 
     profiler_3ds_snoop(0);
 }
@@ -191,23 +197,22 @@ static bool audio_3ds_init()
     }
 
     sNextBuffer = 0;
-    int cpu;
     
     if (is_new_n3ds())
-        cpu = 2; // n3ds 3rd core]
+        s_audio_cpu = NEW_CORE_2; // n3ds 3rd core
 
-    else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(80)))
-        cpu = 1; // o3ds 2nd core (system)
+    else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT)))
+        s_audio_cpu = OLD_CORE_1; // o3ds 2nd core (system)
 
     else
-        cpu = 0; // Run in Thread5
+        s_audio_cpu = OLD_CORE_0; // Run in Thread5
 
-    if (cpu != 0) {
-        threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, 0x18, cpu, true);
+    if (s_audio_cpu != OLD_CORE_0) {
+        threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, 0x18, s_audio_cpu, true);
 
         if (threadId != NULL) {
             s_thread5_does_audio = false;
-            printf("Created audio thread on core %i\n", cpu);
+            printf("Created audio thread on core %i\n", s_audio_cpu);
         } else {
             s_thread5_does_audio = true;
             printf("Failed to create audio thread. Using Thread5.\n");
