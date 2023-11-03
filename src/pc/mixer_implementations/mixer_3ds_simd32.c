@@ -97,7 +97,7 @@ static int16_t resample_table[64][4] = {
 
 // Clamps an int64_t on the positive end, with threshold CLAMP32_UPPER_T.
 // Unfortunately, 3DS lacks a 64-bit saturation instruction.
-// Do not forget to cast after using both clamping functions!
+// Do not forget to cast after using!
 static inline int64_t clamp32_upper(const int64_t v) {
     if (v > CLAMP32_UPPER_T)
         return CLAMP32_UPPER_T;
@@ -107,7 +107,7 @@ static inline int64_t clamp32_upper(const int64_t v) {
 
 // Clamps an int64_t on the negative end, with threshold CLAMP32_LOWER_T.
 // Unfortunately, 3DS lacks a 64-bit saturation instruction.
-// Do not forget to cast after using both clamping functions!
+// Do not forget to cast after using!
 static inline int64_t clamp32_lower(const int64_t v) {
     if (v < CLAMP32_LOWER_T)
         return CLAMP32_LOWER_T;
@@ -117,7 +117,7 @@ static inline int64_t clamp32_lower(const int64_t v) {
 
 // clamps an int64_t to an int32_t. Unfortunately, 3DS lacks a 64-bit saturation instruction.
 // Doing it this way tricks the compiler into using conditional logic, which is faster than conditional branches.
-static inline int32_t clamp32(int64_t v) {
+static inline int32_t clamp32(const int64_t v) {
     return (int32_t) clamp32_upper(clamp32_lower(v));
 }
 
@@ -173,6 +173,7 @@ void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
 
 // Interleaves into dest
 static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, const int count) {
+    #pragma GCC unroll 8
     for (int i = count * 8; i != 0; i--) {
         *dest++ = *l++;
         *dest++ = *r++;
@@ -207,9 +208,10 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
     rspa.adpcm_loop_state = adpcm_loop_state;
 }
 
-// Internal use only
-// ADPCM_STATE is a pointer type! Specifically a short[16].
 /*
+ * Internal use only
+ * ADPCM_STATE is a pointer type! Specifically a short[16].
+ * 
  * ADPCM packet format:
  *  9 bytes length
  *  Byte 1, upper nibble: shift magnitude, range [0-12]
@@ -283,27 +285,6 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
             #pragma GCC unroll 8
             for (int j = 0; j < 8; j++, out++)
                 *out = clamp16(acc_tbl[j] >> 11);
-            
-            // Old way
-            // Load 4 bytes from *in (total of 8)
-            // for (int j = 0; j < 8; j += 2, in++) {
-            //     const uint8_t in_val = *in;
-            //     ins[j] =     (((in_val >> 4) << 28) >> 28) << shift;
-            //     ins[j + 1] = (((in_val & 0xf) << 28) >> 28) << shift;
-            // }
-
-            // #pragma GCC unroll 8
-            // for (int j = 0; j < 8; j++, out++) {
-            //     // int32_t acc = tbl_0[j] * prev2 + tbl_1[j] * prev1 + (ins[j] << 11);
-            //     int32_t acc = __smlad(INT16x2_LOAD(tbl_1[j], tbl_0[j]), prev, ins[j] << 11);
-
-            //     // Iterate tbl in descending order from [j-1, 0]
-            //     // Iterate ins in ascending order from  [0, j-1]
-            //     for (int k = 0; k < j; k++)
-            //         acc += tbl_1[(j - k) - 1] * ins[k];
-                
-            //     *out = clamp16(acc >> 11);
-            // }
         }
         nbytes -= 16 * sizeof(int16_t);
     }
@@ -357,12 +338,6 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
         const int32_t* const in_tmp = (const int32_t* const) in;
         *out = clamp16((__smlad(tbl[1], in_tmp[1], __smlad(tbl[0], in_tmp[0], 0x10000))) >> 15);
 
-        // const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
-        // *out = clamp16((in[0] * tbl[0] +
-        //         in[1] * tbl[1] +
-        //         in[2] * tbl[2] +
-        //         in[3] * tbl[3] + 0x10000) >> 15);
-
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
         pitch_accumulator %= 0x10000;
@@ -382,17 +357,21 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
 }
 
 // Prevents volume from over/under-shooting its target
-static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int16_t target) {
+// Rate is always positive
+// Rate and target are always constant within each call to aEnvMixer
+static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int32_t target_s) {
 
-    // Increasing volume
-    if ((rate >> 16) > 0) {
-        if ((volume >> 16) > target)
-            return target << 16;
+    // // If rate is high enough, we might overshoot
+    if (rate >= 0x10000) {
+        if (volume > target_s)
+            return target_s;
     }
-    
-    // Decreasing volume
-    else if ((volume >> 16) < target)
-            return target << 16;
+
+    // If rate is not high enough, we won't overshoot, so we need to check undershoot
+    else {
+        if (volume < target_s)
+            return target_s;
+    }
 
     return volume;
 }
@@ -413,23 +392,28 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     const int16_t target_0 = isInit ? rspa.target[0] : state[32],
                   target_1 = isInit ? rspa.target[1] : state[35];
 
+    const int32_t target_0_s = target_0 << 16,
+                  target_1_s = target_1 << 16;
+
     const int32_t rate_0 = isInit ? rspa.rate[0] : (state[33] << 16) | (uint16_t)state[34],
                   rate_1 = isInit ? rspa.rate[1] : (state[36] << 16) | (uint16_t)state[37];
 
     const int16_t vol_dry = isInit ? rspa.vol_dry : state[38],
                   vol_wet = isInit ? rspa.vol_wet : state[39];
 
+    const int32_t vol_dry_s = vol_dry << 2,
+                  vol_wet_s = vol_wet << 2;
+
     int32_t vols_0[8], vols_1[8];
 
     if (isInit) {
-        const int32_t step_diff[2] = {
-            rspa.vol[0] * (rate_0 - 0x10000) / 8,
-            rspa.vol[0] * (rate_1 - 0x10000) / 8
-        };
-
+        const int32_t step_diff_0 = rspa.vol[0] * (rate_0 - 0x10000) / 8,
+                      step_diff_1 = rspa.vol[0] * (rate_1 - 0x10000) / 8;
+        
+        #pragma GCC unroll 8
         for (int i = 0; i < 8; i++) {
-            vols_0[i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
-            vols_1[i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff[1] * (i + 1));
+            vols_0[i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff_0 * (i + 1));
+            vols_1[i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff_1 * (i + 1));
         }
     } else {
         memcpy(vols_0, state, 32);
@@ -444,22 +428,23 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
         #pragma GCC unroll 8
         for (int i = 0, index = 0; i < nSamples; i++, in++, wet_0++, wet_1++, dry_0++, dry_1++, index = i & 7) {
 
-            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
-                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0_s),
+                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1_s);
 
-            vols_0[index] = clamp32((((int64_t) volume_0) * rate_0) >> 16);
-            vols_1[index] = clamp32((((int64_t) volume_1) * rate_1) >> 16);
-            
+            // Vols should never be negative
+            vols_0[index] = (int32_t) clamp32_upper((((int64_t) volume_0) * rate_0) >> 16);
+            vols_1[index] = (int32_t) clamp32_upper((((int64_t) volume_1) * rate_1) >> 16);
+
             volume_0 >>= 16;
             volume_1 >>= 16;
-
+            
             const int16_t in_val = *in;
             
-            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
-            *dry_0 = clamp16(*dry_0 + ((in_val * ((volume_0 * vol_dry) >> 15)) >> 15));
-            *dry_1 = clamp16(*dry_1 + ((in_val * ((volume_1 * vol_dry) >> 15)) >> 15));
-            *wet_0 = clamp16(*wet_0 + ((in_val * ((volume_0 * vol_wet) >> 15)) >> 15));
-            *wet_1 = clamp16(*wet_1 + ((in_val * ((volume_1 * vol_wet) >> 15)) >> 15));
+            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.a
+            *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
+            *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
+            *wet_0 = clamp16(*wet_0 + (((in_val * volume_0) * (int64_t) vol_wet_s) >> 32));
+            *wet_1 = clamp16(*wet_1 + (((in_val * volume_1) * (int64_t) vol_wet_s) >> 32));
         }
     }
     
@@ -468,11 +453,12 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
         #pragma GCC unroll 8
         for (int i = 0, index = 0; i < nSamples; i++, in++, dry_0++, dry_1++, index = i & 7) {
 
-            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
-                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0_s),
+                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1_s);
 
-            vols_0[index] = clamp32((((int64_t) volume_0) * rate_0) >> 16);
-            vols_1[index] = clamp32((((int64_t) volume_1) * rate_1) >> 16);
+            // Vols should never be negative
+            vols_0[index] = (int32_t) clamp32_upper((((int64_t) volume_0) * rate_0) >> 16);
+            vols_1[index] = (int32_t) clamp32_upper((((int64_t) volume_1) * rate_1) >> 16);
             
             volume_0 >>= 16;
             volume_1 >>= 16;
@@ -480,8 +466,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             const int16_t in_val = *in;
 
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
-            *dry_0 = clamp16(*dry_0 + ((in_val * ((volume_0 * vol_dry) >> 15)) >> 15));
-            *dry_1 = clamp16(*dry_1 + ((in_val * ((volume_1 * vol_dry) >> 15)) >> 15));
+            *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
+            *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
         }
     }
 

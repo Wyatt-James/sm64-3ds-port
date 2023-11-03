@@ -10,6 +10,11 @@
 
  * Enhanced RSPA emulation allows us to break the rules of
  * RSPA emulation a little bit for better performance.
+ * 
+ * 3DS cache line length is 8 words (32 bytes)
+ * 
+ * Thanks to michi and Wuerfel_21 for help in optimizing
+ * some math and compiler nonsense.
  */
 
 #pragma GCC optimize ("unroll-loops")
@@ -79,92 +84,59 @@ static int16_t resample_table[64][4] = {
     {0xffd8, 0x0e5f, 0x6696, 0x0b39}, {0xffdf, 0x0d46, 0x66ad, 0x0c39}
 };
 
-#define CLAMP16_LOWER_T -0x8000
-#define CLAMP16_UPPER_T 0x7fff
 #define CLAMP32_LOWER_T -0x7fffffff - 1 // Must remain this way or the compiler goofs
 #define CLAMP32_UPPER_T 0x7fffffff
+#define CLAMP16_LOWER_T -0x8000
+#define CLAMP16_UPPER_T 0x7fff
 
-// clamps an int32_t to an int16_t, between CLAMP16_LOWER_T and CLAMP16_UPPER_T.
-static inline int16_t clamp16(int32_t v) {
-    if (v < CLAMP16_LOWER_T)
-        return CLAMP16_LOWER_T;
-
-    else if (v > CLAMP16_UPPER_T)
+// Clamps an int32_t on the negative end, with threshold CLAMP16_LOWER_T.
+// Do not forget to cast after using!
+static inline int32_t clamp16_upper(const int32_t v) {
+    if (v > CLAMP16_UPPER_T)
         return CLAMP16_UPPER_T;
-
-    return (int16_t)v;
-}
-
-// clamps an int64_t to an int32_t, between CLAMP32_LOWER_T and CLAMP32_UPPER_T.
-static inline int32_t clamp32(int64_t v) {
-    if (v < CLAMP32_LOWER_T)
-        return CLAMP32_LOWER_T;
-
-    else if (v > CLAMP32_UPPER_T)
-        return CLAMP32_UPPER_T;
-
-    return (int32_t)v;
-}
-
-// Clamps an int32_t on the positive end, with the provided threshold.
-// Do not forget to cast after using both clamping functions!
-static inline int32_t clamp16_upper_t(const int32_t v, const int32_t thresh) {
-    if (v > thresh)
-        return thresh;
-
-    return v;
-}
-
-// Clamps an int32_t on the negative end, with the provided threshold.
-// Do not forget to cast after using both clamping functions!
-static inline int32_t clamp16_lower_t(const int32_t v, const int32_t thresh) {
-    if (v < thresh)
-        return thresh;
-
-    return v;
-}
-
-// Clamps an int64_t on the positive end, with the provided threshold.
-// Do not forget to cast after using both clamping functions!
-static inline int64_t clamp32_upper_t(const int64_t v, const int64_t thresh) {
-    if (v > thresh)
-        return thresh;
-
-    return v;
-}
-
-// Clamps an int64_t on the negative end, with threshold CLAMP16_LOWER_T.
-// Do not forget to cast after using both clamping functions!
-static inline int64_t clamp32_lower_t(const int64_t v, const int64_t thresh) {
-    if (v < thresh)
-        return thresh;
 
     return v;
 }
 
 // Clamps an int32_t on the positive end, with threshold CLAMP16_UPPER_T.
-// Do not forget to cast after using both clamping functions!
-static inline int32_t clamp16_upper(const int32_t v) {
-    return clamp16_upper_t(v, CLAMP16_UPPER_T);
-}
-
-// Clamps an int32_t on the positive end, with threshold CLAMP16_LOWER_T.
-// Do not forget to cast after using both clamping functions!
+// Do not forget to cast after using!
 static inline int32_t clamp16_lower(const int32_t v) {
-    return clamp16_lower_t(v, CLAMP16_LOWER_T);
+    if (v < CLAMP16_LOWER_T)
+        return CLAMP16_LOWER_T;
+
+    return v;
 }
 
+// clamps an int32_t to an int16_t.
+// Doing it this way tricks the compiler into using conditional logic, which is faster than conditional branches.
+static inline int16_t clamp16(const int32_t v) {
+    return (int16_t) clamp16_upper(clamp16_lower(v));
+}
 
 // Clamps an int64_t on the positive end, with threshold CLAMP32_UPPER_T.
-// Do not forget to cast after using both clamping functions!
+// Unfortunately, 3DS lacks a 64-bit saturation instruction.
+// Do not forget to cast after using!
 static inline int64_t clamp32_upper(const int64_t v) {
-    return clamp32_upper_t(v, CLAMP32_UPPER_T);
+    if (v > CLAMP32_UPPER_T)
+        return CLAMP32_UPPER_T;
+
+    return v;
 }
 
 // Clamps an int64_t on the negative end, with threshold CLAMP32_LOWER_T.
-// Do not forget to cast after using both clamping functions!
+// Unfortunately, 3DS lacks a 64-bit saturation instruction.
+// Do not forget to cast after using!
 static inline int64_t clamp32_lower(const int64_t v) {
-    return clamp32_lower_t(v, CLAMP32_LOWER_T);
+    if (v < CLAMP32_LOWER_T)
+        return CLAMP32_LOWER_T;
+
+    return v;
+}
+
+// clamps an int64_t to an int32_t. Unfortunately, 3DS lacks a 64-bit saturation instruction.
+// Doing it this way tricks the compiler into using conditional logic, which is faster than conditional branches.
+static inline int32_t clamp32(const int64_t v) {
+    return (int32_t) clamp32_upper(clamp32_lower(v));
 }
 
 void aClearBufferImpl(uint16_t addr, int nbytes) {
@@ -219,6 +191,7 @@ void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
 
 // Interleaves into dest
 static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, const int count) {
+    #pragma GCC unroll 8
     for (int i = count * 8; i != 0; i--) {
         *dest++ = *l++;
         *dest++ = *r++;
@@ -253,9 +226,10 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
     rspa.adpcm_loop_state = adpcm_loop_state;
 }
 
-// Internal use only
-// ADPCM_STATE is a pointer type! Specifically a short[16].
 /*
+ * Internal use only
+ * ADPCM_STATE is a pointer type! Specifically a short[16].
+ * 
  * ADPCM packet format:
  *  9 bytes length
  *  Byte 1, upper nibble: shift magnitude, range [0-12]
@@ -268,7 +242,6 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
 */
 static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int16_t* out, int nbytes) {
 
-
     // Write the initial state
     if (flags & A_INIT) {
         memset(out, 0, 16 * sizeof(int16_t));
@@ -279,41 +252,43 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
     }
     out += 16;
 
-
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
-        const int shift = *in >> 4; // should be in 0..12
-        const int table_index = *in++ & 0xf; // should be in 0..7
-        int16_t (*tbl)[8] = rspa.adpcm_table[table_index];
+        const uint8_t shift = *in >> 4; // should be in 0..12
+        const uint8_t table_index = *in++ & 0xf; // should be in 0..7
+        const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
+        const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
 
-        // Decompress 16 PCM samples from 9 bytes ADPCM
+        // Decompress 8 PCM samples twice
         for (int i = 0; i < 2; i++) {
             int16_t ins[8];
             const int16_t prev1 = out[-1];
             const int16_t prev2 = out[-2];
-
+            
             // Load 4 bytes from *in (total of 8)
-            for (int j = 0; j < 4; j++) {
-                ins[j * 2] = (((*in >> 4) << 28) >> 28) << shift;
-                ins[j * 2 + 1] = (((*in++ & 0xf) << 28) >> 28) << shift;
+            #pragma GCC unroll 4
+            for (int j = 0; j < 8; j += 2, in++) {
+                const uint8_t in_val = *in;
+                ins[j] =     (((in_val >> 4) << 28) >> 28) << shift;
+                ins[j + 1] = (((in_val & 0xf) << 28) >> 28) << shift;
             }
 
+            #pragma GCC unroll 8
             for (int j = 0; j < 8; j++, out++) {
-                int32_t acc = tbl[0][j] * prev2 + tbl[1][j] * prev1 + (ins[j] << 11);
+                int32_t acc = tbl_0[j] * prev2 + tbl_1[j] * prev1 + (ins[j] << 11);
 
-                for (int k = 0; k < j; k++) {
-                    acc += tbl[1][((j - k) - 1)] * ins[k];
-                }
-
-                const int32_t sample = clamp16_lower(acc >> 11);
-                *out = (int16_t) clamp16_upper(sample);
+                // Iterate tbl in descending order from [j-1, 0]
+                // Iterate ins in ascending order from  [0, j-1]
+                for (int k = 0; k < j; k++)
+                    acc += tbl_1[(j - k) - 1] * ins[k];
+                
+                *out = clamp16(acc >> 11);
             }
         }
         nbytes -= 16 * sizeof(int16_t);
     }
     memcpy(state, out - 16, 16 * sizeof(int16_t));
 }
-    
 
 // Decodes ADPCM data directly from a given source.
 void aADPCMdecDirectImpl(uint8_t flags, ADPCM_STATE state, uint8_t* source) {
@@ -357,12 +332,12 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     // Round up, and divide by 2 for byte count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
     for (int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t)); nSamples != 0; nSamples--, out++) {
         const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
-        const int32_t sample_temp = clamp16_lower(((in[0] * tbl[0] + 0x4000) >> 15) +
-                                                    ((in[1] * tbl[1] + 0x4000) >> 15) +
-                                                    ((in[2] * tbl[2] + 0x4000) >> 15) +
-                                                    ((in[3] * tbl[3] + 0x4000) >> 15));
 
-        *out = (int16_t) clamp16_upper(sample_temp);
+        // Inaccurate rounding
+        *out = clamp16((in[0] * tbl[0] +
+                        in[1] * tbl[1] +
+                        in[2] * tbl[2] +
+                        in[3] * tbl[3] + 0x10000) >> 15);
 
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
@@ -382,20 +357,21 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     memcpy(state + 8, in, 8 * sizeof(int16_t));
 }
 
-static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int16_t target) {
+// Prevents volume from over/under-shooting its target
+// Rate is always positive
+// Rate and target are always constant within each call to aEnvMixer
+static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int32_t target_s) {
 
-    // Increasing volume
-    if ((rate >> 16) > 0) {
-        if ((volume >> 16) > target) {
-            return target << 16;
-        }
+    // // If rate is high enough, we might overshoot
+    if (rate >= 0x10000) {
+        if (volume > target_s)
+            return target_s;
     }
-    
-    // Decreasing volume
+
+    // If rate is not high enough, we won't overshoot, so we need to check undershoot
     else {
-        if ((volume >> 16) < target) {
-            return target << 16;
-        }
+        if (volume < target_s)
+            return target_s;
     }
 
     return volume;
@@ -417,23 +393,28 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     const int16_t target_0 = isInit ? rspa.target[0] : state[32],
                   target_1 = isInit ? rspa.target[1] : state[35];
 
+    const int32_t target_0_s = target_0 << 16,
+                  target_1_s = target_1 << 16;
+
     const int32_t rate_0 = isInit ? rspa.rate[0] : (state[33] << 16) | (uint16_t)state[34],
                   rate_1 = isInit ? rspa.rate[1] : (state[36] << 16) | (uint16_t)state[37];
 
     const int16_t vol_dry = isInit ? rspa.vol_dry : state[38],
                   vol_wet = isInit ? rspa.vol_wet : state[39];
 
+    const int32_t vol_dry_s = vol_dry << 2,
+                  vol_wet_s = vol_wet << 2;
+
     int32_t vols_0[8], vols_1[8];
 
     if (isInit) {
-        const int32_t step_diff[2] = {
-            rspa.vol[0] * (rate_0 - 0x10000) / 8,
-            rspa.vol[0] * (rate_1 - 0x10000) / 8
-        };
-
+        const int32_t step_diff_0 = rspa.vol[0] * (rate_0 - 0x10000) / 8,
+                      step_diff_1 = rspa.vol[0] * (rate_1 - 0x10000) / 8;
+        
+        #pragma GCC unroll 8
         for (int i = 0; i < 8; i++) {
-            vols_0[i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
-            vols_1[i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff[1] * (i + 1));
+            vols_0[i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff_0 * (i + 1));
+            vols_1[i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff_1 * (i + 1));
         }
     } else {
         memcpy(vols_0, state, 32);
@@ -445,69 +426,49 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
     // If we have the AUX flag set, use both the wet and dry channels.
     if (flags & A_AUX) {
+        #pragma GCC unroll 8
         for (int i = 0, index = 0; i < nSamples; i++, in++, wet_0++, wet_1++, dry_0++, dry_1++, index = i & 7) {
-            const int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
-                          volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+
+            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0_s),
+                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1_s);
+
+            // Vols should never be negative
+            vols_0[index] = (int32_t) clamp32_upper((((int64_t) volume_0) * rate_0) >> 16);
+            vols_1[index] = (int32_t) clamp32_upper((((int64_t) volume_1) * rate_1) >> 16);
+
+            volume_0 >>= 16;
+            volume_1 >>= 16;
             
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Only clamping on the upper end seems to work for volume, but I'll leave both ends on for now.
-                const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
-                              vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
-
-                vols_0[index] = (int32_t) clamp32_upper(vol_0_temp);
-                vols_1[index] = (int32_t) clamp32_upper(vol_1_temp);
-            }
-
-            const int32_t volume_0_s = volume_0 >> 16,
-                          volume_1_s = volume_1 >> 16;
-
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Thanks to michi for optimizing the underlying math here.
-                const int16_t in_val = *in;
-                const int32_t dry_temp_0 = clamp16_lower((((*dry_0 << 15) - *dry_0 + in_val * ((volume_0_s * vol_dry) >> 15) + 1) >> 15) + 1),
-                              dry_temp_1 = clamp16_lower((((*dry_1 << 15) - *dry_1 + in_val * ((volume_1_s * vol_dry) >> 15) + 1) >> 15) + 1),
-                              wet_temp_0 = clamp16_lower((((*wet_0 << 15) - *wet_0 + in_val * ((volume_0_s * vol_wet) >> 15) + 1) >> 15) + 1),
-                              wet_temp_1 = clamp16_lower((((*wet_1 << 15) - *wet_1 + in_val * ((volume_1_s * vol_wet) >> 15) + 1) >> 15) + 1);
-                
-                *dry_0 = (int16_t) clamp16_upper(dry_temp_0);
-                *dry_1 = (int16_t) clamp16_upper(dry_temp_1);
-                *wet_0 = (int16_t) clamp16_upper(wet_temp_0);
-                *wet_1 = (int16_t) clamp16_upper(wet_temp_1);
-            }
+            const int16_t in_val = *in;
+            
+            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.a
+            *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
+            *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
+            *wet_0 = clamp16(*wet_0 + (((in_val * volume_0) * (int64_t) vol_wet_s) >> 32));
+            *wet_1 = clamp16(*wet_1 + (((in_val * volume_1) * (int64_t) vol_wet_s) >> 32));
         }
     }
     
     // Else if we do NOT have the AUX flag set, use only the dry channel
     else {
+        #pragma GCC unroll 8
         for (int i = 0, index = 0; i < nSamples; i++, in++, dry_0++, dry_1++, index = i & 7) {
-            const int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0),
-                          volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1);
+
+            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0_s),
+                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1_s);
+
+            // Vols should never be negative
+            vols_0[index] = (int32_t) clamp32_upper((((int64_t) volume_0) * rate_0) >> 16);
+            vols_1[index] = (int32_t) clamp32_upper((((int64_t) volume_1) * rate_1) >> 16);
             
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Only clamping on the upper end seems to work for volume, but I'll leave both ends on for now.
-                const int64_t vol_0_temp = clamp32_lower((((int64_t) volume_0) * rate_0) >> 16),
-                              vol_1_temp = clamp32_lower((((int64_t) volume_1) * rate_1) >> 16);
+            volume_0 >>= 16;
+            volume_1 >>= 16;
 
-                vols_0[index] = (int32_t) clamp32_upper(vol_0_temp);
-                vols_1[index] = (int32_t) clamp32_upper(vol_1_temp);
-            }
+            const int16_t in_val = *in;
 
-            const int32_t volume_0_s = volume_0 >> 16,
-                          volume_1_s = volume_1 >> 16;
-
-            {
-                // These are done in batches, and clamping in two parts, to reduce branching, which helps performance slightly.
-                // Thanks to michi for optimizing the underlying math here.
-                const int16_t in_val = *in;
-                const int32_t dry_temp_0 = clamp16_lower((((*dry_0 << 15) - *dry_0 + in_val * ((volume_0_s * vol_dry) >> 15) + 1) >> 15) + 1),
-                              dry_temp_1 = clamp16_lower((((*dry_1 << 15) - *dry_1 + in_val * ((volume_1_s * vol_dry) >> 15) + 1) >> 15) + 1);
-                          
-                *dry_0 = (int16_t) clamp16_upper(dry_temp_0);
-                *dry_1 = (int16_t) clamp16_upper(dry_temp_1);
-            }
+            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+            *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
+            *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
         }
     }
 
@@ -529,17 +490,13 @@ void aMixImpl(const int16_t gain, const uint16_t in_addr, const uint16_t out_add
 
     // If gain is a specific value, use simplified logic
     if (gain == -0x8000)
-        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++) {
-            const int32_t sample = clamp16_lower(*out - *in);
-            *out = (int16_t) clamp16_upper(sample);
-        }
+        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++)
+            *out = (int16_t) clamp16(*out - *in);
     
     // Else, use full logic
     else
-        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++) {
-            const int32_t sample = clamp16_lower(((*out * 0x7fff + *in * gain) + 0x4000) >> 15);
-            *out = (int16_t) clamp16_upper(sample);
-        }
+        for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++)
+            *out = (int16_t) clamp16(*out + ((*in * gain) >> 15));
 }
 
 // Enables one to inspect the contents of the Emulated RSPA via debugger.
