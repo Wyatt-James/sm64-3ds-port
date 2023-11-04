@@ -286,10 +286,8 @@ void init_render_image(void) {
     move_segment_table_to_dmem();
     my_rdp_init();
     my_rsp_init();
-
+    
     clear_z_buffer();
-
-    // This could be disabled for most stages, but some scenes require it.
     display_frame_buffer();
 }
 
