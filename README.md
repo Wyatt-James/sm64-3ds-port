@@ -35,6 +35,8 @@ A prior copy of the game is required to extract the assets.
 
 After building, either install the `.cia` if you made one, or copy over the `sm64.us.f3dex2e.3dsx` into the `/3ds` directory on your SD card and load via [The Homebrew Launcher](https://smealum.github.io/3ds/).
 
+After making any changes to your build flags, it is important to run `make clean` before rebuilding, or else the new flags will not be applied.
+
   - [Docker](#docker)
   - [Linux / WSL (Ubuntu 18.04 or higher)](#linux--wsl-ubuntu)
   - [Windows (MSYS2)](#windows-msys2)
