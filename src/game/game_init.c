@@ -690,6 +690,12 @@ void game_loop_one_iteration(void) {
 
         display_and_vsync();
 
+        // This is padding to allow fps.patch to be compatible with 60fps.patch.
+        // Isn't git wonderful?
+        // I think it is, too.
+        // In other news, I'm nearly ready to merge, which is excellent.
+        // Anyway, I'm off to finish fixing up patches.
+
         // when debug info is enabled, print the "BUF %d" information.
         if (gShowDebugText) {
             // subtract the end of the gfx pool with the display list to obtain the
