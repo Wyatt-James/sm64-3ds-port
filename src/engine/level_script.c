@@ -893,10 +893,8 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
         LevelScriptJumpTable[sCurrentCmd->type]();
     }
 
-    audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
-    
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
-
+    // audio_game_loop_tick is called in game_init.c
     init_render_image();
     render_game();
     end_master_display_list();

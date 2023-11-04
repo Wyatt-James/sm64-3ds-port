@@ -683,6 +683,9 @@ void game_loop_one_iteration(void) {
             osContStartReadData(&gSIEventMesgQueue);
         }
 
+#if !defined TARGET_N3DS || defined DISABLE_AUDIO
+        audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
+#endif
         config_gfx_pool();
         read_controller_inputs();
 
