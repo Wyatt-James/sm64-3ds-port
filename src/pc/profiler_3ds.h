@@ -1,7 +1,7 @@
-#include <types.h>
-
 #ifndef PROFILER_3DS_H
 #define PROFILER_3DS_H
+
+#include <types.h>
 
 #define PROFILER_3DS_ENABLE 0
 
@@ -32,13 +32,11 @@
 
 #endif
 
+
+// Loggers and Calculators
 void profiler_3ds_log_time_impl(uint32_t id); // Logs a time with the given ID.
-
-// Metadata Logs and Calculators
 void profiler_3ds_average_calculate_average_impl(); // Calculates the long-term average
-
 void profiler_3ds_linear_calculate_averages_impl(); // Calculates the averages over the linear log's history.
-
 void profiler_3ds_circular_advance_frame_impl(); // Advances one frame in the circular log
 void profiler_3ds_circular_calculate_averages_impl(); // Calculates the averages for the circular log
 
@@ -57,15 +55,13 @@ double profiler_3ds_circular_get_average_time_impl(uint32_t id); // Returns the 
 void   profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_until_snoop); // Sets the interval for a snoop counter.
 void   profiler_3ds_snoop_impl(uint32_t snoop_id); // Computes some useful information for the timestamps. Intended for debugger use.
 
+// Relays to the actual functions
 #if PROFILER_3DS_ENABLE == 1
 
 // Loggers and Calculators
 #define profiler_3ds_log_time(id)                     profiler_3ds_log_time_impl(id) // Logs a time with the given ID.
-
 #define profiler_3ds_average_calculate_averages()     profiler_3ds_average_calculate_average_impl() // Calculates the long-term average
-
 #define profiler_3ds_linear_calculate_averages()      profiler_3ds_linear_calculate_averages_impl() // Calculates the averages over the linear log's history.
-
 #define profiler_3ds_circular_advance_frame()         profiler_3ds_circular_advance_frame_impl() // Advances one frame in the circular log
 #define profiler_3ds_circular_calculate_averages()    profiler_3ds_circular_calculate_averages_impl() // Calculates the averages for the circular log
 
@@ -84,6 +80,7 @@ void   profiler_3ds_snoop_impl(uint32_t snoop_id); // Computes some useful infor
 #define profiler_3ds_set_snoop_counter(sid, ftl)      profiler_3ds_set_snoop_counter_impl(sid, ftl) // Sets the interval for a snoop counter.
 #define profiler_3ds_snoop(sid)                       profiler_3ds_snoop_impl(sid) // Computes some useful information for the timestamps. Intended for debugger use.
 
+// Stubs used when the profiler is disabled
 #else
 
 #define profiler_3ds_log_time(id)                                    do {} while (0) // Profiler is disabled.
