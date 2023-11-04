@@ -290,7 +290,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // p/f *circ_durations_per_id@18
 
     // IDs:
-    // 0:  mixed
+    // 0:  Misc
     // 1:  ADPCM Copy
     // 2:  ADPCM Decode
     // 3:  Non-resample note end
