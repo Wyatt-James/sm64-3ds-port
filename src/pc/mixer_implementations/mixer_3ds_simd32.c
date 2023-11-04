@@ -330,13 +330,21 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     memcpy(in, tmp, 4 * sizeof(int16_t));
     uint32_t pitch_accumulator = (uint16_t) tmp[4];
     
-    // Round up, and divide by 2 for byte count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
+    // Round up, and divide by 2 for byte count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.a
     for (int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t)); nSamples != 0; nSamples--, out++) {
 
+#ifdef AUDIO_USE_ACCURATE_MATH
+        const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
+        *out = ((in[0] * tbl[0] + 0x4000) >> 15) +
+               ((in[1] * tbl[1] + 0x4000) >> 15) +
+               ((in[2] * tbl[2] + 0x4000) >> 15) +
+               ((in[3] * tbl[3] + 0x4000) >> 15);
+#else
         // Inaccurate rounding
         const int32_t* const tbl = (const int32_t* const) resample_table[(pitch_accumulator << 6) >> 16];
         const int32_t* const in_tmp = (const int32_t* const) in;
         *out = clamp16((__smlad(tbl[1], in_tmp[1], __smlad(tbl[0], in_tmp[0], 0x10000))) >> 15);
+#endif
 
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
@@ -401,8 +409,11 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     const int16_t vol_dry = isInit ? rspa.vol_dry : state[38],
                   vol_wet = isInit ? rspa.vol_wet : state[39];
 
+// Used only in inaccurate audio
+#ifndef AUDIO_USE_ACCURATE_MATH
     const int32_t vol_dry_s = vol_dry << 2,
                   vol_wet_s = vol_wet << 2;
+#endif
 
     int32_t vols_0[8], vols_1[8];
 
@@ -439,12 +450,19 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             volume_1 >>= 16;
             
             const int16_t in_val = *in;
-            
+
+#ifdef AUDIO_USE_ACCURATE_MATH
+            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * (((volume_0 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * (((volume_1 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *wet_0 = clamp16(((*wet_0 << 15) - *wet_0 + in_val * (((volume_0 >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+            *wet_1 = clamp16(((*wet_1 << 15) - *wet_1 + in_val * (((volume_1 >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+#else
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.a
             *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
             *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
             *wet_0 = clamp16(*wet_0 + (((in_val * volume_0) * (int64_t) vol_wet_s) >> 32));
             *wet_1 = clamp16(*wet_1 + (((in_val * volume_1) * (int64_t) vol_wet_s) >> 32));
+#endif
         }
     }
     
@@ -465,9 +483,14 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
             const int16_t in_val = *in;
 
+#ifdef AUDIO_USE_ACCURATE_MATH
+            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * (((volume_0 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * (((volume_1 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+#else
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
             *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
             *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
+#endif
         }
     }
 

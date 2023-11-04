@@ -11,8 +11,9 @@ A prior copy of the game is required to extract the assets.
  - Naïve frame-skip if frame takes longer than 33.3ms (1 / 30 FPS) to render
      - Disable by building with `DISABLE_N3DS_FRAMESKIP=1`
  - Enhanced RSP Audio emulation performance
-     - Disable some minor enhancements by building with `DISABLE_ENHANCED_RSPA=1`. This should not impact quality, but may be useful for debugging.
+     - Disable some minor performance enhancements by building with `DISABLE_ENHANCED_RSPA=1`. This should not impact quality, but may be useful for debugging.
      - Use the PC port's original audio emulation by building with `FORCE_REFERENCE_RSPA=1`. This should not impact quality, but may be useful for debugging, and will override `DISABLE_ENHANCED_RSPA`.
+     - By default, 3DS audio uses some inaccurate math to increase performance with no perceptible loss in quality. To disable this, build with `AUDIO_USE_ACCURATE_MATH=1`. This may have no effect depending on the audio implementation being used; for example, Reference RSPA ignores this flag.
  - Configurable controls via `sm64config.txt`
      - Use [this](https://codepen.io/benoitcaron/full/abNZrbP) online editor from [BenoitCaron](https://github.com/BenoitCaron).
  - GFX_POOL_SIZE [fix](https://github.com/aboood40091/sm64-port/commit/6ae4f4687ed234291ac1e572b75d65191ca9f364) (support 60 FPS on 32bit platforms)

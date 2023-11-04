@@ -512,12 +512,21 @@ endif
 
 # RSP Audio Emulation flags
 ifneq ($(TARGET_N64),1)
+
+  # Reference RSPA is the original implementation from the PC port.
+  # Enhanced RSPA is an N64-incompatible ehnancement that bypasses some redundancy.
   ifeq ($(FORCE_REFERENCE_RSPA),1)
     PLATFORM_CFLAGS += -DRSPA_USE_REFERENCE_IMPLEMENTATION
   else
     ifneq ($(DISABLE_ENHANCED_RSPA),1)
       PLATFORM_CFLAGS += -DRSPA_USE_ENHANCEMENTS
     endif
+  endif
+
+  # Accurate rounding for audio, which is practically identical, but faster.
+  # Support depends on which mixer implementation is used.
+  ifeq ($(AUDIO_USE_ACCURATE_MATH),1)
+    PLATFORM_CFLAGS += -DAUDIO_USE_ACCURATE_MATH
   endif
 endif
 
