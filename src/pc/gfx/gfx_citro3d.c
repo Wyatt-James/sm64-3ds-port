@@ -18,6 +18,8 @@
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
 
+#define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
+
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
 static DVLB_s* sVShaderDvlb;
@@ -842,7 +844,11 @@ static void gfx_citro3d_init(void)
     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
     C3D_AlphaTest(true, GPU_GREATER, 0x00);
 
+#ifdef VERSION_EU
+    C3D_FrameRate(25);
+#else
     C3D_FrameRate(30);
+#endif
 }
 
 static void gfx_citro3d_start_frame(void)

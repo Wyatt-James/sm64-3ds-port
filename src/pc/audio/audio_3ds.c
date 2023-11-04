@@ -12,16 +12,21 @@
 
 #include "src/pc/profiler_3ds.h"
 
+#define PLAYBACK_RATE 32000
+
+// We synthesize 2 * SAMPLES_HIGH or LOW each frame
 #ifdef VERSION_EU
-#define SAMPLES_HIGH 656
+#define SAMPLES_HIGH 656 // ROUND_UP_16(32000/50) + 16
 #define SAMPLES_LOW 640
+#define SAMPLES_DESIRED 1320
 #else
-#define SAMPLES_HIGH 544
+#define SAMPLES_HIGH 544 // ROUND_UP_16(32000/60)
 #define SAMPLES_LOW 528
+#define SAMPLES_DESIRED 1100
 #endif
 
-#define N3DS_DSP_DMA_BUFFER_COUNT   4
-#define N3DS_DSP_DMA_BUFFER_SIZE   4096 * 4
+#define N3DS_DSP_DMA_BUFFER_COUNT 4
+#define N3DS_DSP_DMA_BUFFER_SIZE 4096 * 4
 #define N3DS_DSP_N_CHANNELS 2
 
 // Instructions for Thread5
@@ -69,7 +74,7 @@ static int audio_3ds_buffered(void)
 
 static int audio_3ds_get_desired_buffered(void)
 {
-    return 1100;
+    return SAMPLES_DESIRED;
 }
 
 // Returns true if the next buffer is FREE or DONE. Available in audio_3ds.h.
@@ -178,7 +183,7 @@ static bool audio_3ds_init()
     ndspChnReset(0);
     ndspChnWaveBufClear(0);
     ndspChnSetInterp(0, NDSP_INTERP_LINEAR);
-    ndspChnSetRate(0, 32000);
+    ndspChnSetRate(0, PLAYBACK_RATE);
     ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
 
     float mix[12];
