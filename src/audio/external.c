@@ -868,7 +868,7 @@ struct SPTask *create_next_audio_frame_task(void) {
     task->yield_data_size = 0;
 #endif
 
-    decrease_sample_dma_ttls(); // N64 only
+    decrease_sample_dma_ttls();
     return gAudioTask;
 }
 
