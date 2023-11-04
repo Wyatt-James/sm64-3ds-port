@@ -1,5 +1,5 @@
 diff --git a/src/game/game_init.c b/src/game/game_init.c
-index 5893ac5..c23817a 100644
+index dce491c..8c9f971 100644
 --- a/src/game/game_init.c
 +++ b/src/game/game_init.c
 @@ -64,6 +64,29 @@ struct DemoInput *gCurrDemoInput = NULL; // demo input sequence
@@ -32,7 +32,7 @@ index 5893ac5..c23817a 100644
  /**
   * Initializes the Reality Display Processor (RDP).
   * This function initializes settings such as texture filtering mode,
-@@ -689,6 +712,8 @@ void game_loop_one_iteration(void) {
+@@ -690,6 +713,8 @@ void game_loop_one_iteration(void) {
          levelCommandAddr = level_script_execute(levelCommandAddr);
  
          display_and_vsync();

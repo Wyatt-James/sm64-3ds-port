@@ -619,10 +619,10 @@ index 7a83b53..3b21da5 100644
  
  extern s8 gEnvFxMode;
 diff --git a/src/game/game_init.c b/src/game/game_init.c
-index 5893ac5..61c5c84 100644
+index dce491c..0eb0220 100644
 --- a/src/game/game_init.c
 +++ b/src/game/game_init.c
-@@ -688,6 +688,11 @@ void game_loop_one_iteration(void) {
+@@ -689,6 +689,11 @@ void game_loop_one_iteration(void) {
  
          levelCommandAddr = level_script_execute(levelCommandAddr);
  
@@ -634,7 +634,7 @@ index 5893ac5..61c5c84 100644
          display_and_vsync();
  
          // This is padding to allow fps.patch to be compatible with 60fps.patch.
-@@ -695,6 +700,12 @@ void game_loop_one_iteration(void) {
+@@ -696,6 +701,12 @@ void game_loop_one_iteration(void) {
          // I think it is, too.
          // In other news, I'm nearly ready to merge, which is excellent.
          // Anyway, I'm off to finish fixing up patches.
@@ -1911,18 +1911,21 @@ index b51dae7..7182e1f 100644
      
      if (!gShowConfigMenu)
 diff --git a/src/pc/gfx/gfx_citro3d.c b/src/pc/gfx/gfx_citro3d.c
-index 855d707..0ca1146 100644
+index 9f1e274..3bfaff7 100644
 --- a/src/pc/gfx/gfx_citro3d.c
 +++ b/src/pc/gfx/gfx_citro3d.c
-@@ -842,7 +842,7 @@ static void gfx_citro3d_init(void)
-     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
+@@ -845,9 +845,9 @@ static void gfx_citro3d_init(void)
      C3D_AlphaTest(true, GPU_GREATER, 0x00);
  
+ #ifdef VERSION_EU
+-    C3D_FrameRate(25);
++    C3D_FrameRate(50);
+ #else
 -    C3D_FrameRate(30);
 +    C3D_FrameRate(60);
+ #endif
  }
  
- static void gfx_citro3d_start_frame(void)
 diff --git a/src/pc/gfx/gfx_dxgi.cpp b/src/pc/gfx/gfx_dxgi.cpp
 index 02cdd81..c036e0b 100644
 --- a/src/pc/gfx/gfx_dxgi.cpp
