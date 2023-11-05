@@ -1897,19 +1897,22 @@ index cd9f13c..abfb71e 100644
          gSPMatrix(displayListIter++, scaleMat, G_MTX_MODELVIEW | G_MTX_MUL | G_MTX_PUSH);
          gSPDisplayList(displayListIter++, &intro_seg7_dl_0700B3A0);
          gSPPopMatrix(displayListIter++, G_MTX_MODELVIEW);
-diff --git a/src/pc/gfx/gfx_3ds_menu.c b/src/pc/gfx/gfx_3ds_menu.c
-index b51dae7..7182e1f 100644
---- a/src/pc/gfx/gfx_3ds_menu.c
-+++ b/src/pc/gfx/gfx_3ds_menu.c
-@@ -108,7 +108,7 @@ menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
-         return DO_NOTHING;
-     }
+diff --git a/src/pc/gfx/gfx_3ds.c b/src/pc/gfx/gfx_3ds.c
+index 62985b2..775abfe 100644
+--- a/src/pc/gfx/gfx_3ds.c
++++ b/src/pc/gfx/gfx_3ds.c
+@@ -33,9 +33,9 @@
  
--    debounce = 8; // wait quarter second between mashing
-+    debounce = 16; // wait quarter second between mashing
+ // wait a quarter second between mashing
+ #ifdef VERSION_EU
+-#define DEBOUNCE_FRAMES 6
++#define DEBOUNCE_FRAMES 12
+ #else
+-#define DEBOUNCE_FRAMES 8
++#define DEBOUNCE_FRAMES 15
+ #endif
  
-     
-     if (!gShowConfigMenu)
+ C3D_RenderTarget *gTarget;
 diff --git a/src/pc/gfx/gfx_citro3d.c b/src/pc/gfx/gfx_citro3d.c
 index 9f1e274..3bfaff7 100644
 --- a/src/pc/gfx/gfx_citro3d.c
