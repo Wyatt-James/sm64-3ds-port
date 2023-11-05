@@ -1898,10 +1898,10 @@ index cd9f13c..abfb71e 100644
          gSPDisplayList(displayListIter++, &intro_seg7_dl_0700B3A0);
          gSPPopMatrix(displayListIter++, G_MTX_MODELVIEW);
 diff --git a/src/pc/gfx/gfx_3ds.c b/src/pc/gfx/gfx_3ds.c
-index 62985b2..775abfe 100644
+index 1caf4ee..bfc0f18 100644
 --- a/src/pc/gfx/gfx_3ds.c
 +++ b/src/pc/gfx/gfx_3ds.c
-@@ -33,9 +33,9 @@
+@@ -34,9 +34,9 @@
  
  // wait a quarter second between mashing
  #ifdef VERSION_EU
