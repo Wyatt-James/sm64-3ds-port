@@ -174,7 +174,7 @@ void decrease_sample_dma_ttls() {
     sUnused80226B40 = 0;
 }
 
-void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
+void *dma_sample_data(uintptr_t devAddr, u32 size, s32 noteFlags, u8 *noteSampleDmaIndexPtr) {
     s32 hasDma = FALSE;
     struct SharedDma *dma;
     uintptr_t dmaDevAddr;
@@ -184,7 +184,7 @@ void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
     ssize_t bufferPos;
     UNUSED u32 pad;
 
-    if (arg2 != 0 || *arg3 >= sSampleDmaListSize1) {
+    if (noteFlags != 0 || *noteSampleDmaIndexPtr >= sSampleDmaListSize1) {
         for (i = sSampleDmaListSize1; i < gSampleDmaNumListItems; i++) {
 #ifdef VERSION_EU
             dma = &sSampleDmas[i];
@@ -206,7 +206,7 @@ void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
                     sSampleDmaReuseQueueTail2++;
                 }
                 dma->ttl = 60;
-                *arg3 = (u8) i;
+                *noteSampleDmaIndexPtr = (u8) i;
 #ifdef VERSION_EU
                 return &dma->buffer[(devAddr - dma->source)];
 #else
@@ -215,7 +215,7 @@ void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
             }
         }
 
-        if (sSampleDmaReuseQueueTail2 != sSampleDmaReuseQueueHead2 && arg2 != 0) {
+        if (sSampleDmaReuseQueueTail2 != sSampleDmaReuseQueueHead2 && noteFlags != 0) {
             // Allocate a DMA from reuse queue 2. This queue can be empty, since
             // TTL 60 is pretty large.
             dmaIndex = sSampleDmaReuseQueue2[sSampleDmaReuseQueueTail2];
@@ -226,9 +226,9 @@ void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
     } else {
 #ifdef VERSION_EU
         dma = sSampleDmas;
-        dma += *arg3;
+        dma += *noteSampleDmaIndexPtr;
 #else
-        dma = sSampleDmas + *arg3;
+        dma = sSampleDmas + *noteSampleDmaIndexPtr;
 #endif
         bufferPos = devAddr - dma->source;
         if (0 <= bufferPos && (size_t) bufferPos <= dma->bufSize - size) {
@@ -266,7 +266,7 @@ void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
     }
 
     transfer = dma->bufSize;
-    dmaDevAddr = devAddr & ~0xF;
+    dmaDevAddr = devAddr & ~0xF; // Provided address rounded down to multiple of 16
     dma->ttl = 2;
     dma->source = dmaDevAddr;
     dma->sizeUnused = transfer;
@@ -274,16 +274,30 @@ void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3) {
     osInvalDCache(dma->buffer, transfer);
 #endif
 #ifdef VERSION_EU
-    osPiStartDma(&gCurrAudioFrameDmaIoMesgBufs[gCurrAudioFrameDmaCount++], OS_MESG_PRI_NORMAL,
-                 OS_READ, dmaDevAddr, dma->buffer, transfer, &gCurrAudioFrameDmaQueue);
-    *arg3 = dmaIndex;
-    return (devAddr - dmaDevAddr) + dma->buffer;
+
+    osPiStartDma(&gCurrAudioFrameDmaIoMesgBufs[gCurrAudioFrameDmaCount++],
+                OS_MESG_PRI_NORMAL,
+                 OS_READ,
+                 dmaDevAddr,    // source
+                 dma->buffer,   // destination
+                 transfer,      // nBytes
+                 &gCurrAudioFrameDmaQueue);
+                 
+    *noteSampleDmaIndexPtr = dmaIndex;
+    return (devAddr - dmaDevAddr) + dma->buffer; // Destination address
 #else
     gCurrAudioFrameDmaCount++;
-    osPiStartDma(&gCurrAudioFrameDmaIoMesgBufs[gCurrAudioFrameDmaCount - 1], OS_MESG_PRI_NORMAL,
-                 OS_READ, dmaDevAddr, dma->buffer, transfer, &gCurrAudioFrameDmaQueue);
-    *arg3 = dmaIndex;
-    return dma->buffer + (devAddr - dmaDevAddr);
+
+    osPiStartDma(&gCurrAudioFrameDmaIoMesgBufs[gCurrAudioFrameDmaCount - 1],
+                 OS_MESG_PRI_NORMAL,
+                 OS_READ,
+                 dmaDevAddr,    // source
+                 dma->buffer,   // destination
+                 transfer,      // nBytes
+                 &gCurrAudioFrameDmaQueue);
+
+    *noteSampleDmaIndexPtr = dmaIndex;
+    return dma->buffer + (devAddr - dmaDevAddr); // Destination address
 #endif
 }
 

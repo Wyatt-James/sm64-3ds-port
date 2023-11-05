@@ -29,6 +29,10 @@
 #include "course_table.h"
 #include "thread6.h"
 
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+    #include "src/pc/audio/audio_3ds_threading.h"
+#endif
+
 #define PLAY_MODE_NORMAL 0
 #define PLAY_MODE_PAUSED 2
 #define PLAY_MODE_CHANGE_AREA 3
@@ -1123,6 +1127,9 @@ static s32 play_mode_unused(void) {
     return 0;
 }
 
+/**
+ * Updates the main game level.
+ */
 s32 update_level(void) {
     s32 changeLevel;
 
@@ -1143,6 +1150,14 @@ s32 update_level(void) {
             changeLevel = play_mode_frame_advance();
             break;
     }
+
+    // This is safe within vanilla SM64, as update_level is ALWAYS called
+    // from within a CALL_LOOP, from which the only way to exit is to change
+    // level. If it were instead called alone, and we did not change level,
+    // it could cause a race condition.
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+    s_thread5_wait_for_audio_to_finish = changeLevel == 0 ? true : false;
+#endif
 
     if (changeLevel) {
         reset_volume();

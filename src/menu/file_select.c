@@ -33,6 +33,10 @@ const float scalerNorm = 0.11111111f; // menu state and default scale
 const float scalerNarrow = scalerNorm / aspectScale; // button state divides out hardcoded x-axis scaling
 #endif
 
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+    #include "src/pc/audio/audio_3ds_threading.h"
+#endif
+
 /**
  * @file file_select.c
  * This file implements how the file select and it's menus render and function.
@@ -3274,5 +3278,10 @@ s32 lvl_init_menu_values_and_cursor_pos(UNUSED s32 arg, UNUSED s32 unused) {
  */
 s32 lvl_update_obj_and_load_file_selected(UNUSED s32 arg, UNUSED s32 unused) {
     area_update_objects();
+
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+    s_thread5_wait_for_audio_to_finish = sSelectedFileNum == 0 ? true : false;
+#endif
+
     return sSelectedFileNum;
 }

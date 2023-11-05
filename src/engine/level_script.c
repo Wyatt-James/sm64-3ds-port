@@ -25,6 +25,11 @@
 #include "surface_collision.h"
 #include "surface_load.h"
 
+#if defined TARGET_N3DS
+#include "pc/audio/audio_3ds_threading.h"
+#include "pc/audio/audio_3ds.h"
+#endif
+
 #define CMD_GET(type, offset) (*(type *) (CMD_PROCESS_OFFSET(offset) + (u8 *) sCurrentCmd))
 
 // These are equal
@@ -715,7 +720,7 @@ static void level_cmd_set_menu_music(void) {
     sCurrentCmd = CMD_NEXT;
 }
 
-static void level_cmd_38(void) {
+static void level_cmd_fadeout_music(void) {
     fadeout_music(CMD_GET(s16, 2));
     sCurrentCmd = CMD_NEXT;
 }
@@ -819,13 +824,67 @@ static void (*LevelScriptJumpTable[])(void) = {
     /*35*/ level_cmd_set_gamma,
     /*36*/ level_cmd_set_music,
     /*37*/ level_cmd_set_menu_music,
-    /*38*/ level_cmd_38,
+    /*38*/ level_cmd_fadeout_music,
     /*39*/ level_cmd_set_macro_objects,
     /*3A*/ level_cmd_3A,
     /*3B*/ level_cmd_create_whirlpool,
     /*3C*/ level_cmd_get_or_set_var,
 };
 
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+
+static inline void waitForSynchronizationVar(volatile __3ds_s32* const ptr) {
+    while(*ptr > 0)
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+}
+
+struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
+    sScriptStatus = SCRIPT_RUNNING;
+    sCurrentCmd = cmd;
+
+    // Either wait for synthesis or tick
+    if (s_thread5_wait_for_audio_to_finish)
+        waitForSynchronizationVar(&s_audio_frames_to_process);
+    else
+        waitForSynchronizationVar(&s_audio_frames_to_tick);
+
+    // Execute the script
+    while (sScriptStatus == SCRIPT_RUNNING) {
+        LevelScriptJumpTable[sCurrentCmd->type]();
+
+        // If we need to wait for synthesis to finish, wait and break
+        if (s_thread5_wait_for_audio_to_finish) {
+            waitForSynchronizationVar(&s_audio_frames_to_process);
+            break;
+        }
+    }
+    
+    // Optimization: avoid checking vars redundantly
+    while (sScriptStatus == SCRIPT_RUNNING) {
+        LevelScriptJumpTable[sCurrentCmd->type]();
+    }
+
+    profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
+    audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
+
+    // Notify audio thread that a frame is ready. Maintain this order.
+    AtomicIncrement(&s_audio_frames_to_tick);
+    AtomicIncrement(&s_audio_frames_to_process);
+
+    if (s_thread5_does_audio)
+        audio_3ds_run_one_frame();
+
+    init_render_image();
+    render_game();
+    end_master_display_list();
+    alloc_display_list(0);
+
+    return sCurrentCmd;
+}
+
+#else
+
+// Non-3DS and 3DS-non-audio
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
     sCurrentCmd = cmd;
@@ -835,6 +894,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     }
 
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
+    // audio_game_loop_tick is called in game_init.c
     init_render_image();
     render_game();
     end_master_display_list();
@@ -842,3 +902,4 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
 
     return sCurrentCmd;
 }
+#endif

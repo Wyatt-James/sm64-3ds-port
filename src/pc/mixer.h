@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <ultra64.h>
 
+// This file is ignored completely on N64.
+
 #undef aSegment
 #undef aClearBuffer
 #undef aSetBuffer
@@ -34,9 +36,12 @@ void aResampleImpl(uint8_t flags, uint16_t pitch, RESAMPLE_STATE state);
 void aEnvMixerImpl(uint8_t flags, ENVMIX_STATE state);
 void aMixImpl(int16_t gain, uint16_t in_addr, uint16_t out_addr);
 
+// Redirects to the native versions of these functions.
+// The command increment is completely removed.
+
 #define aSegment(pkt, s, b) do { } while(0)
 #define aClearBuffer(pkt, d, c) aClearBufferImpl(d, c)
-#define aLoadBuffer(pkt, s) aLoadBufferImpl(s)
+#define aLoadBuffer(pkt, s) aLoadBufferImpl(s) // Loads data from the given source into rspa.in
 #define aSaveBuffer(pkt, s) aSaveBufferImpl(s)
 #define aLoadADPCM(pkt, c, d) aLoadADPCMImpl(c, d)
 #define aSetBuffer(pkt, f, i, o, c) aSetBufferImpl(f, i, o, c)
@@ -50,4 +55,23 @@ void aMixImpl(int16_t gain, uint16_t in_addr, uint16_t out_addr);
 #define aEnvMixer(pkt, f, s) aEnvMixerImpl(f, s)
 #define aMix(pkt, f, g, i, o) aMixImpl(g, i, o)
 
+// Enhanced RSPA emulation allows us to break the rules of
+// RSPA emulation a little bit for better performance.
+// Should be disabled when using reference implementation.
+// This file is ignored completely on N64.
+#if defined RSPA_USE_ENHANCEMENTS && !defined RSPA_USE_REFERENCE_IMPLEMENTATION && !defined DISABLE_AUDIO
+
+#define ENHANCED_RSPA_EMULATION
+
+// Snoop contents of the emulated RSPA for debugging.
+void aSnoop(volatile int snoopTag);
+
+void aADPCMdecDirectImpl(uint8_t flags, ADPCM_STATE state, uint8_t* source);
+void aInterleaveAndCopyImpl(uint16_t left, uint16_t right, int16_t *dest_addr);
+
+#define aADPCMdecDirect(pkt, f, s, src) aADPCMdecDirectImpl(f, s, src) // ADPCM Decode directly from external address
+#define aInterleaveAndCopy(pkt, l, r, dest) aInterleaveAndCopyImpl(l, r, dest) // Interleave directly to external address
+
 #endif
+
+#endif // MIXER_H

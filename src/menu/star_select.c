@@ -20,6 +20,10 @@
 #include "text_strings.h"
 #include "prevent_bss_reordering.h"
 
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+    #include "src/pc/audio/audio_3ds_threading.h"
+#endif
+
 /**
  * @file star_select.c
  * This file implements how the star select screen (act selector) function.
@@ -449,5 +453,11 @@ s32 lvl_update_obj_and_load_act_button_actions(UNUSED s32 arg, UNUSED s32 unused
 
     area_update_objects();
     sActSelectorMenuTimer++;
+
+
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+    s_thread5_wait_for_audio_to_finish = sLoadedActNum == 0 ? true : false;
+#endif
+
     return sLoadedActNum;
 }

@@ -2,6 +2,7 @@
 
 #include "gfx_3ds.h"
 #include "gfx_3ds_menu.h"
+#include "gfx_citro3d.h"
 
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
@@ -13,13 +14,11 @@ static C3D_Tex aa_off_tex, aa_on_tex;
 static C3D_Tex resume_tex, exit_tex;
 static C3D_Tex menu_cleft_tex, menu_cright_tex, menu_cdown_tex, menu_cup_tex;
 
-static u8 debounce;
-
 static int touch_x;
 static int touch_y;
 
-
-static void gfx_3ds_menu_draw_background(float *vbo_buffer)
+// Unused. We clear the screen elsewhere with a proper clear function.
+/*static void gfx_3ds_menu_draw_background(float *vbo_buffer)
 {
     Mtx_Identity(&modelView);
     Mtx_OrthoTilt(&projection, 0.0, 320.0, 0.0, 240.0, 0.0, 1.0, true);
@@ -40,7 +39,7 @@ static void gfx_3ds_menu_draw_background(float *vbo_buffer)
     C3D_DrawArrays(GPU_TRIANGLES, buffer_offset, 6); // 2 triangles
 
     buffer_offset += 6;
-}
+}*/
 
 static void gfx_3ds_menu_draw_button(float *vbo_buffer, int x, int y, C3D_Tex texture, bool thin)
 {
@@ -100,42 +99,43 @@ static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int hei
     return pos_x >= x && pos_x <= (x+width) && pos_y >= y && pos_y <= (y+height);
 }
 
-menu_action gfx_3ds_menu_on_touch(int x, int y)
+menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 {
-    if (debounce)
-        return DO_NOTHING;
-
-    touch_x = x;
-    touch_y = y;
-    debounce = 8; // wait quarter second between mashing
-
-    // aa
-    if (is_inside_box(touch_x, touch_y, 11, 32, 64, 64))
+    if (!gShowConfigMenu)
     {
-        // cannot use AA in 3D mode
+        return SHOW_MENU;
+    }
+
+    // toggle anti-aliasing
+    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, 11, 32, 64, 64))
+    {
+        // cannot use AA in 400px mode
         if (gfx_config.useWide)
         {
             gfx_config.useAA = !gfx_config.useAA;
             return CONFIG_CHANGED;
         }
+        
         return DO_NOTHING;
     }
-    // screen mode
-    if (is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
+    // 400px vs 800px
+    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
     {
         gfx_config.useWide = !gfx_config.useWide;
-        // disable AA if 3D mode
+
+        // disable AA if 400px
         if (!gfx_config.useWide && gfx_config.useAA)
             gfx_config.useAA = false;
+        
         return CONFIG_CHANGED;
     }
-    // resume
-    if (is_inside_box(touch_x, touch_y, 11, 144, 64, 64))
+    // hide menu
+    else if (is_inside_box(touch_x, touch_y, 11, 144, 64, 64))
     {
         return EXIT_MENU;
     }
-    // exit?
-    if (is_inside_box(touch_x, touch_y, 86, 144, 64, 64))
+    // exit to loader
+    else if (is_inside_box(touch_x, touch_y, 86, 144, 64, 64))
     {
         gShouldRun = false;
     }
@@ -175,18 +175,26 @@ void gfx_3ds_menu_init()
 
     load_t3x_texture(&menu_cup_tex, NULL, menu_cup_t3x, menu_cup_t3x_size);
     C3D_TexSetFilter(&menu_cup_tex, GPU_LINEAR, GPU_NEAREST);
+
+    gBottomScreenNeedsRender = true;
 }
 
-void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool enabled)
+void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButtonsEnabled)
 {
+    if (!gBottomScreenNeedsRender)
+        return;
+
+    gBottomScreenNeedsRender = false;
+
     C3D_FrameDrawOn(gTargetBottom);
 
     buffer_offset = vertex_offset;
-    gfx_3ds_menu_draw_background(vertex_buffer);
-    if (enabled)
+
+    // WYATT_TODO this should proooobably be re-enabled once the bottom screen is reworked.
+    C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_GREEN | GPU_WRITE_RED | GPU_WRITE_BLUE);
+
+    if (configButtonsEnabled)
         gfx_3ds_menu_draw_buttons(vertex_buffer);
-    if (debounce)
-        debounce--;
 
     gfx_3ds_menu_draw_cbuttons(vertex_buffer);
 }

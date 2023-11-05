@@ -10,6 +10,10 @@ A prior copy of the game is required to extract the assets.
  - Multi-threaded; audio thread runs on Core 1 on O3DS and Core 2 on N3DS; needs [Luma v10.1.1](https://github.com/LumaTeam/Luma3DS/releases) or higher
  - Naïve frame-skip if frame takes longer than 33.3ms (1 / 30 FPS) to render
      - Disable by building with `DISABLE_N3DS_FRAMESKIP=1`
+ - Enhanced RSP Audio emulation performance
+     - Disable some minor performance enhancements by building with `DISABLE_ENHANCED_RSPA=1`. This should not impact quality, but may be useful for debugging.
+     - Use the PC port's original audio emulation by building with `FORCE_REFERENCE_RSPA=1`. This should not impact quality, but may be useful for debugging, and will override `DISABLE_ENHANCED_RSPA`.
+     - By default, 3DS audio uses some inaccurate math to increase performance with no perceptible loss in quality. To disable this, build with `AUDIO_USE_ACCURATE_MATH=1`. This may have no effect depending on the audio implementation being used; for example, Reference RSPA ignores this flag.
  - Configurable controls via `sm64config.txt`
      - Use [this](https://codepen.io/benoitcaron/full/abNZrbP) online editor from [BenoitCaron](https://github.com/BenoitCaron).
  - GFX_POOL_SIZE [fix](https://github.com/aboood40091/sm64-port/commit/6ae4f4687ed234291ac1e572b75d65191ca9f364) (support 60 FPS on 32bit platforms)
@@ -31,6 +35,8 @@ A prior copy of the game is required to extract the assets.
 
 After building, either install the `.cia` if you made one, or copy over the `sm64.us.f3dex2e.3dsx` into the `/3ds` directory on your SD card and load via [The Homebrew Launcher](https://smealum.github.io/3ds/).
 
+After making any changes to your build flags, it is important to run `make clean` before rebuilding, or else the new flags will not be applied.
+
   - [Docker](#docker)
   - [Linux / WSL (Ubuntu 18.04 or higher)](#linux--wsl-ubuntu)
   - [Windows (MSYS2)](#windows-msys2)
@@ -40,6 +46,8 @@ Visit the [wiki](https://github.com/mkst/sm64-port/wiki) for information.
 ### Docker
 
 The following assumes a basic understanding of [Docker](https://www.docker.com/); if you do not belong to the `docker` group, prefix those commands with `sudo`.
+
+As of recently, using Docker Desktop for Windows and WSL2 has become the easiest way to build when using WSL. For more information, look [here.](https://docs.docker.com/desktop/wsl/)
 
 **Clone Repository:**
 
@@ -61,12 +69,14 @@ cp /path/to/your/baserom.us.z64 ./ # change 'us' to 'eu', 'jp' or 'sh' as approp
 
 **Build with pre-baked image:**
 
-Change `VERSION=us` if applicable.
+Change `VERSION=us` if applicable. It is recommended to build with optimizations enabled, as shown below.
 ```sh
-docker run --rm -v $(pwd):/sm64 markstreet/sm64:3ds make --jobs 4 VERSION=us cia
+docker run --rm -v $(pwd):/sm64 markstreet/sm64:3ds make --jobs 4 VERSION=us OPT_FLAGS="-O3" cia 
 ```
 
 ### Linux / WSL (Ubuntu)
+
+As of recently, using Docker Desktop for Windows and WSL2 has become the easiest way to build when using WSL. For more information, look [here.](https://docs.docker.com/desktop/wsl/)
 
 Tested successfully on **Ubuntu 18.04** and **20.04**. Does not work on **16.04**.
 
@@ -219,13 +229,13 @@ cp /c/temp/baserom.us.z64 ./ && echo "OK!" # change 'us' to 'eu', 'jp' or 'sh' a
 **Compile 3dsx:**
 
 ```sh
-make VERSION=us --jobs 4 # change 'us' to 'eu', 'jp' or 'sh' as appropriate
+make VERSION=us OPT_FLAGS="-O3" --jobs 4 # Change 'us' to 'eu', 'jp' or 'sh' as appropriate. Change or remove optimizations as appropriate.
 ```
 
 **Create .cia:**
 
 ```sh
-make VERSION=us cia # change 'us' to 'eu', 'jp' or 'sh' as appropriate
+make VERSION=us OPT_FLAGS="-O3" cia # Change 'us' to 'eu', 'jp' or 'sh' as appropriate. Change or remove optimizations as appropriate.
 ```
 
 ### Other Operating Systems

@@ -11,10 +11,20 @@
 #include "../pc/mixer.h"
 #endif
 
+#ifdef TARGET_N3DS
+#include "src/pc/profiler_3ds.h"
+#include "src/pc/audio/audio_3ds.h"
+static s16* sCurAiBufBasePtr = NULL;
+
+#define DO_3DS(code) do { code } while(0)
+#else
+#define DO_3DS(code) do {} while(0)
+#endif
+
 #define DMEM_ADDR_TEMP 0x0
-#define DMEM_ADDR_UNCOMPRESSED_NOTE 0x180
 #define DMEM_ADDR_RESAMPLED 0x20
 #define DMEM_ADDR_RESAMPLED2 0x160
+#define DMEM_ADDR_UNCOMPRESSED_NOTE 0x180
 #define DMEM_ADDR_NOTE_PAN_TEMP 0x200
 #define DMEM_ADDR_STEREO_STRONG_TEMP_DRY 0x200
 #define DMEM_ADDR_STEREO_STRONG_TEMP_WET 0x340
@@ -36,6 +46,7 @@
     aSetBuffer(pkt, 0, 0, c + DMEM_ADDR_WET_RIGHT_CH, d);                                              \
     aSaveBuffer(pkt, VIRTUAL_TO_PHYSICAL2(gSynthesisReverb.ringBuffer.right + (off)));
 
+// Rounds val up to the next multiple of (1 << amnt). For example, ALIGN(50, 5) results in 64 (nearest 32)
 #define ALIGN(val, amnt) (((val) + (1 << amnt) - 1) & ~((1 << amnt) - 1))
 
 struct VolumeChange {
@@ -233,11 +244,11 @@ void synthesis_load_note_subs_eu(s32 updateIndex) {
 #endif
 
 #ifndef VERSION_EU
-s32 get_volume_ramping(u16 sourceVol, u16 targetVol, s32 arg2) {
-    // This roughly computes 2^16 * (targetVol / sourceVol) ^ (8 / arg2),
-    // but with discretizations of targetVol, sourceVol and arg2.
+s32 get_volume_ramping(u16 sourceVol, u16 targetVol, s32 nSamples) {
+    // This roughly computes 2^16 * (targetVol / sourceVol) ^ (8 / nSamples),
+    // but with discretizations of targetVol, sourceVol and nSamples.
     f32 ret;
-    switch (arg2) {
+    switch (nSamples) {
         default:
             ret = gVolRampingLhs136[targetVol >> 8] * gVolRampingRhs136[sourceVol >> 8];
             break;
@@ -265,6 +276,7 @@ u64 *synthesis_execute(u64 *cmdBuf, s32 *writtenCmds, s16 *aiBuf, s32 bufLen) {
     u64 *cmd = cmdBuf;
     s32 chunkLen;
     s32 nextVolRampTable;
+    DO_3DS(sCurAiBufBasePtr = aiBuf;);
 
     for (i = gAudioBufferParameters.updatesPerFrame; i > 0; i--) {
         process_sequences(i - 1);
@@ -307,13 +319,17 @@ u64 *synthesis_execute(u64 *cmdBuf, s32 *writtenCmds, s16 *aiBuf, s32 bufLen) {
     return cmd;
 }
 #else
+
+// NTSC versions
 // bufLen will be divisible by 16
+// bufLen is how many s16s are written
 u64 *synthesis_execute(u64 *cmdBuf, s32 *writtenCmds, s16 *aiBuf, s32 bufLen) {
     s32 chunkLen;
     s32 i;
     u32 *aiBufPtr = (u32 *) aiBuf;
     u64 *cmd = cmdBuf + 1;
     s32 v0;
+    DO_3DS(sCurAiBufBasePtr = aiBuf;);
 
     aSegment(cmdBuf, 0, 0);
 
@@ -490,12 +506,41 @@ u64 *synthesis_do_one_audio_update(s16 *aiBuf, s32 bufLen, u64 *cmd, u32 updateI
     }
 
     temp = bufLen * 2;
+
+// If possible, interleave directly into the output buf and skip the discrete copy.
+#ifdef ENHANCED_RSPA_EMULATION
+    aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, temp);
+
+    // Avoid redundant copy on 3DS when possible
+    DO_3DS(
+        if (audio_3ds_next_buffer_is_ready())
+            aiBuf = direct_buf + (aiBuf - sCurAiBufBasePtr);
+        else
+            samples_to_copy += bufLen;
+    );
+
+    aInterleaveAndCopy(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH, aiBuf);
+
+// Else if enhanced RSPA Emulation is disabled, move to the copy buf.
+#else
     aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, temp);
     aInterleave(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH);
     aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, temp * 2);
+
+    // Avoid redundant copy on 3DS when possible
+    DO_3DS(
+        if (audio_3ds_next_buffer_is_ready())
+            aiBuf = direct_buf + (aiBuf - sCurAiBufBasePtr);
+        else
+            samples_to_copy += bufLen;
+    );
+
     aSaveBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(aiBuf));
+#endif
+
     return cmd;
 }
+
 #else
 u64 *synthesis_do_one_audio_update(s16 *aiBuf, s32 bufLen, u64 *cmd, u32 updateIndex) {
     UNUSED s32 pad1[1];
@@ -572,6 +617,9 @@ u64 *synthesis_do_one_audio_update(s16 *aiBuf, s32 bufLen, u64 *cmd, u32 updateI
 }
 #endif
 
+// All N64 versions
+#ifdef TARGET_N64
+
 #ifdef VERSION_EU
 // Processes just one note, not all
 u64 *synthesis_process_note(struct Note *note, struct NoteSubEu *noteSubEu, struct NoteSynthesisState *synthesisState, UNUSED s16 *aiBuf, s32 bufLen, u64 *cmd) {
@@ -584,7 +632,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 #endif
     struct AudioBankSample *audioBookSample; // sp164, sp138
     struct AdpcmLoop *loopInfo;              // sp160, sp134
-    s16 *curLoadedBook = NULL;               // sp154, sp130
+    s16 *curLoadedBook = NULL;               // sp154, samplePosAlignmentOffset
 #ifdef VERSION_EU
     UNUSED u8 padEU[0x04];
 #endif
@@ -601,19 +649,19 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
     UNUSED u8 pad7[0x0c];                    // sp100
     UNUSED s32 tempBufLen;
 #ifdef VERSION_EU
-    s32 sp130;  //sp128, sp104
+    s32 samplePosAlignmentOffset;  //sp128, sp104
     UNUSED u32 pad9;
 #else
     UNUSED u32 pad9;
-    s32 sp130;  //sp128, sp104
+    s32 samplePosAlignmentOffset;  //sp128, sp104
 #endif
     s32 nAdpcmSamplesProcessed; // signed required for US
-    s32 t0;
+    s32 nAdpcmPacketsThisIteration;
 #ifdef VERSION_EU
     u8 *sampleAddr;                          // sp120, spF4
-    s32 s6;
+    s32 samplesSkippedThisIteration;
 #else
-    s32 s6;
+    s32 samplesSkippedThisIteration;
     u8 *sampleAddr;                          // sp120, spF4
 #endif
 
@@ -626,28 +674,28 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
     UNUSED s32 samplesLenInt;
     s32 endPos;             // sp110,    spE4
     s32 nSamplesToProcess;  // sp10c/a0, spE0
-    s32 s2;
+    s32 samplePosIntLowerNibble;
 #else
     // Might have been used to store (samplesLenFixedPoint >> 0x10), but doing so causes strange
     // behavior with the break near the end of the loop, causing US and JP to need a goto instead
     UNUSED s32 samplesLenInt;
     s32 samplesLenAdjusted; // 108
-    s32 s2;
+    s32 samplePosIntLowerNibble;
     s32 endPos;             // sp110,    spE4
     s32 nSamplesToProcess;  // sp10c/a0, spE0
 #endif
 
-    s32 s0;
+    s32 nUncompressedSamplesThisIteration;
     s32 s3;
-    s32 s5; //s4
+    s32 decodeTailPtr; //s4
 
     u32 samplesLenFixedPoint;    // v1_1
     s32 nSamplesInThisIteration; // v1_2
-    u32 a3;
+    u32 sampleDataOffset;
 #ifndef VERSION_EU
     s32 t9;
 #endif
-    u8 *v0_2;
+    u8 *sampleDataAddr;
     s32 nParts;                 // spE8, spBC
     s32 curPart;                // spE4, spB8
 
@@ -657,7 +705,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
     s32 temp;
 
 #ifdef VERSION_EU
-    s32 s5Aligned;
+    s32 decodeTailPtrAligned;
 #endif
     s32 resampledTempLen;                    // spD8, spAC
     u16 noteSamplesDmemAddrBeforeResampling; // spD6, spAA
@@ -762,7 +810,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                 resampledTempLen = 0;
                 for (curPart = 0; curPart < nParts; curPart++) {
                     nAdpcmSamplesProcessed = 0; // s8
-                    s5 = 0;                     // s4
+                    decodeTailPtr = 0;                     // s4
 
                     if (nParts == 1) {
                         samplesLenAdjusted = samplesLenFixedPoint >> 0x10;
@@ -793,46 +841,46 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
                     while (nAdpcmSamplesProcessed != samplesLenAdjusted) {
                         s32 samplesRemaining; // v1
-                        s32 s0;
+                        s32 nUncompressedSamplesThisIteration;
 
                         noteFinished = FALSE;
                         restart = FALSE;
                         nSamplesToProcess = samplesLenAdjusted - nAdpcmSamplesProcessed;
 #ifdef VERSION_EU
-                        s2 = synthesisState->samplePosInt & 0xf;
+                        samplePosIntLowerNibble = synthesisState->samplePosInt & 0xf;
                         samplesRemaining = endPos - synthesisState->samplePosInt;
 #else
-                        s2 = note->samplePosInt & 0xf;
+                        samplePosIntLowerNibble = note->samplePosInt & 0xf;
                         samplesRemaining = endPos - note->samplePosInt;
 #endif
 
 #ifdef VERSION_EU
-                        if (s2 == 0 && synthesisState->restart == FALSE) {
-                            s2 = 16;
+                        if (samplePosIntLowerNibble == 0 && synthesisState->restart == FALSE) {
+                            samplePosIntLowerNibble = 16;
                         }
 #else
-                        if (s2 == 0 && note->restart == FALSE) {
-                            s2 = 16;
+                        if (samplePosIntLowerNibble == 0 && note->restart == FALSE) {
+                            samplePosIntLowerNibble = 16;
                         }
 #endif
-                        s6 = 16 - s2; // a1
+                        samplesSkippedThisIteration = 16 - samplePosIntLowerNibble; // a1
 
                         if (nSamplesToProcess < samplesRemaining) {
-                            t0 = (nSamplesToProcess - s6 + 0xf) / 16;
-                            s0 = t0 * 16;
-                            s3 = s6 + s0 - nSamplesToProcess;
+                            nAdpcmPacketsThisIteration = (nSamplesToProcess - samplesSkippedThisIteration + 0xf) / 16;
+                            nUncompressedSamplesThisIteration = nAdpcmPacketsThisIteration * 16;
+                            s3 = samplesSkippedThisIteration + nUncompressedSamplesThisIteration - nSamplesToProcess;
                         } else {
 #ifndef VERSION_EU
-                            s0 = samplesRemaining + s2 - 0x10;
+                            nUncompressedSamplesThisIteration = samplesRemaining + samplePosIntLowerNibble - 0x10;
 #else
-                            s0 = samplesRemaining - s6;
+                            nUncompressedSamplesThisIteration = samplesRemaining - samplesSkippedThisIteration;
 #endif
                             s3 = 0;
-                            if (s0 <= 0) {
-                                s0 = 0;
-                                s6 = samplesRemaining;
+                            if (nUncompressedSamplesThisIteration <= 0) {
+                                nUncompressedSamplesThisIteration = 0;
+                                samplesSkippedThisIteration = samplesRemaining;
                             }
-                            t0 = (s0 + 0xf) / 16;
+                            nAdpcmPacketsThisIteration = (nUncompressedSamplesThisIteration + 0xf) / 16;
                             if (loopInfo->count != 0) {
                                 // Loop around and restart
                                 restart = 1;
@@ -841,28 +889,28 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                             }
                         }
 
-                        if (t0 != 0) {
+                        if (nAdpcmPacketsThisIteration != 0) {
 #ifdef VERSION_EU
-                            temp = (synthesisState->samplePosInt - s2 + 0x10) / 16;
+                            temp = (synthesisState->samplePosInt - samplePosIntLowerNibble + 0x10) / 16;
                             if (audioBookSample->loaded == 0x81) {
-                                v0_2 = sampleAddr + temp * 9;
+                                sampleDataAddr = sampleAddr + temp * 9;
                             } else {
-                                v0_2 = dma_sample_data(
+                                sampleDataAddr = dma_sample_data(
                                     (uintptr_t) (sampleAddr + temp * 9),
-                                    t0 * 9, flags, &synthesisState->sampleDmaIndex);
+                                    nAdpcmPacketsThisIteration * 9, flags, &synthesisState->sampleDmaIndex);
                             }
 #else
-                            temp = (note->samplePosInt - s2 + 0x10) / 16;
-                            v0_2 = dma_sample_data(
+                            temp = (note->samplePosInt - samplePosIntLowerNibble + 0x10) / 16;
+                            sampleDataAddr = dma_sample_data(
                                 (uintptr_t) (sampleAddr + temp * 9),
-                                t0 * 9, flags, &note->sampleDmaIndex);
+                                nAdpcmPacketsThisIteration * 9, flags, &note->sampleDmaIndex);
 #endif
-                            a3 = (u32)((uintptr_t) v0_2 & 0xf);
-                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA, 0, t0 * 9 + a3);
-                            aLoadBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(v0_2 - a3));
+                            sampleDataOffset = (u32)((uintptr_t) sampleDataAddr & 0xf);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA, 0, nAdpcmPacketsThisIteration * 9 + sampleDataOffset);
+                            aLoadBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(sampleDataAddr - sampleDataOffset));
                         } else {
-                            s0 = 0;
-                            a3 = 0;
+                            nUncompressedSamplesThisIteration = 0;
+                            sampleDataOffset = 0;
                         }
 
 #ifdef VERSION_EU
@@ -879,32 +927,32 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                         }
 #endif
 
-                        nSamplesInThisIteration = s0 + s6 - s3;
+                        nSamplesInThisIteration = nUncompressedSamplesThisIteration + samplesSkippedThisIteration - s3;
 #ifdef VERSION_EU
                         if (nAdpcmSamplesProcessed == 0) {
-                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + a3,
-                                       DMEM_ADDR_UNCOMPRESSED_NOTE, s0 * 2);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset,
+                                       DMEM_ADDR_UNCOMPRESSED_NOTE, nUncompressedSamplesThisIteration * 2);
                             aADPCMdec(cmd++, flags,
                                       VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->adpcmdecState));
-                            sp130 = s2 * 2;
+                            samplePosAlignmentOffset = samplePosIntLowerNibble * 2;
                         } else {
-                            s5Aligned = ALIGN(s5, 5);
-                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + a3,
-                                       DMEM_ADDR_UNCOMPRESSED_NOTE + s5Aligned, s0 * 2);
+                            decodeTailPtrAligned = ALIGN(decodeTailPtr, 5);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset,
+                                       DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtrAligned, nUncompressedSamplesThisIteration * 2);
                             aADPCMdec(cmd++, flags,
                                       VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->adpcmdecState));
-                            aDMEMMove(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + s5Aligned + (s2 * 2),
-                                      DMEM_ADDR_UNCOMPRESSED_NOTE + s5, (nSamplesInThisIteration) * 2);
+                            aDMEMMove(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtrAligned + (samplePosIntLowerNibble * 2),
+                                      DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr, (nSamplesInThisIteration) * 2);
                         }
 #else
                         if (nAdpcmSamplesProcessed == 0) {
-                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + a3, DMEM_ADDR_UNCOMPRESSED_NOTE, s0 * 2);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset, DMEM_ADDR_UNCOMPRESSED_NOTE, nUncompressedSamplesThisIteration * 2);
                             aADPCMdec(cmd++, flags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->adpcmdecState));
-                            sp130 = s2 * 2;
+                            samplePosAlignmentOffset = samplePosIntLowerNibble * 2;
                         } else {
-                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + a3, DMEM_ADDR_UNCOMPRESSED_NOTE + ALIGN(s5, 5), s0 * 2);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset, DMEM_ADDR_UNCOMPRESSED_NOTE + ALIGN(decodeTailPtr, 5), nUncompressedSamplesThisIteration * 2);
                             aADPCMdec(cmd++, flags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->adpcmdecState));
-                            aDMEMMove(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + ALIGN(s5, 5) + (s2 * 2), DMEM_ADDR_UNCOMPRESSED_NOTE + s5, (nSamplesInThisIteration) * 2);
+                            aDMEMMove(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + ALIGN(decodeTailPtr, 5) + (samplePosIntLowerNibble * 2), DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr, (nSamplesInThisIteration) * 2);
                         }
 #endif
 
@@ -912,26 +960,26 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
                         switch (flags) {
                             case A_INIT: // = 1
-                                sp130 = 0;
-                                s5 = s0 * 2 + s5;
+                                samplePosAlignmentOffset = 0;
+                                decodeTailPtr = nUncompressedSamplesThisIteration * 2 + decodeTailPtr;
                                 break;
 
                             case A_LOOP: // = 2
-                                s5 = nSamplesInThisIteration * 2 + s5;
+                                decodeTailPtr = nSamplesInThisIteration * 2 + decodeTailPtr;
                                 break;
 
                             default:
-                                if (s5 != 0) {
-                                    s5 = nSamplesInThisIteration * 2 + s5;
+                                if (decodeTailPtr != 0) {
+                                    decodeTailPtr = nSamplesInThisIteration * 2 + decodeTailPtr;
                                 } else {
-                                    s5 = (s2 + nSamplesInThisIteration) * 2;
+                                    decodeTailPtr = (samplePosIntLowerNibble + nSamplesInThisIteration) * 2;
                                 }
                                 break;
                         }
                         flags = 0;
 
                         if (noteFinished) {
-                            aClearBuffer(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + s5,
+                            aClearBuffer(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr,
                                          (samplesLenAdjusted - nAdpcmSamplesProcessed) * 2);
 #ifdef VERSION_EU
                             noteSubEu->finished = 1;
@@ -963,13 +1011,13 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
                     switch (nParts) {
                         case 1:
-                            noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_UNCOMPRESSED_NOTE + sp130;
+                            noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset;
                             break;
 
                         case 2:
                             switch (curPart) {
                                 case 0:
-                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + sp130, DMEM_ADDR_RESAMPLED, samplesLenAdjusted + 4);
+                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset, DMEM_ADDR_RESAMPLED, samplesLenAdjusted + 4);
 #ifdef VERSION_EU
                                     aResample(cmd++, A_INIT, 0xff60, VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->dummyResampleState));
 #else
@@ -987,7 +1035,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                                     break;
 
                                 case 1:
-                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + sp130,
+                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset,
                                                DMEM_ADDR_RESAMPLED2,
                                                samplesLenAdjusted + 8);
 #ifdef VERSION_EU
@@ -1038,32 +1086,32 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
 #ifndef VERSION_EU
             if (note->headsetPanRight != 0 || note->prevHeadsetPanRight != 0) {
-                s0 = 1;
+                nUncompressedSamplesThisIteration = 1;
             } else if (note->headsetPanLeft != 0 || note->prevHeadsetPanLeft != 0) {
-                s0 = 2;
+                nUncompressedSamplesThisIteration = 2;
 #else
             if (noteSubEu->headsetPanRight != 0 || synthesisState->prevHeadsetPanRight != 0) {
-                s0 = 1;
+                nUncompressedSamplesThisIteration = 1;
             } else if (noteSubEu->headsetPanLeft != 0 || synthesisState->prevHeadsetPanLeft != 0) {
-                s0 = 2;
+                nUncompressedSamplesThisIteration = 2;
 #endif
             } else {
-                s0 = 0;
+                nUncompressedSamplesThisIteration = 0;
             }
 
 #ifdef VERSION_EU
-            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, 0, s0, flags);
+            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, 0, nUncompressedSamplesThisIteration, flags);
 #else
-            cmd = process_envelope(cmd, note, bufLen, 0, s0, flags);
+            cmd = process_envelope(cmd, note, bufLen, 0, nUncompressedSamplesThisIteration, flags);
 #endif
 
 #ifdef VERSION_EU
             if (noteSubEu->usesHeadsetPanEffects) {
-                cmd = note_apply_headset_pan_effects(cmd, noteSubEu, synthesisState, bufLen * 2, flags, s0);
+                cmd = note_apply_headset_pan_effects(cmd, noteSubEu, synthesisState, bufLen * 2, flags, nUncompressedSamplesThisIteration);
             }
 #else
             if (note->usesHeadsetPanEffects) {
-                cmd = note_apply_headset_pan_effects(cmd, note, bufLen * 2, flags, s0);
+                cmd = note_apply_headset_pan_effects(cmd, note, bufLen * 2, flags, nUncompressedSamplesThisIteration);
             }
 #endif
         }
@@ -1080,6 +1128,711 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
     return cmd;
 }
+
+// EU Non-N64 version
+#elif VERSION_EU
+// Processes just one note, not all
+u64 *synthesis_process_note(struct Note *note, struct NoteSubEu *noteSubEu, struct NoteSynthesisState *synthesisState, UNUSED s16 *aiBuf, s32 bufLen, u64 *cmd) {
+    UNUSED s32 pad0[3];
+    struct AudioBankSample *audioBookSample;
+    struct AdpcmLoop *loopInfo;
+    s16 *curLoadedBook = NULL;
+    UNUSED u8 padEU[0x04];
+    UNUSED u8 pad8[0x04];
+    s32 noteFinished;
+    s32 restart;
+    s32 flags;
+    u16 resamplingRateFixedPoint;
+    UNUSED u8 pad7[0x0c];
+    UNUSED s32 tempBufLen;
+    s32 samplePosAlignmentOffset;
+    UNUSED u32 pad9;
+    s32 nAdpcmSamplesProcessed;
+    s32 nAdpcmPacketsThisIteration;
+    u8 *sampleAddr;
+    s32 samplesSkippedThisIteration;
+
+    // sp6c is a temporary!
+
+    s32 samplesLenAdjusted; // 108,      spEC
+    // Might have been used to store (samplesLenFixedPoint >> 0x10), but doing so causes strange
+    // behavior with the break near the end of the loop, causing US and JP to need a goto instead
+    UNUSED s32 samplesLenInt;
+    s32 endPos;
+    s32 nSamplesToProcess;
+    s32 samplePosIntLowerNibble;
+
+    s32 nUncompressedSamplesThisIteration;
+    s32 s3;
+    s32 decodeTailPtr; // Location to write next sample data
+
+    u32 samplesLenFixedPoint;
+    s32 nSamplesInThisIteration;
+    u32 sampleDataOffset;
+    u8 *sampleDataAddr; // Address where ADPCM data is stored after loaded from cart
+    s32 nParts;
+    s32 curPart;
+
+    s32 temp;
+
+    s32 decodeTailPtrAligned; // Aligned, made right before decode
+    s32 resampledTempLen;
+    u16 noteSamplesDmemAddrBeforeResampling;
+
+        if (note->noteSubEu.enabled == FALSE) {
+            return cmd;
+        } else {
+            flags = 0;
+            tempBufLen = bufLen;
+
+            if (noteSubEu->needsInit == TRUE) {
+                flags = A_INIT;
+                synthesisState->restart = FALSE;
+                synthesisState->samplePosInt = 0;
+                synthesisState->samplePosFrac = 0;
+                synthesisState->curVolLeft = 1;
+                synthesisState->curVolRight = 1;
+                synthesisState->prevHeadsetPanRight = 0;
+                synthesisState->prevHeadsetPanLeft = 0;
+            }
+
+            resamplingRateFixedPoint = noteSubEu->resamplingRateFixedPoint;
+            nParts = noteSubEu->hasTwoAdpcmParts + 1;
+            samplesLenFixedPoint = (resamplingRateFixedPoint * tempBufLen * 2) + synthesisState->samplePosFrac;
+            synthesisState->samplePosFrac = samplesLenFixedPoint & 0xFFFF;
+
+            if (noteSubEu->isSyntheticWave) {
+                cmd = load_wave_samples(cmd, noteSubEu, synthesisState, samplesLenFixedPoint >> 0x10);
+                noteSamplesDmemAddrBeforeResampling = (synthesisState->samplePosInt * 2) + DMEM_ADDR_UNCOMPRESSED_NOTE;
+                synthesisState->samplePosInt += samplesLenFixedPoint >> 0x10;
+            }
+            else {
+                // ADPCM note
+
+                audioBookSample = noteSubEu->sound.audioBankSound->sample;
+
+                loopInfo = audioBookSample->loop;
+                endPos = loopInfo->end;
+                sampleAddr = audioBookSample->sampleAddr;
+                resampledTempLen = 0;
+                for (curPart = 0; curPart < nParts; curPart++) {
+                    nAdpcmSamplesProcessed = 0; // s8
+                    decodeTailPtr = 0;                     // s4
+
+                    if (nParts == 1) {
+                        samplesLenAdjusted = samplesLenFixedPoint >> 0x10;
+                    } else if ((samplesLenFixedPoint >> 0x10) & 1) {
+                        samplesLenAdjusted = ((samplesLenFixedPoint >> 0x10) & ~1) + (curPart * 2);
+                    }
+                    else {
+                        samplesLenAdjusted = (samplesLenFixedPoint >> 0x10);
+                    }
+
+                    if (curLoadedBook != audioBookSample->book->book) {
+                        u32 nEntries; // v1
+                        curLoadedBook = audioBookSample->book->book;
+                        nEntries = 16 * audioBookSample->book->order * audioBookSample->book->npredictors;
+                        aLoadADPCM(cmd++, nEntries, VIRTUAL_TO_PHYSICAL2(curLoadedBook + noteSubEu->bookOffset));
+                    }
+
+                    if (noteSubEu->bookOffset) {
+                        curLoadedBook = (s16 *) &euUnknownData_80301950; // what's this? never read
+                    }
+
+                    while (nAdpcmSamplesProcessed != samplesLenAdjusted) {
+                        s32 samplesRemaining; // v1
+                        s32 nUncompressedSamplesThisIteration;
+
+                        noteFinished = FALSE;
+                        restart = FALSE;
+                        nSamplesToProcess = samplesLenAdjusted - nAdpcmSamplesProcessed;
+                        samplePosIntLowerNibble = synthesisState->samplePosInt & 0xf;
+                        samplesRemaining = endPos - synthesisState->samplePosInt;
+
+                        if (samplePosIntLowerNibble == 0 && synthesisState->restart == FALSE) {
+                            samplePosIntLowerNibble = 16;
+                        }
+                        samplesSkippedThisIteration = 16 - samplePosIntLowerNibble; // a1
+
+                        if (nSamplesToProcess < samplesRemaining) {
+                            nAdpcmPacketsThisIteration = (nSamplesToProcess - samplesSkippedThisIteration + 0xf) / 16;
+                            nUncompressedSamplesThisIteration = nAdpcmPacketsThisIteration * 16;
+                            s3 = samplesSkippedThisIteration + nUncompressedSamplesThisIteration - nSamplesToProcess;
+                        } else {
+                            nUncompressedSamplesThisIteration = samplesRemaining - samplesSkippedThisIteration;
+                            s3 = 0;
+                            if (nUncompressedSamplesThisIteration <= 0) {
+                                nUncompressedSamplesThisIteration = 0;
+                                samplesSkippedThisIteration = samplesRemaining;
+                            }
+                            nAdpcmPacketsThisIteration = (nUncompressedSamplesThisIteration + 0xf) / 16;
+                            if (loopInfo->count != 0) {
+                                // Loop around and restart
+                                restart = 1;
+                            } else {
+                                noteFinished = 1;
+                            }
+                        }
+
+                        if (nAdpcmPacketsThisIteration != 0) {
+                            temp = (synthesisState->samplePosInt - samplePosIntLowerNibble + 0x10) / 16;
+                            if (audioBookSample->loaded == 0x81) {
+                                sampleDataAddr = sampleAddr + temp * 9;
+                            } else {
+                                sampleDataAddr = dma_sample_data(
+                                    (uintptr_t) (sampleAddr + temp * 9),
+                                    nAdpcmPacketsThisIteration * 9, flags, &synthesisState->sampleDmaIndex);
+                            }
+                            sampleDataOffset = (u32)((uintptr_t) sampleDataAddr & 0xf);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA, 0, nAdpcmPacketsThisIteration * 9 + sampleDataOffset);
+                            aLoadBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(sampleDataAddr - sampleDataOffset));
+                        } else {
+                            nUncompressedSamplesThisIteration = 0;
+                            sampleDataOffset = 0;
+                        }
+
+                        if (synthesisState->restart != FALSE) {
+                            aSetLoop(cmd++, VIRTUAL_TO_PHYSICAL2(audioBookSample->loop->state));
+                            flags = A_LOOP; // = 2
+                            synthesisState->restart = FALSE;
+                        }
+
+                        nSamplesInThisIteration = nUncompressedSamplesThisIteration + samplesSkippedThisIteration - s3;
+                        if (nAdpcmSamplesProcessed == 0) {
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset,
+                                       DMEM_ADDR_UNCOMPRESSED_NOTE, nUncompressedSamplesThisIteration * 2);
+                            aADPCMdec(cmd++, flags,
+                                      VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->adpcmdecState));
+                            samplePosAlignmentOffset = samplePosIntLowerNibble * 2;
+                        } else {
+                            decodeTailPtrAligned = ALIGN(decodeTailPtr, 5);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset,
+                                       DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtrAligned, nUncompressedSamplesThisIteration * 2);
+                            aADPCMdec(cmd++, flags,
+                                      VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->adpcmdecState));
+                            aDMEMMove(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtrAligned + (samplePosIntLowerNibble * 2),
+                                      DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr, (nSamplesInThisIteration) * 2);
+                        }
+
+                        nAdpcmSamplesProcessed += nSamplesInThisIteration;
+
+                        switch (flags) {
+                            case A_INIT: // = 1
+                                samplePosAlignmentOffset = 0;
+                                decodeTailPtr = nUncompressedSamplesThisIteration * 2 + decodeTailPtr;
+                                break;
+
+                            case A_LOOP: // = 2
+                                decodeTailPtr = nSamplesInThisIteration * 2 + decodeTailPtr;
+                                break;
+
+                            default:
+                                if (decodeTailPtr != 0) {
+                                    decodeTailPtr = nSamplesInThisIteration * 2 + decodeTailPtr;
+                                } else {
+                                    decodeTailPtr = (samplePosIntLowerNibble + nSamplesInThisIteration) * 2;
+                                }
+                                break;
+                        }
+                        flags = 0;
+
+                        if (noteFinished) {
+                            aClearBuffer(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr,
+                                         (samplesLenAdjusted - nAdpcmSamplesProcessed) * 2);
+                            noteSubEu->finished = 1;
+                            note->noteSubEu.finished = 1;
+                            note->noteSubEu.enabled = 0;
+                            break;
+                        }
+                        if (restart) {
+                            synthesisState->restart = TRUE;
+                            synthesisState->samplePosInt = loopInfo->start;
+                        } else {
+                            synthesisState->samplePosInt += nSamplesToProcess;
+                        }
+                    }
+
+                    switch (nParts) {
+                        case 1:
+                            noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset;
+                            break;
+
+                        case 2:
+                            switch (curPart) {
+                                case 0:
+                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset, DMEM_ADDR_RESAMPLED, samplesLenAdjusted + 4);
+                                    aResample(cmd++, A_INIT, 0xff60, VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->dummyResampleState));
+                                    resampledTempLen = samplesLenAdjusted + 4;
+                                    noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_RESAMPLED + 4;
+                                    if (noteSubEu->finished != FALSE) {
+                                        aClearBuffer(cmd++, DMEM_ADDR_RESAMPLED + resampledTempLen, samplesLenAdjusted + 0x10);
+                                    }
+                                    break;
+
+                                case 1:
+                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset,
+                                               DMEM_ADDR_RESAMPLED2,
+                                               samplesLenAdjusted + 8);
+                                    aResample(cmd++, A_INIT, 0xff60,
+                                              VIRTUAL_TO_PHYSICAL2(
+                                                  synthesisState->synthesisBuffers->dummyResampleState));
+                                    aDMEMMove(cmd++, DMEM_ADDR_RESAMPLED2 + 4,
+                                              DMEM_ADDR_RESAMPLED + resampledTempLen,
+                                              samplesLenAdjusted + 4);
+                                    break;
+                            }
+                    }
+
+                    if (noteSubEu->finished != FALSE) {
+                        break;
+                    }
+                }
+            }
+
+            flags = 0;
+
+            if (noteSubEu->needsInit == TRUE) {
+                flags = A_INIT;
+                noteSubEu->needsInit = FALSE;
+            }
+
+            cmd = final_resample(cmd, synthesisState, bufLen * 2, resamplingRateFixedPoint,
+                                 noteSamplesDmemAddrBeforeResampling, flags);
+
+            if (noteSubEu->headsetPanRight != 0 || synthesisState->prevHeadsetPanRight != 0) {
+                nUncompressedSamplesThisIteration = 1;
+            } else if (noteSubEu->headsetPanLeft != 0 || synthesisState->prevHeadsetPanLeft != 0) {
+                nUncompressedSamplesThisIteration = 2;
+            } else {
+                nUncompressedSamplesThisIteration = 0;
+            }
+
+            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, 0, nUncompressedSamplesThisIteration, flags);
+
+            if (noteSubEu->usesHeadsetPanEffects) {
+                cmd = note_apply_headset_pan_effects(cmd, noteSubEu, synthesisState, bufLen * 2, flags, nUncompressedSamplesThisIteration);
+            }
+        }
+
+    return cmd;
+}
+
+// US and JP Non-N64 versions
+#else
+
+// Cleaned up and somewhat optimized version
+u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
+    s16* curLoadedBook = NULL;
+
+    for (s32 noteIndex = 0; noteIndex < gMaxSimultaneousNotes; noteIndex++) {
+        struct Note* note = &gNotes[noteIndex];
+
+        // If the note is enabled but the audio bank isn't loaded, error.
+        //! This function requires note->enabled to be volatile, but it breaks other functions like note_enable.
+        //! Casting to a struct with just the volatile bitfield works, but there may be a better way to match.
+#ifdef VERSION_US
+        if (((struct vNote *)note)->enabled && IS_BANK_LOAD_COMPLETE(note->bankId) == FALSE) {
+#else
+        if (IS_BANK_LOAD_COMPLETE(note->bankId) == FALSE) {
+#endif
+            gAudioErrorFlags = (note->bankId << 8) + noteIndex + 0x1000000;
+        }
+        
+        // If the note is loaded and its bank is loaded, play it. Else, continue.
+        else if (((struct vNote *)note)->enabled) {
+            s32 flags;
+            u16 noteSamplesDmemAddrBeforeResampling;
+
+            // Init the note
+            if (note->needsInit == TRUE) {
+                flags = A_INIT;
+                note->samplePosInt = 0;
+                note->samplePosFrac = 0;
+            } else {
+                flags = 0;
+            }
+
+            // Clamp the frequency
+            if (note->frequency >= US_FLOAT(3.99993))
+                note->frequency = US_FLOAT(3.99993);
+
+            // If frequency is >= 2.0, the processing must be split into two parts
+            const bool tIsHighFreqNote = note->frequency >= US_FLOAT(2.0);
+            const f32 resamplingRate = tIsHighFreqNote ? note->frequency * US_FLOAT(.5) : note->frequency;
+            const s32 nParts = ((s32) tIsHighFreqNote) + 1; // If tIsHighFreqNote, 2. Else, 1.
+
+            const u16 resamplingRateFixedPoint = (u16)(s32)(resamplingRate * 32768.0f);
+            const u32 samplesLenFixedPoint = note->samplePosFrac + (resamplingRateFixedPoint * bufLen) * 2;
+            note->samplePosFrac = samplesLenFixedPoint & 0xFFFF; // 16-bit store, can't reuse
+
+            // A wave synthesis note (not ADPCM)
+            if (note->sound == NULL) {
+                cmd = load_wave_samples(cmd, note, samplesLenFixedPoint >> 0x10);
+                noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_UNCOMPRESSED_NOTE + note->samplePosInt * 2;
+                note->samplePosInt += (samplesLenFixedPoint >> 0x10);
+                flags = 0;
+            }
+
+            // An ADPCM note
+            else {
+                const struct AudioBankSample *audioBookSample = note->sound->sample;
+                const struct AdpcmLoop *loopInfo = audioBookSample->loop;
+                u8* sampleAddr = audioBookSample->sampleAddr;
+
+                s32 resampledTempLen = 0;
+
+                // If the wrong ADPCM book is loaded, load the right one
+                if (curLoadedBook != audioBookSample->book->book) {
+                    const u32 nEntries = audioBookSample->book->order * audioBookSample->book->npredictors;
+                    curLoadedBook = audioBookSample->book->book;
+                    aLoadADPCM(cmd++, nEntries * 16, VIRTUAL_TO_PHYSICAL2(curLoadedBook));
+                }
+
+                // Execute 1 or 2 times depending on frequency
+                for (s32 curPart = 0; curPart < nParts; curPart++) {
+                    s32 nAdpcmSamplesProcessed = 0;
+                    s32 decodeTailPtr = 0;  // Points to the first free byte in the uncompressed note buffer
+                    s32 samplesLenAdjusted;
+                    s32 samplePosAlignmentOffset; // Offset into the ADPCM output buffer start pos
+
+                    // Adjust sample length if we have two parts
+                    if (nParts == 1) {
+                        samplesLenAdjusted = samplesLenFixedPoint >> 0x10;
+                    } else if ((samplesLenFixedPoint >> 0x10) & 1) {
+                        samplesLenAdjusted = ((samplesLenFixedPoint >> 0x10) & ~1) + (curPart * 2);
+                    }
+                    else {
+                        samplesLenAdjusted = (samplesLenFixedPoint >> 0x10);
+                    }
+
+                    /*
+                     * Process every sample in this part of the note
+                     * Contents run gMaxSimultaneousNotes * (parts per note (2 max)) * (samplesLenAdjusted per note)
+                     * Important information:
+                     *   ADPCM is compressed data, stored in chunks of 9 bytes.
+                     *   PCM is uncompressed data, stored in 16-bit unsigned ints.
+                     *   For every 16 PCM samples, 9 bytes of ADPCM + the previous 2 bytes of PCM are used.
+                     *   A Sample Chunk is the smallest amount of data that adpcmDec decodes at once
+                    */
+                    
+                    while (nAdpcmSamplesProcessed != samplesLenAdjusted) {
+                        const s32 samplesRemaining = loopInfo->end - note->samplePosInt; // samples until the end of this part of the note
+                        const s32 nSamplesToProcess = samplesLenAdjusted - nAdpcmSamplesProcessed; // samples to process this notePart
+                        s32 samplePosIntLowerNibble = note->samplePosInt & 15; // Aligned to 16-byte chunks
+                        s32 nAdpcmPacketsThisIteration; // Data is decoded one packet at a time (16 samples PCM from 9 bytes ADPCM)
+                        s32 nUncompressedSamplesThisIteration; // 
+                        bool noteFinished = false, restart = false;
+
+                        // If we can avoid skipping samples, do so
+                        if (samplePosIntLowerNibble == 0 && note->restart == FALSE) {
+                            samplePosIntLowerNibble = 16;
+                        }
+
+                        s32 samplesSkippedThisIteration = 16 - samplePosIntLowerNibble; // Alignment
+                        s32 s3;
+
+                        // If we have more chunks after this one, process a full chunk
+                        if (nSamplesToProcess < samplesRemaining) {
+                            nAdpcmPacketsThisIteration = (nSamplesToProcess - samplesSkippedThisIteration + 15) / 16;
+                            nUncompressedSamplesThisIteration = nAdpcmPacketsThisIteration * 16;
+                            s3 = samplesSkippedThisIteration + nUncompressedSamplesThisIteration - nSamplesToProcess;
+                        }
+
+                        // The final sample chunk, which may be smaller than the rest
+                        else {
+                            nUncompressedSamplesThisIteration = samplesRemaining + samplePosIntLowerNibble - 16;
+                            s3 = 0;
+                            if (nUncompressedSamplesThisIteration <= 0) {
+                                nUncompressedSamplesThisIteration = 0;
+                                samplesSkippedThisIteration = samplesRemaining;
+                            }
+                            nAdpcmPacketsThisIteration = (nUncompressedSamplesThisIteration + 15) / 16;
+                            
+                            if (loopInfo->count != 0)
+                                restart =  true;
+                            else
+                                noteFinished = true;
+                        }
+
+                        profiler_3ds_log_time(0);
+
+#ifdef ENHANCED_RSPA_EMULATION
+
+                        uint8_t* directSampleAddr = 0; // Sample data is read directly from emuROM
+
+                        if (nAdpcmPacketsThisIteration == 0)
+                            nUncompressedSamplesThisIteration = 0;
+                        else
+                            directSampleAddr = sampleAddr + (((note->samplePosInt - samplePosIntLowerNibble + 16) >> 4) * 9);
+
+#else
+
+                        u32 sampleDataOffset; // Aligns sample data to 16-byte chunks.
+
+                        // Load compressed ADPCM data into the RSP
+                        if (nAdpcmPacketsThisIteration != 0) {
+                            const s32 tempNumSamples = (note->samplePosInt - samplePosIntLowerNibble + 16) / 16;
+                            
+                            // Load sample data
+                            const u8* sampleDataAddr = dma_sample_data(
+                                (uintptr_t) (sampleAddr + tempNumSamples * 9), // Source addr
+                                nAdpcmPacketsThisIteration * 9, // size
+                                flags,
+                                &note->sampleDmaIndex);
+
+                            sampleDataOffset = (u32)((uintptr_t) sampleDataAddr & 0b1111); // lower 4 bits of address (aligned down to 16) 
+
+                            // Load ADPCM data into DMEM_ADDR_COMPRESSED_ADPCM_DATA
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA, 0, nAdpcmPacketsThisIteration * 9 + sampleDataOffset); 
+                            aLoadBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(sampleDataAddr - sampleDataOffset)); 
+                        } else {
+                            nUncompressedSamplesThisIteration = 0;
+                            sampleDataOffset = 0;
+                        }
+#endif
+                        profiler_3ds_log_time(1); // ADPCM Copy
+
+                        // If we need to restart the note, loop it
+                        if (note->restart != FALSE) {
+                            aSetLoop(cmd++, VIRTUAL_TO_PHYSICAL2(audioBookSample->loop->state));
+                            flags = A_LOOP; // = 2
+                            note->restart = FALSE;
+                        }
+
+                        const s32 nSamplesInThisIteration = nUncompressedSamplesThisIteration + samplesSkippedThisIteration - s3;
+
+                        profiler_3ds_log_time(0);
+
+#ifdef ENHANCED_RSPA_EMULATION
+                        
+                        // Decode some data
+                        // If this is the firt decode, do an unaligned chunk to get us aligned to 32-byte chunks.
+                        if (nAdpcmSamplesProcessed == 0) {
+                            aSetBuffer(cmd++, 0, /*Unused IN*/ 0, DMEM_ADDR_UNCOMPRESSED_NOTE, nUncompressedSamplesThisIteration * 2);
+                            aADPCMdecDirect(cmd++, flags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->adpcmdecState), directSampleAddr);
+                            samplePosAlignmentOffset = samplePosIntLowerNibble * 2;
+                        }
+                        
+                        // If this is not the first decode, decode aligned to 32-byte chunks
+                        // and then the data is copied to unaligned memory
+                        else {
+                            const s32 alignedDecodeAddr = ALIGN(decodeTailPtr, 5);
+                            aSetBuffer(cmd++, 0, /*Unused IN*/ 0, DMEM_ADDR_UNCOMPRESSED_NOTE + alignedDecodeAddr, nUncompressedSamplesThisIteration * 2);
+
+                            aADPCMdecDirect(cmd++, flags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->adpcmdecState), directSampleAddr);
+
+                            // Shift our aligned data down to the unaligned destination
+                            aDMEMMove(
+                                cmd++,
+                                DMEM_ADDR_UNCOMPRESSED_NOTE + alignedDecodeAddr + (samplePosIntLowerNibble * 2), // input
+                                DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr, // output
+                                nSamplesInThisIteration * 2); // nbytes
+                        }
+#else
+                        // Decode some data
+                        // If this is the firt decode, do an unaligned chunk to get us aligned to 32-byte chunks.
+                        if (nAdpcmSamplesProcessed == 0) {
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset, DMEM_ADDR_UNCOMPRESSED_NOTE, nUncompressedSamplesThisIteration * 2);
+                            aADPCMdec(cmd++, flags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->adpcmdecState));
+                            samplePosAlignmentOffset = samplePosIntLowerNibble * 2;
+                        }
+
+                        
+                        
+                        // If this is not the first decode, decode aligned to 32-byte chunks
+                        // and then the data is copied to unaligned memory
+                        else {
+                            const s32 alignedDecodeAddr = ALIGN(decodeTailPtr, 5);
+                            aSetBuffer(cmd++, 0, DMEM_ADDR_COMPRESSED_ADPCM_DATA + sampleDataOffset, DMEM_ADDR_UNCOMPRESSED_NOTE + alignedDecodeAddr, nUncompressedSamplesThisIteration * 2);
+                            aADPCMdec(cmd++, flags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->adpcmdecState));
+
+                            // Shift our aligned data down to the unaligned destination
+                            aDMEMMove(
+                                cmd++,
+                                DMEM_ADDR_UNCOMPRESSED_NOTE + alignedDecodeAddr + (samplePosIntLowerNibble * 2), // input
+                                DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr, // output
+                                nSamplesInThisIteration * 2); // nbytes
+                        }
+#endif
+                        profiler_3ds_log_time(2); // ADPCM Decode
+
+                        nAdpcmSamplesProcessed += nSamplesInThisIteration;
+
+                        switch (flags) {
+                            case A_INIT: // = 1
+                                samplePosAlignmentOffset = 0;
+                                decodeTailPtr = nUncompressedSamplesThisIteration * 2 + decodeTailPtr;
+                                break;
+
+                            case A_LOOP: // = 2
+                                decodeTailPtr = nSamplesInThisIteration * 2 + decodeTailPtr;
+                                break;
+
+                            default:
+                                if (decodeTailPtr != 0) {
+                                    decodeTailPtr = nSamplesInThisIteration * 2 + decodeTailPtr;
+                                } else {
+                                    decodeTailPtr = (samplePosIntLowerNibble + nSamplesInThisIteration) * 2;
+                                }
+                                break;
+                        }
+                        flags = 0;
+
+                        // If the note is finished, clear junk data from the end of the buffer,
+                        // disable the note, and exit the loop.
+                        if (noteFinished) {
+                            aClearBuffer(cmd++, DMEM_ADDR_UNCOMPRESSED_NOTE + decodeTailPtr,
+                                         (samplesLenAdjusted - nAdpcmSamplesProcessed) * 2);
+                            note->samplePosInt = 0;
+                            note->finished = 1;
+                            ((struct vNote *)note)->enabled = 0;
+                            break;
+                        }
+
+                        else if (restart) {
+                            note->restart = TRUE;
+                            note->samplePosInt = loopInfo->start;
+                        }
+                        
+                        else {
+                            note->samplePosInt += nSamplesToProcess;
+                        }
+                    }
+
+                    // End of while-loop synthesis
+                    // ADPCM only
+
+                    switch (nParts) {
+
+                        // If we have one part, don't resample.
+                        case 1:
+                            profiler_3ds_log_time(0);
+                            noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset;
+                            profiler_3ds_log_time(3); // Non-resample note end
+                            break;
+
+                        // If we have two parts (high-pitched notes), resample
+                        case 2:
+                            switch (curPart) {
+                                case 0:
+                                    profiler_3ds_log_time(0);
+                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset, DMEM_ADDR_RESAMPLED, samplesLenAdjusted + 4);
+                                    aResample(cmd++, A_INIT, 0xff60, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->dummyResampleState));
+                                    resampledTempLen = samplesLenAdjusted + 4;
+                                    noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_RESAMPLED + 4;
+                                    if (note->finished != FALSE) {
+                                        aClearBuffer(cmd++, DMEM_ADDR_RESAMPLED + resampledTempLen, samplesLenAdjusted + 0x10);
+                                    }
+                                    profiler_3ds_log_time(4); // High-pitch part 1 end
+                                    break;
+
+                                case 1:
+                                    profiler_3ds_log_time(0);
+                                    aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset,
+                                               DMEM_ADDR_RESAMPLED2,
+                                               samplesLenAdjusted + 8);
+                                    aResample(cmd++, A_INIT, 0xff60,
+                                              VIRTUAL_TO_PHYSICAL2(
+                                                  note->synthesisBuffers->dummyResampleState));
+                                    aDMEMMove(cmd++, DMEM_ADDR_RESAMPLED2 + 4,
+                                              DMEM_ADDR_RESAMPLED + resampledTempLen,
+                                              samplesLenAdjusted + 4);
+                                    profiler_3ds_log_time(5); // High-pitch part 2 end
+                                    break;
+                            }
+                    }
+
+                    if (note->finished != FALSE) {
+                        break;
+                    }
+
+                } // end for (curPart = 0; curPart < nParts; curPart++){...}
+            } // End if(...) {synthetic} else {adpcm}
+
+            // Our note is now fully decompressed/synthesized.
+            // Do one final resample, process envelope, and apply headset panning.
+
+            flags = 0;
+
+            if (note->needsInit == TRUE) {
+                flags = A_INIT;
+                note->needsInit = FALSE;
+            }
+
+            profiler_3ds_log_time(0);
+            cmd = final_resample(cmd, note, bufLen * 2, resamplingRateFixedPoint,
+                                 noteSamplesDmemAddrBeforeResampling, flags);
+            profiler_3ds_log_time(6); // Final Resample
+
+            // panRight = 1, panLeft = 2, else 0
+            const u16 panRight = note->headsetPanRight | note->prevHeadsetPanRight;
+            const u16 panLeft = note->headsetPanLeft | note->prevHeadsetPanLeft;
+            const s32 panSettings = panRight ? 1 : (panLeft ? 2 : 0);
+
+            // profiler_3ds_log_time(0);
+            // Stereo panning is handled here
+            cmd = process_envelope(cmd, note, bufLen, 0, panSettings, flags);
+            // profiler_3ds_log_time(7); // Envelope
+
+            // Only ever set if gSoundMode == HEADSET. Applies extra panning nonsense.
+            if (note->usesHeadsetPanEffects) {
+                profiler_3ds_log_time(0);
+                cmd = note_apply_headset_pan_effects(cmd, note, bufLen * 2, flags, panSettings);
+                profiler_3ds_log_time(8); // Headset pan
+            }
+
+        } // end of if(data is not yet loaded) {skip note} else {process note}
+    } // end of for(each note) {process}
+
+    // All notes are now processed. Interleave the audio and save it.
+
+
+
+// If possible, interleave directly into the output buf and skip the discrete copy.
+#ifdef ENHANCED_RSPA_EMULATION
+    profiler_3ds_log_time(0); // Interleave
+    const s32 outputBufLen = bufLen * 2;
+    aSetBuffer(cmd++, 0, 0, /*Unused OUT*/ 0, outputBufLen);
+
+    // Avoid redundant copy on 3DS when possible
+    DO_3DS(
+        if (audio_3ds_next_buffer_is_ready())
+            aiBuf = direct_buf + (aiBuf - sCurAiBufBasePtr);
+        else
+            samples_to_copy += bufLen;
+    );
+
+    aInterleaveAndCopy(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH, aiBuf);
+    profiler_3ds_log_time(9); // Interleave
+
+// Else if enhanced RSPA Emulation is disabled, move to the copy buf.
+#else
+    profiler_3ds_log_time(0);
+    const s32 outputBufLen = bufLen * 2;
+    aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, outputBufLen);
+    aInterleave(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH);
+    profiler_3ds_log_time(9); // Interleave
+
+    profiler_3ds_log_time(0);
+    aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, outputBufLen * 2);
+
+    // Avoid redundant copy on 3DS when possible
+    DO_3DS(
+        if (audio_3ds_next_buffer_is_ready())
+            aiBuf = direct_buf + (aiBuf - sCurAiBufBasePtr);
+        else
+            samples_to_copy += bufLen;
+    );
+
+    aSaveBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(aiBuf));
+
+    profiler_3ds_log_time(10); // Output copy
+#endif
+
+    return cmd;
+}
+
+#endif
 
 #ifdef VERSION_EU
 u64 *load_wave_samples(u64 *cmd, struct NoteSubEu *noteSubEu, struct NoteSynthesisState *synthesisState, s32 nSamplesToLoad) {
@@ -1127,7 +1880,7 @@ u64 *final_resample(u64 *cmd, struct NoteSynthesisState *synthesisState, s32 cou
 }
 #else
 u64 *final_resample(u64 *cmd, struct Note *note, s32 count, u16 pitch, u16 dmemIn, u32 flags) {
-    aSetBuffer(cmd++, /*flags*/ 0, dmemIn, /*dmemout*/ 0, count);
+    aSetBuffer(cmd++, /*flags*/ 0, dmemIn, /*out*/ DMEM_ADDR_TEMP, count);
     aResample(cmd++, flags, pitch, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->finalResampleState));
     return cmd;
 }
@@ -1183,6 +1936,7 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
     // in, dry left, count without A_AUX flag.
     // dry right, wet left, wet right with A_AUX flag.
 
+    profiler_3ds_log_time(0);
     if (note->usesHeadsetPanEffects) {
         aClearBuffer(cmd++, DMEM_ADDR_NOTE_PAN_TEMP, DEFAULT_LEN_1CH);
 
@@ -1222,6 +1976,7 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
             aSetBuffer(cmd++, A_AUX, DMEM_ADDR_RIGHT_CH, DMEM_ADDR_WET_LEFT_CH, DMEM_ADDR_WET_RIGHT_CH);
         }
     }
+    profiler_3ds_log_time(11); // Envelope Stereo Buffer Stuff
 
 #ifdef VERSION_EU
     if (targetLeft == sourceLeft && targetRight == sourceRight && !note->envMixerNeedsInit) {
@@ -1256,6 +2011,7 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
         aSetVolume(cmd++, A_AUX, gVolume, 0, note->reverbVol);
 #endif
     }
+    profiler_3ds_log_time(12); // Envelope volume settings
 
 #ifdef VERSION_EU
     if (gUseReverb && note->reverbVol != 0) {
@@ -1266,6 +2022,7 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
         aEnvMixer(cmd++, mixerFlags | A_AUX,
                   VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->mixEnvelopeState));
 #endif
+        profiler_3ds_log_time(13); // EnvMixer Reverb
         if (note->stereoStrongRight) {
             aSetBuffer(cmd++, 0, 0, 0, nSamples * 2);
             // 0x8000 is -100%, so subtract sound instead of adding...
@@ -1280,12 +2037,14 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
             aMix(cmd++, 0, /*gain*/ 0x8000, /*in*/ DMEM_ADDR_STEREO_STRONG_TEMP_WET,
                  /*out*/ DMEM_ADDR_WET_RIGHT_CH);
         }
+        profiler_3ds_log_time(14); // Mix Reverb
     } else {
 #ifdef VERSION_EU
         aEnvMixer(cmd++, mixerFlags, VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->mixEnvelopeState));
 #else
         aEnvMixer(cmd++, mixerFlags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->mixEnvelopeState));
 #endif
+        profiler_3ds_log_time(15); // EnvMixer Non-Reverb
         if (note->stereoStrongRight) {
             aSetBuffer(cmd++, 0, 0, 0, nSamples * 2);
             aMix(cmd++, 0, /*gain*/ 0x8000, /*in*/ DMEM_ADDR_STEREO_STRONG_TEMP_DRY,
@@ -1295,6 +2054,7 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
             aMix(cmd++, 0, /*gain*/ 0x8000, /*in*/ DMEM_ADDR_STEREO_STRONG_TEMP_DRY,
                  /*out*/ DMEM_ADDR_RIGHT_CH);
         }
+        profiler_3ds_log_time(16); // Mix Non-Reverb
     }
     return cmd;
 }

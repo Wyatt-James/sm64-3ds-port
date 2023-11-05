@@ -27,7 +27,6 @@
 #include "audio/audio_sdl.h"
 #include "audio/audio_null.h"
 #include "audio/audio_3ds.h"
-#include "audio/audio_3ds_threading.h"
 
 #include "controller/controller_keyboard.h"
 
@@ -84,6 +83,7 @@ void send_display_list(struct SPTask *spTask) {
 void produce_one_frame(void) {
     gfx_start_frame();
     game_loop_one_iteration();
+
 #ifndef TARGET_N3DS
     int samples_left = audio_api->buffered();
     u32 num_audio_samples = samples_left < audio_api->get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
@@ -93,12 +93,8 @@ void produce_one_frame(void) {
     }
     audio_api->play((u8 *)audio_buffer, 2 * num_audio_samples * 4);
 #endif
+
     gfx_end_frame();
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-    LightEvent_Wait(&s_event_main);
-#endif
-#endif
 }
 
 #ifdef TARGET_WEB
@@ -198,13 +194,13 @@ void main_func(void) {
         audio_api = &audio_sdl;
     }
 #endif
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
+
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
     if (audio_api == NULL && audio_3ds.init()) {
         audio_api = &audio_3ds;
     }
 #endif
-#endif
+
     if (audio_api == NULL) {
         audio_api = &audio_null;
     }

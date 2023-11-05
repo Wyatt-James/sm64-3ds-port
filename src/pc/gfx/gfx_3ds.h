@@ -9,17 +9,21 @@
 #define _LANGUAGE_C
 #endif
 
-#define u64 __u64
-#define s64 __s64
-#define u32 __u32
-#define vu32 __vu32
-#define vs32 __vs32
-#define s32 __s32
-#define u16 __u16
-#define s16 __s16
-#define u8 __u8
-#define s8 __s8
+// hack for redefinition of types in libctru
+// All 3DS includes must be done inside of an equivalent
+// #define/undef block to avoid type redefinition issues.
+#define u64 __3ds_u64
+#define s64 __3ds_s64
+#define u32 __3ds_u32
+#define vu32 __3ds_vu32
+#define vs32 __3ds_vs32
+#define s32 __3ds_s32
+#define u16 __3ds_u16
+#define s16 __3ds_s16
+#define u8 __3ds_u8
+#define s8 __3ds_s8
 #include <3ds/types.h>
+#include <3ds.h>
 #undef u64
 #undef s64
 #undef u32
@@ -33,7 +37,6 @@
 
 #include <PR/gbi.h>
 
-#include <3ds.h>
 #include <citro3d.h>
 #include <tex3ds.h>
 
@@ -50,16 +53,18 @@ extern C3D_RenderTarget *gTarget;
 extern C3D_RenderTarget *gTargetRight;
 extern C3D_RenderTarget *gTargetBottom;
 
+extern bool gBottomScreenNeedsRender;
+
 extern int uLoc_projection, uLoc_modelView;
 
 extern float gSliderLevel;
 
 typedef enum
 {
-    GFX_3DS_MODE_NORMAL,
-    GFX_3DS_MODE_AA_22,
-    GFX_3DS_MODE_WIDE,
-    GFX_3DS_MODE_WIDE_AA_12
+    GFX_3DS_MODE_NORMAL,     // 400px no AA AND 400px 3D | !useAA && !useWide
+    GFX_3DS_MODE_AA_22,      // 400px +  AA (unused)     |  useAA && !useWide
+    GFX_3DS_MODE_WIDE,       // 800px no AA              | !useAA &&  useWide
+    GFX_3DS_MODE_WIDE_AA_12  // 800px +  AA              |  useAA &&  useWide
 } Gfx3DSMode;
 
 extern bool gShouldRun;
@@ -67,6 +72,7 @@ extern bool gShowConfigMenu;
 
 extern struct GfxWindowManagerAPI gfx_3ds;
 extern Gfx3DSMode gGfx3DSMode;
+extern bool gGfx3DEnabled;
 
 static bool load_t3x_texture(C3D_Tex* tex, C3D_TexCube* cube, const void* data, size_t size)
 {

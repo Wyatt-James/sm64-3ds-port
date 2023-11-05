@@ -206,7 +206,13 @@ s32 gAudioErrorFlags2 = 0;
 #else
 s32 gAudioErrorFlags = 0;
 #endif
-s32 sGameLoopTicked = 0;
+
+// Poor naming. A better option would be sAudioNeedsTick.
+#if defined TARGET_N3DS && !defined DISABLE_AUDIO
+        volatile s32 sGameLoopTicked = 0;
+#else
+        s32 sGameLoopTicked = 0;
+#endif
 
 // Dialog sounds
 // The US difference is the sound for DIALOG_037 ("I win! You lose! Ha ha ha ha!
@@ -760,7 +766,7 @@ void func_eu_802e9bec(s32 player, s32 channel, s32 arg2) {
     func_802ad770(0x08000000 | (player & 0xff) << 16 | (channel & 0xff) << 8, (s8) arg2);
 }
 
-#else
+#else // VERSION_EU
 
 #ifdef TARGET_N64
 struct SPTask *create_next_audio_frame_task(void) {
@@ -865,23 +871,57 @@ struct SPTask *create_next_audio_frame_task(void) {
     decrease_sample_dma_ttls();
     return gAudioTask;
 }
-#else
+
+#else // TARGET_N64
+
 struct SPTask *create_next_audio_frame_task(void) {
     return NULL;
 }
+
+// At this point, we are non-N64, non-european
+
+// If we're on 3DS, use modified functions.
+#if defined TARGET_N3DS
+
+void update_game_sound_wrapper_3ds() {
+    update_game_sound();
+    sGameLoopTicked = 0;
+}
+
+// 3DS Version
 void create_next_audio_buffer(s16 *samples, u32 num_samples) {
     gAudioFrameCount++;
+
+    // Use the sound system state to synthesize audio
+    s32 writtenCmds;
+    synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
+
+    gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
+    decrease_sample_dma_ttls();
+}
+
+#else
+
+// Non-3DS Version
+void create_next_audio_buffer(s16 *samples, u32 num_samples) {
+    gAudioFrameCount++;
+
+    // Update the sound system's state
     if (sGameLoopTicked != 0) {
         update_game_sound();
         sGameLoopTicked = 0;
     }
+
+    // Use the sound system state to synthesize audio
     s32 writtenCmds;
     synthesis_execute(gAudioCmdBuffers[0], &writtenCmds, samples, num_samples);
+
     gAudioRandom = ((gAudioRandom + gAudioFrameCount) * gAudioFrameCount);
     decrease_sample_dma_ttls();
 }
-#endif
-#endif
+#endif // TARGET_N3DS ELSE
+#endif // TARGET_N64_ELSE
+#endif // VERSION_EU_ELSE
 
 void play_sound(s32 soundBits, f32 *pos) {
     sSoundRequests[sSoundRequestCount].soundBits = soundBits;

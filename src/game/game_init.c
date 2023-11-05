@@ -22,9 +22,8 @@
 #include <prevent_bss_reordering.h>
 
 #ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-#include "pc/audio/audio_3ds_threading.h"
-#endif
+#include "src/pc/gfx/color_conversion.h"
+#include "src/pc/gfx/gfx_citro3d.h"
 #endif
 
 // FIXME: I'm not sure all of these variables belong in this file, but I don't
@@ -120,7 +119,69 @@ void my_rsp_init(void) {
 #endif
 }
 
+/** Sets up the final framebuffer image. */
+void display_frame_buffer(void) {
+    gDPPipeSync(gDisplayListHead++);
+
+    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
+    gDPSetColorImage(gDisplayListHead++, G_IM_FMT_RGBA, G_IM_SIZ_16b, SCREEN_WIDTH,
+                     gPhysicalFrameBuffers[frameBufferIndex]);
+    gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, BORDER_HEIGHT, SCREEN_WIDTH,
+                  SCREEN_HEIGHT - BORDER_HEIGHT);
+}
+
+#ifdef TARGET_N3DS
+
+// 3DS version
+void clear_frame_buffer(s32 color) {
+    u32 color_3ds = COLOR_RGBA_S32_N64_TO_RGBA32_SCALED(color);
+
+    gfx_citro3d_set_clear_color_RGBA32(VIEW_MAIN_SCREEN, color_3ds);
+    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
+}
+
+// 3DS version
+void clear_z_buffer(void) {
+    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
+}
+
+/** Clears and initializes the viewport. */
+void clear_viewport(Vp *viewport, s32 color) {
+    s16 vpUlx = (viewport->vp.vtrans[0] - viewport->vp.vscale[0]) / 4 + 1;
+    s16 vpUly = (viewport->vp.vtrans[1] - viewport->vp.vscale[1]) / 4 + 1;
+    s16 vpLrx = (viewport->vp.vtrans[0] + viewport->vp.vscale[0]) / 4 - 2;
+    s16 vpLry = (viewport->vp.vtrans[1] + viewport->vp.vscale[1]) / 4 - 2;
+
+#ifdef WIDESCREEN
+    vpUlx = GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(vpUlx);
+    vpLrx = GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(SCREEN_WIDTH - vpLrx);
+#endif
+
+    clear_frame_buffer(color);
+}
+
+#else
+
+/** Clears the framebuffer, allowing it to be overwritten. */
+// Non-3DS version
+void clear_frame_buffer(s32 color) {
+    gDPPipeSync(gDisplayListHead++);
+
+    gDPSetRenderMode(gDisplayListHead++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
+    gDPSetCycleType(gDisplayListHead++, G_CYC_FILL);
+
+    gDPSetFillColor(gDisplayListHead++, color);
+    gDPFillRectangle(gDisplayListHead++,
+                     GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(0), BORDER_HEIGHT,
+                     GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(0) - 1, SCREEN_HEIGHT - BORDER_HEIGHT - 1);
+
+    gDPPipeSync(gDisplayListHead++);
+
+    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
+}
+
 /** Clear the Z buffer. */
+// Non-3DS version
 void clear_z_buffer(void) {
     gDPPipeSync(gDisplayListHead++);
 
@@ -135,42 +196,8 @@ void clear_z_buffer(void) {
                      SCREEN_HEIGHT - 1 - BORDER_HEIGHT);
 }
 
-/** Sets up the final framebuffer image. */
-void display_frame_buffer(void) {
-    gDPPipeSync(gDisplayListHead++);
-
-    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
-    gDPSetColorImage(gDisplayListHead++, G_IM_FMT_RGBA, G_IM_SIZ_16b, SCREEN_WIDTH,
-                     gPhysicalFrameBuffers[frameBufferIndex]);
-    gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, BORDER_HEIGHT, SCREEN_WIDTH,
-                  SCREEN_HEIGHT - BORDER_HEIGHT);
-}
-
-/** Clears the framebuffer, allowing it to be overwritten. */
-void clear_frame_buffer(s32 color) {
-    gDPPipeSync(gDisplayListHead++);
-
-    gDPSetRenderMode(gDisplayListHead++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
-    gDPSetCycleType(gDisplayListHead++, G_CYC_FILL);
-
-    gDPSetFillColor(gDisplayListHead++, color);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 1);
-#endif
-    gDPFillRectangle(gDisplayListHead++,
-                     GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(0), BORDER_HEIGHT,
-                     GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(0) - 1, SCREEN_HEIGHT - BORDER_HEIGHT - 1);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 0);
-#endif
-    gDPPipeSync(gDisplayListHead++);
-
-    gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
-}
-
 /** Clears and initializes the viewport. */
+// Non-3DS version
 void clear_viewport(Vp *viewport, s32 color) {
     s16 vpUlx = (viewport->vp.vtrans[0] - viewport->vp.vscale[0]) / 4 + 1;
     s16 vpUly = (viewport->vp.vtrans[1] - viewport->vp.vscale[1]) / 4 + 1;
@@ -188,19 +215,12 @@ void clear_viewport(Vp *viewport, s32 color) {
     gDPSetCycleType(gDisplayListHead++, G_CYC_FILL);
 
     gDPSetFillColor(gDisplayListHead++, color);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 1);
-#endif
     gDPFillRectangle(gDisplayListHead++, vpUlx, vpUly, vpLrx, vpLry);
-#ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 0);
-#endif
     gDPPipeSync(gDisplayListHead++);
 
     gDPSetCycleType(gDisplayListHead++, G_CYC_1CYCLE);
 }
+#endif
 
 /** Draws the horizontal screen borders */
 void draw_screen_borders(void) {
@@ -266,6 +286,7 @@ void init_render_image(void) {
     move_segment_table_to_dmem();
     my_rdp_init();
     my_rsp_init();
+    
     clear_z_buffer();
     display_frame_buffer();
 }
@@ -660,16 +681,21 @@ void game_loop_one_iteration(void) {
             osContStartReadData(&gSIEventMesgQueue);
         }
 
-        audio_game_loop_tick();
+#if !defined TARGET_N3DS || defined DISABLE_AUDIO
+        audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
+#endif
         config_gfx_pool();
         read_controller_inputs();
+
         levelCommandAddr = level_script_execute(levelCommandAddr);
-#ifdef TARGET_N3DS
-#ifndef DISABLE_AUDIO
-        LightEvent_Signal(&s_event_audio);
-#endif
-#endif
+
         display_and_vsync();
+
+        // This is padding to allow fps.patch to be compatible with 60fps.patch.
+        // Isn't git wonderful?
+        // I think it is, too.
+        // In other news, I'm nearly ready to merge, which is excellent.
+        // Anyway, I'm off to finish fixing up patches.
 
         // when debug info is enabled, print the "BUF %d" information.
         if (gShowDebugText) {

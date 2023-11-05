@@ -28,6 +28,16 @@
 *.app
 *.hex
 
+# scripts and script support
+*.sh
+/build_flags.txt
+/build_scripts
+/build_scripts/*
+
+# logging
+/build_logs
+/build_logs/*
+
 # Debug files
 *.dSYM/
 *.su
@@ -44,6 +54,7 @@
 
 # Text editor remnants
 *.swp
+.vscode
 .vscode/*
 
 # General project-specific ignores

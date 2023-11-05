@@ -50,7 +50,7 @@ extern s8 gSoundMode;
 
 void audio_dma_partial_copy_async(uintptr_t *devAddr, u8 **vAddr, ssize_t *remaining, OSMesgQueue *queue, OSIoMesg *mesg);
 void decrease_sample_dma_ttls(void);
-void *dma_sample_data(uintptr_t devAddr, u32 size, s32 arg2, u8 *arg3);
+void *dma_sample_data(uintptr_t devAddr, u32 size, s32 noteFlags, u8 *noteSampleDmaIndexPtr);
 void init_sample_dma_buffers(s32 arg0);
 void patch_audio_bank(struct AudioBank *mem, u8 *offset, u32 numInstruments, u32 numDrums);
 void preload_sequence(u32 seqId, u8 preloadMask);

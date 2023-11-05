@@ -12,8 +12,13 @@
 #include "gfx_cc.h"
 #include "gfx_rendering_api.h"
 
+#include "gfx_citro3d.h"
+#include "color_conversion.h"
+
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
+
+#define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
@@ -79,6 +84,39 @@ static int sOrigBufIdx;
 static int s2DMode;
 float iodZ = 8.0f;
 float iodW = 16.0f;
+
+// Data storage type for the screen clear buf configs
+union ScreenClearBufConfig3ds {
+    struct {
+        enum ViewportClearBuffer top;
+        enum ViewportClearBuffer bottom;
+    } struc;
+    enum ViewportClearBuffer array[3];
+};
+
+// Determines the clear mode for the viewports.
+static union ScreenClearBufConfig3ds screen_clear_bufs = {{
+    VIEW_CLEAR_BUFFER_NONE,      // top
+    VIEW_CLEAR_BUFFER_NONE       // bottom
+}};
+
+// Used for compatibility with 60fps patches
+static union ScreenClearBufConfig3ds saved_screen_clear_bufs = {{
+    VIEW_CLEAR_BUFFER_NONE,      // top
+    VIEW_CLEAR_BUFFER_NONE       // bottom
+}};
+
+// Determines the clear colors for the viewports
+static union {
+    struct {
+        u32 top;
+        u32 bottom;
+    } struc;
+    u32 array[3];
+} screen_clear_colors = {{
+    COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // top: 0x000000FF
+    COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // bottom: 0x000000FF
+}};
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
 {
@@ -757,7 +795,7 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if ((gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22) && gSliderLevel > 0.0f)
+    if (gGfx3DEnabled)
     {
         // left screen
         sOrigBufIdx = sBufIdx;
@@ -778,7 +816,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
 
 static void gfx_citro3d_init(void)
 {
-    sVShaderDvlb = DVLB_ParseFile((u32*)shader_shbin, shader_shbin_size);
+    sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader_shbin, shader_shbin_size);
     shaderProgramInit(&sShaderProgram);
     shaderProgramSetVsh(&sShaderProgram, &sVShaderDvlb->DVLE[0]);
     C3D_BindProgram(&sShaderProgram);
@@ -806,7 +844,11 @@ static void gfx_citro3d_init(void)
     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
     C3D_AlphaTest(true, GPU_GREATER, 0x00);
 
+#ifdef VERSION_EU
+    C3D_FrameRate(25);
+#else
     C3D_FrameRate(30);
+#endif
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -822,10 +864,25 @@ static void gfx_citro3d_start_frame(void)
         sCurrentGfx3DSMode = gGfx3DSMode;
     }
 
-    C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-    if (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22)
-        C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-    C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
+    enum ViewportClearBuffer clear_top = screen_clear_bufs.struc.top;
+    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.struc.bottom;
+
+    // Clear top screen
+    if (clear_top)
+        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+        
+    // Clear right-eye view
+    // We check gGfx3DSMode because clearing in 800px modes causes a crash.
+    if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
+        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+
+    // Clear bottom screen only if it needs re-rendering.
+    if (clear_bottom)
+        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
+
+    // Reset screen clear buffer flags
+    screen_clear_bufs.struc.top = 
+    screen_clear_bufs.struc.bottom = VIEW_CLEAR_BUFFER_NONE;
 
     // reset model view matrix
     Mtx_Identity(&modelView);
@@ -846,10 +903,11 @@ static void gfx_citro3d_end_frame(void)
 {
     // TOOD: draw the minimap here
     gfx_3ds_menu_draw(sVboBuffer, sBufIdx, gShowConfigMenu);
+
     // set the texenv back
     update_shader(false);
 
-    C3D_FrameEnd(0);
+    C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
 
 static void gfx_citro3d_finish_render(void)
@@ -890,7 +948,34 @@ static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
 
 static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    fog_color = (a << 24) | (b << 16) | (g << 8) | r;
+    fog_color = (a << 24) | (b << 16) | (g << 8) | r; // Why is this reversed? Weird endianness?
+}
+
+void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    screen_clear_colors.array[viewport] = COLOR_RGBA_PARAMS_TO_RGBA32(r, g, b, a);
+}
+
+void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color)
+{
+    screen_clear_colors.array[viewport] = color;
+}
+
+void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
+{
+    screen_clear_bufs.array[viewport] |= mode;
+}
+
+// Save current screen clear buffer flags (used for 60fps patch compatibility)
+void gfx_citro3d_save_viewport_clear_buffer_flags()
+{
+    memcpy(saved_screen_clear_bufs.array, screen_clear_bufs.array, sizeof(saved_screen_clear_bufs.array));
+}
+
+// Restore saved screen clear buffer flags (used for 60fps patch compatibility)
+void gfx_citro3d_restore_viewport_clear_buffer_flags()
+{
+    memcpy(screen_clear_bufs.array, saved_screen_clear_bufs.array, sizeof(screen_clear_bufs.array));
 }
 
 struct GfxRenderingAPI gfx_citro3d_api = {
