@@ -4,13 +4,6 @@
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
 
-// wait a quarter second between mashing
-#ifdef VERSION_EU
-#define DEBOUNCE_FRAMES 6
-#else
-#define DEBOUNCE_FRAMES 8
-#endif
-
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
 static C3D_Mtx modelView, projection;
@@ -20,8 +13,6 @@ static C3D_Tex mode_400_tex, mode_800_tex;
 static C3D_Tex aa_off_tex, aa_on_tex;
 static C3D_Tex resume_tex, exit_tex;
 static C3D_Tex menu_cleft_tex, menu_cright_tex, menu_cdown_tex, menu_cup_tex;
-
-static u8 debounce;
 
 static int touch_x;
 static int touch_y;
@@ -110,13 +101,6 @@ static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int hei
 
 menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 {
-    if (debounce > 0) {
-        debounce--;
-        return DO_NOTHING;
-    }
-
-    debounce = DEBOUNCE_FRAMES; // wait quarter second between mashing
-    
     if (!gShowConfigMenu)
     {
         return SHOW_MENU;
@@ -197,9 +181,6 @@ void gfx_3ds_menu_init()
 
 void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButtonsEnabled)
 {
-    if (debounce)
-        debounce--;
-
     if (!gBottomScreenNeedsRender)
         return;
 

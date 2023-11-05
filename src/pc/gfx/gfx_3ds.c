@@ -31,6 +31,13 @@
 #undef u8
 #undef s8
 
+// wait a quarter second between mashing
+#ifdef VERSION_EU
+#define DEBOUNCE_FRAMES 6
+#else
+#define DEBOUNCE_FRAMES 8
+#endif
+
 C3D_RenderTarget *gTarget;
 C3D_RenderTarget *gTargetRight;
 C3D_RenderTarget *gTargetBottom;
@@ -47,11 +54,11 @@ bool gGfx3DEnabled;
 bool gShowConfigMenu = false;
 bool gShouldRun = true;
 bool gUpdateSliderFlag = false;
-volatile __3ds_s32 gAppSuspendCounter = 0; // > 0 when the 3DS lid is closed or home button is pressed
 
-aptHookCookie apt_hook_cookie;
-
-static u8 n3ds_model = 0;
+static u8 debounce = 0;
+static s32 appSuspendCounter = 0; // > 0 when the 3DS lid is closed or home button is pressed
+static u8 n3dsModel = 0;
+static aptHookCookie apt_hook_cookie;
 
 static bool checkN3DS()
 {
@@ -87,7 +94,7 @@ static void initialise_screens()
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
 
     bool useAA = gfx_config.useAA;
-    bool useWide = gfx_config.useWide && n3ds_model != 3; // old 2DS does not support 800px
+    bool useWide = gfx_config.useWide && n3dsModel != 3; // old 2DS does not support 800px
 
     u32 transferFlags = DISPLAY_TRANSFER_FLAGS;
 
@@ -165,8 +172,12 @@ static void gfx_3ds_handle_touch() {
     touchPosition pos;
     hidTouchRead(&pos);
 
-    if ((pos.px || pos.py) && (pos.px < 160))
+    if (debounce > 0)
+        debounce--;
+
+    if (debounce == 0 && (pos.px || pos.py) && (pos.px < 160))
     {
+        debounce = DEBOUNCE_FRAMES; // wait quarter second between mashing
         menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
 
         switch (res) {
@@ -209,14 +220,14 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
             while (s_audio_frames_to_process > 0)
                 svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
 
-            AtomicIncrement(&gAppSuspendCounter);
+            AtomicIncrement(&appSuspendCounter);
             APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT_IDLE);
             break;
 
         case APTHOOK_ONWAKEUP: // Lid opened
         case APTHOOK_ONRESTORE: // Home menu closed
             APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT);
-            AtomicDecrement(&gAppSuspendCounter);
+            AtomicDecrement(&appSuspendCounter);
             break;
 
         case APTHOOK_ONEXIT: // Application exit
@@ -241,7 +252,7 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
         u8 model;
         rc = CFGU_GetSystemModel(&model);
         if (R_SUCCEEDED(rc))
-            n3ds_model = model;
+            n3dsModel = model;
         cfguExit();
     }
 
@@ -277,7 +288,7 @@ static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
 
     while (aptMainLoop() && gShouldRun)
     {
-        if (gAppSuspendCounter == 0)
+        if (appSuspendCounter == 0)
             run_one_game_iter();
         else
             svcSleepThread(N3DS_AUDIO_MILLIS_TO_NANOS(33));
@@ -285,7 +296,7 @@ static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
 
     aptSetSleepAllowed(false);
     aptUnhook(&apt_hook_cookie);
-    gAppSuspendCounter = 0;
+    appSuspendCounter = 0;
     C3D_Fini();
     gfxExit();
 }
