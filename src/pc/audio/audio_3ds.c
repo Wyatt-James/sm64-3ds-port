@@ -85,7 +85,7 @@ bool audio_3ds_next_buffer_is_ready()
 }
 
 // Copies len_to_copy bytes from src to the audio buffer, then submits len_total to play. 
-static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len_to_copy)
+static void audio_3ds_play_internal(const uint8_t *src, size_t len_total, size_t len_to_copy)
 {
     if (len_total > N3DS_DSP_DMA_BUFFER_SIZE)
         return;
@@ -117,7 +117,7 @@ static void audio_3ds_play_fast(const uint8_t *src, size_t len_total, size_t len
 static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
 {
     if (audio_3ds_next_buffer_is_ready())
-        audio_3ds_play_fast(buf, len, len);
+        audio_3ds_play_internal(buf, len, len);
 }
 
 inline void audio_3ds_run_one_frame() {
@@ -146,7 +146,7 @@ inline void audio_3ds_run_one_frame() {
 
     // Play our audio buffer. If we outrun the DSP, we wait until the DSP is ready.
     profiler_3ds_log_time(0);
-    audio_3ds_play_fast((u8 *)audio_buffer, N3DS_DSP_N_CHANNELS * num_audio_samples * 4, N3DS_DSP_N_CHANNELS * samples_to_copy * 4);
+    audio_3ds_play_internal((u8 *)audio_buffer, N3DS_DSP_N_CHANNELS * num_audio_samples * 4, N3DS_DSP_N_CHANNELS * samples_to_copy * 4);
     profiler_3ds_log_time(17); // 3DS export to DSP
 
     // profiler_3ds_log_time(0);
