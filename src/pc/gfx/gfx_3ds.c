@@ -1,12 +1,13 @@
 #ifdef TARGET_N3DS
 
+#include <stdio.h>
+
 #include "macros.h"
 
 #include "gfx_3ds.h"
 #include "gfx_3ds_menu.h"
-
-#include "multi_viewport/multi_viewport.h"
 #include "gfx_citro3d.h"
+
 #include "src/pc/audio/audio_3ds_threading.h"
 
 #define u64 __3ds_u64
@@ -211,32 +212,58 @@ static void gfx_3ds_handle_touch() {
 // Called whenever a 3DS OS event is fired.
 static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
 {
-    if (s_audio_cpu != OLD_CORE_1)
+    if (s_audio_cpu != OLD_CORE_1) {
+        printf("APT hook ignored with audio CPU: %d.\n", s_audio_cpu);
         return;
+    }
+
+    char* eventName = "unknown event";
 
     switch (hook) {
         case APTHOOK_ONSLEEP: // Lid closed
-        case APTHOOK_ONSUSPEND: // Home menu opened
-            while (s_audio_frames_to_process > 0)
-                svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-
+            eventName = "sleep";
             AtomicIncrement(&appSuspendCounter);
-            APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT_IDLE);
+            break;
+
+        case APTHOOK_ONSUSPEND: // Home menu opened
+            eventName = "suspend";
+            AtomicIncrement(&appSuspendCounter);
             break;
 
         case APTHOOK_ONWAKEUP: // Lid opened
+            eventName = "wake-up";
+            AtomicDecrement(&appSuspendCounter);
+            break;
+
         case APTHOOK_ONRESTORE: // Home menu closed
-            APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT);
+            eventName = "restore";
             AtomicDecrement(&appSuspendCounter);
             break;
 
         case APTHOOK_ONEXIT: // Application exit
-            APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT_IDLE);
+            eventName = "exit";
             break;
         
-        case APTHOOK_COUNT: // Unused
-            break;
+        case APTHOOK_COUNT: // Unused - should never happen
+            perror("Invalid APT hook type: count.\n");
+            return;
+            
+        default: // Should never happen
+            perror("Unknown APT hook type.\n");
+            return;
     }
+
+    // Wait for audio to finish
+    if (appSuspendCounter > 0)
+        while (s_audio_frames_to_process > 0)
+            svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+
+    const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
+
+    if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
+        printf("APT_SetAppCpuTimeLimit set to %hhd on %s.\n", limit, eventName);
+    else
+        fprintf(stderr, "Error: APT_SetAppCpuTimeLimit failed to set to %hhd on %s.\n", limit, eventName);
 }
 
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)
