@@ -4,6 +4,13 @@
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
 
+// wait a quarter second between mashing
+#ifdef VERSION_EU
+#define DEBOUNCE_FRAMES 6
+#else
+#define DEBOUNCE_FRAMES 8
+#endif
+
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
 static C3D_Mtx modelView, projection;
@@ -103,13 +110,12 @@ static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int hei
 
 menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 {
-    if (debounce) {
+    if (debounce > 0) {
         debounce--;
         return DO_NOTHING;
     }
 
-    debounce = 8; // wait quarter second between mashing
-
+    debounce = DEBOUNCE_FRAMES; // wait quarter second between mashing
     
     if (!gShowConfigMenu)
     {
