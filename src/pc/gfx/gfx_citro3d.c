@@ -100,12 +100,6 @@ static union ScreenClearBufConfig3ds screen_clear_bufs = {{
     VIEW_CLEAR_BUFFER_NONE       // bottom
 }};
 
-// Used for compatibility with 60fps patches
-static union ScreenClearBufConfig3ds saved_screen_clear_bufs = {{
-    VIEW_CLEAR_BUFFER_NONE,      // top
-    VIEW_CLEAR_BUFFER_NONE       // bottom
-}};
-
 // Determines the clear colors for the viewports
 static union {
     struct {
@@ -117,6 +111,26 @@ static union {
     COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // top: 0x000000FF
     COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // bottom: 0x000000FF
 }};
+
+// Handles 3DS screen clearing
+static void clear_buffers()
+{
+    enum ViewportClearBuffer clear_top = screen_clear_bufs.struc.top;
+    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.struc.bottom;
+
+    // Clear top screen
+    if (clear_top)
+        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+        
+    // Clear right-eye view
+    // We check gGfx3DSMode because clearing in 800px modes causes a crash.
+    if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
+        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+
+    // Clear bottom screen only if it needs re-rendering.
+    if (clear_bottom)
+        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
+}
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
 {
@@ -864,21 +878,11 @@ static void gfx_citro3d_start_frame(void)
         sCurrentGfx3DSMode = gGfx3DSMode;
     }
 
-    enum ViewportClearBuffer clear_top = screen_clear_bufs.struc.top;
-    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.struc.bottom;
+    // Due to hardware differences, the PC port always clears the depth buffer,
+    // rather than just when the N64 would clear it.
+    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
 
-    // Clear top screen
-    if (clear_top)
-        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
-        
-    // Clear right-eye view
-    // We check gGfx3DSMode because clearing in 800px modes causes a crash.
-    if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
-
-    // Clear bottom screen only if it needs re-rendering.
-    if (clear_bottom)
-        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
+    clear_buffers();
 
     // Reset screen clear buffer flags
     screen_clear_bufs.struc.top = 
@@ -964,18 +968,6 @@ void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color)
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
 {
     screen_clear_bufs.array[viewport] |= mode;
-}
-
-// Save current screen clear buffer flags (used for 60fps patch compatibility)
-void gfx_citro3d_save_viewport_clear_buffer_flags()
-{
-    memcpy(saved_screen_clear_bufs.array, screen_clear_bufs.array, sizeof(saved_screen_clear_bufs.array));
-}
-
-// Restore saved screen clear buffer flags (used for 60fps patch compatibility)
-void gfx_citro3d_restore_viewport_clear_buffer_flags()
-{
-    memcpy(screen_clear_bufs.array, saved_screen_clear_bufs.array, sizeof(screen_clear_bufs.array));
 }
 
 struct GfxRenderingAPI gfx_citro3d_api = {

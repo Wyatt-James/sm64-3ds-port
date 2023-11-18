@@ -1,5 +1,5 @@
 diff --git a/src/game/game_init.c b/src/game/game_init.c
-index dce491c..8c9f971 100644
+index e5552ec..b134990 100644
 --- a/src/game/game_init.c
 +++ b/src/game/game_init.c
 @@ -64,6 +64,29 @@ struct DemoInput *gCurrDemoInput = NULL; // demo input sequence
@@ -32,15 +32,15 @@ index dce491c..8c9f971 100644
  /**
   * Initializes the Reality Display Processor (RDP).
   * This function initializes settings such as texture filtering mode,
-@@ -690,6 +713,8 @@ void game_loop_one_iteration(void) {
+@@ -654,6 +677,8 @@ void game_loop_one_iteration(void) {
          levelCommandAddr = level_script_execute(levelCommandAddr);
  
          display_and_vsync();
 +        
 +        render_fps();
  
-         // This is padding to allow fps.patch to be compatible with 60fps.patch.
-         // Isn't git wonderful?
+         // when debug info is enabled, print the "BUF %d" information.
+         if (gShowDebugText) {
 diff --git a/src/pc/ultra_reimplementation.c b/src/pc/ultra_reimplementation.c
 index 2b28ea8..541b419 100644
 --- a/src/pc/ultra_reimplementation.c
