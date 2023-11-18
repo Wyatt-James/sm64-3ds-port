@@ -20,13 +20,7 @@ void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t
 void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color);
 
 // Sets a buffer to be cleared for the given viewport on the next frame.
-// All buffers provided will be cleared.
+// All flags provided will be cleared on gfx_citro3d_start_frame().
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode);
-
-// Save current screen clear buffer flags (used for 60fps patch compatibility)
-void gfx_citro3d_save_viewport_clear_buffer_flags();
-
-// Restore saved screen clear buffer flags (used for 60fps patch compatibility)
-void gfx_citro3d_restore_viewport_clear_buffer_flags();
 
 #endif
