@@ -329,7 +329,7 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     memcpy(in, tmp, 4 * sizeof(int16_t));
     uint32_t pitch_accumulator = (uint16_t) tmp[4];
     
-    // Round up, and divide by 2 for byte count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
+    // Round up, and divide by 2 for sample count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
     for (int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t)); nSamples != 0; nSamples--, out++) {
         const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
 
@@ -386,25 +386,26 @@ static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume
 
 // Crackpipe optimized version
 // Optimize at your own risk!
+// Channel 0 is left and 1 is right
 void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     const bool isInit = flags & A_INIT ? true : false;
 
     int16_t *in = rspa.buf.as_s16 + rspa.in / sizeof(int16_t);
 
-    int16_t *dry_0 = rspa.buf.as_s16 + rspa.out / sizeof(int16_t),
-            *dry_1 = rspa.buf.as_s16 + rspa.dry_right / sizeof(int16_t);
+    int16_t *dry[2] = {rspa.buf.as_s16 + rspa.out / sizeof(int16_t),
+                       rspa.buf.as_s16 + rspa.dry_right / sizeof(int16_t)};
 
-    int16_t *wet_0 = rspa.buf.as_s16 + rspa.wet_left / sizeof(int16_t),
-            *wet_1 = rspa.buf.as_s16 + rspa.wet_right / sizeof(int16_t);
+    int16_t *wet[2] = {rspa.buf.as_s16 + rspa.wet_left / sizeof(int16_t),
+                       rspa.buf.as_s16 + rspa.wet_right / sizeof(int16_t)};
 
-    const int16_t target_0 = isInit ? rspa.target[0] : state[32],
-                  target_1 = isInit ? rspa.target[1] : state[35];
+    const int16_t target[2] = {isInit ? rspa.target[0] : state[32],
+                               isInit ? rspa.target[1] : state[35]};
 
-    const int32_t target_0_s = target_0 << 16,
-                  target_1_s = target_1 << 16;
+    const int32_t target_s[2] = {target[0] << 16,
+                                 target[1] << 16};
 
-    const int32_t rate_0 = isInit ? rspa.rate[0] : (state[33] << 16) | (uint16_t)state[34],
-                  rate_1 = isInit ? rspa.rate[1] : (state[36] << 16) | (uint16_t)state[37];
+    const int32_t rate[2] = {isInit ? rspa.rate[0] : (state[33] << 16) | (uint16_t)state[34],
+                             isInit ? rspa.rate[1] : (state[36] << 16) | (uint16_t)state[37]};
 
     const int16_t vol_dry = isInit ? rspa.vol_dry : state[38],
                   vol_wet = isInit ? rspa.vol_wet : state[39];
@@ -415,93 +416,91 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                   vol_wet_s = vol_wet << 2;
 #endif
 
-    int32_t vols_0[8], vols_1[8];
+    int32_t vols[2][8];
 
     if (isInit) {
-        const int32_t step_diff_0 = rspa.vol[0] * (rate_0 - 0x10000) / 8,
-                      step_diff_1 = rspa.vol[0] * (rate_1 - 0x10000) / 8;
+        const int32_t step_diff[2] = {rspa.vol[0] * (rate[0] - 0x10000) / 8,
+                                      rspa.vol[0] * (rate[1] - 0x10000) / 8};
         
         #pragma GCC unroll 8
         for (int i = 0; i < 8; i++) {
-            vols_0[i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff_0 * (i + 1));
-            vols_1[i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff_1 * (i + 1));
+            vols[0][i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
+            vols[1][i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff[1] * (i + 1));
         }
     } else {
-        memcpy(vols_0, state, 32);
-        memcpy(vols_1, state + 16, 32);
+        memcpy(vols[0], state, 32);
+        memcpy(vols[1], state + 16, 32);
     }
 
-    // Round up, and divide by 2 for byte count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
+    // Round up, and divide by 2 for sample count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
     const int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t));
 
     // If we have the AUX flag set, use both the wet and dry channels.
     if (flags & A_AUX) {
-        #pragma GCC unroll 8
-        for (int i = 0, index = 0; i < nSamples; i++, in++, wet_0++, wet_1++, dry_0++, dry_1++, index = i & 7) {
+        for (int i = 0; i < nSamples; i++, in++, wet[0]++, wet[1]++, dry[0]++, dry[1]++) {
 
-            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0_s),
-                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1_s);
+            int32_t volume[2] = {envMixerGetVolume(rate[0], vols[0][i & 7], target_s[0]),
+                                 envMixerGetVolume(rate[1], vols[1][i & 7], target_s[1])};
 
             // Vols should never be negative
-            vols_0[index] = (int32_t) clamp32_upper((((int64_t) volume_0) * rate_0) >> 16);
-            vols_1[index] = (int32_t) clamp32_upper((((int64_t) volume_1) * rate_1) >> 16);
+            vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+            vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
-            volume_0 >>= 16;
-            volume_1 >>= 16;
+            volume[0] >>= 16;
+            volume[1] >>= 16;
             
             const int16_t in_val = *in;
 
 #ifdef AUDIO_USE_ACCURATE_MATH
-            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * (((volume_0 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * (((volume_1 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *wet_0 = clamp16(((*wet_0 << 15) - *wet_0 + in_val * (((volume_0 >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
-            *wet_1 = clamp16(((*wet_1 << 15) - *wet_1 + in_val * (((volume_1 >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * (((volume[0] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * (((volume[1] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *wet[0] = clamp16(((*wet[0] << 15) - *wet[0] + in_val * (((volume[0] >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+            *wet[1] = clamp16(((*wet[1] << 15) - *wet[1] + in_val * (((volume[1] >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
 #else
-            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.a
-            *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
-            *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
-            *wet_0 = clamp16(*wet_0 + (((in_val * volume_0) * (int64_t) vol_wet_s) >> 32));
-            *wet_1 = clamp16(*wet_1 + (((in_val * volume_1) * (int64_t) vol_wet_s) >> 32));
+            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+            *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
+            *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) vol_dry_s) >> 32));
+            *wet[0] = clamp16(*wet[0] + (((in_val * volume[0]) * (int64_t) vol_wet_s) >> 32));
+            *wet[1] = clamp16(*wet[1] + (((in_val * volume[1]) * (int64_t) vol_wet_s) >> 32));
 #endif
         }
     }
     
     // Else if we do NOT have the AUX flag set, use only the dry channel
     else {
-        #pragma GCC unroll 8
-        for (int i = 0, index = 0; i < nSamples; i++, in++, dry_0++, dry_1++, index = i & 7) {
+        for (int i = 0; i < nSamples; i++, in++, dry[0]++, dry[1]++) {
 
-            int32_t volume_0 = envMixerGetVolume(rate_0, vols_0[index], target_0_s),
-                    volume_1 = envMixerGetVolume(rate_1, vols_1[index], target_1_s);
+            int32_t volume[2] = {envMixerGetVolume(rate[0], vols[0][i & 7], target_s[0]),
+                                 envMixerGetVolume(rate[1], vols[1][i & 7], target_s[1])};
 
             // Vols should never be negative
-            vols_0[index] = (int32_t) clamp32_upper((((int64_t) volume_0) * rate_0) >> 16);
-            vols_1[index] = (int32_t) clamp32_upper((((int64_t) volume_1) * rate_1) >> 16);
+            vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+            vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
             
-            volume_0 >>= 16;
-            volume_1 >>= 16;
+            volume[0] >>= 16;
+            volume[1] >>= 16;
 
             const int16_t in_val = *in;
 
 #ifdef AUDIO_USE_ACCURATE_MATH
-            *dry_0 = clamp16(((*dry_0 << 15) - *dry_0 + in_val * (((volume_0 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *dry_1 = clamp16(((*dry_1 << 15) - *dry_1 + in_val * (((volume_1 >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * (((volume[0] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * (((volume[1] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
 #else
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
-            *dry_0 = clamp16(*dry_0 + (((in_val * volume_0) * (int64_t) vol_dry_s) >> 32));
-            *dry_1 = clamp16(*dry_1 + (((in_val * volume_1) * (int64_t) vol_dry_s) >> 32));
+            *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
+            *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) vol_dry_s) >> 32));
 #endif
         }
     }
 
-    memcpy(state, vols_0, 32);
-    memcpy(state + 16, vols_1, 32);
-    state[32] = target_0;
-    state[35] = target_1;
-    state[33] = (int16_t)(rate_0 >> 16);
-    state[34] = (int16_t) rate_0;
-    state[36] = (int16_t)(rate_1 >> 16);
-    state[37] = (int16_t) rate_1;
+    memcpy(state, vols[0], 32);
+    memcpy(state + 16, vols[1], 32);
+    state[32] = target[0];
+    state[35] = target[1];
+    state[33] = (int16_t)(rate[0] >> 16);
+    state[34] = (int16_t) rate[0];
+    state[36] = (int16_t)(rate[1] >> 16);
+    state[37] = (int16_t) rate[1];
     state[38] = vol_dry;
     state[39] = vol_wet;
 }

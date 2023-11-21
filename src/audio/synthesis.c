@@ -1100,9 +1100,9 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
             }
 
 #ifdef VERSION_EU
-            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, 0, nUncompressedSamplesThisIteration, flags);
+            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, DMEM_ADDR_TEMP, nUncompressedSamplesThisIteration, flags);
 #else
-            cmd = process_envelope(cmd, note, bufLen, 0, nUncompressedSamplesThisIteration, flags);
+            cmd = process_envelope(cmd, note, bufLen, DMEM_ADDR_TEMP, nUncompressedSamplesThisIteration, flags);
 #endif
 
 #ifdef VERSION_EU
@@ -1407,7 +1407,7 @@ u64 *synthesis_process_note(struct Note *note, struct NoteSubEu *noteSubEu, stru
                 nUncompressedSamplesThisIteration = 0;
             }
 
-            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, 0, nUncompressedSamplesThisIteration, flags);
+            cmd = process_envelope(cmd, noteSubEu, synthesisState, bufLen, DMEM_ADDR_TEMP, nUncompressedSamplesThisIteration, flags);
 
             if (noteSubEu->usesHeadsetPanEffects) {
                 cmd = note_apply_headset_pan_effects(cmd, noteSubEu, synthesisState, bufLen * 2, flags, nUncompressedSamplesThisIteration);
@@ -1771,7 +1771,7 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
             // profiler_3ds_log_time(0);
             // Stereo panning is handled here
-            cmd = process_envelope(cmd, note, bufLen, 0, panSettings, flags);
+            cmd = process_envelope(cmd, note, bufLen, DMEM_ADDR_TEMP, panSettings, flags);
             // profiler_3ds_log_time(7); // Envelope
 
             // Only ever set if gSoundMode == HEADSET. Applies extra panning nonsense.
