@@ -369,7 +369,7 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
 // Rate and target are always constant within each call to aEnvMixer
 static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int32_t target_s) {
 
-    // // If rate is high enough, we might overshoot
+    // If rate is high enough, we might overshoot
     if (rate >= 0x10000) {
         if (volume > target_s)
             return target_s;
