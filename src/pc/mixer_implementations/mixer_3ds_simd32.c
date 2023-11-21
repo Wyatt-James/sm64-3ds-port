@@ -452,10 +452,10 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             const int16_t in_val = *in;
 
 #ifdef AUDIO_USE_ACCURATE_MATH
-            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * (((volume[0] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * (((volume[1] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *wet[0] = clamp16(((*wet[0] << 15) - *wet[0] + in_val * (((volume[0] >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
-            *wet[1] = clamp16(((*wet[1] << 15) - *wet[1] + in_val * (((volume[1] >> 16) * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *wet[0] = clamp16(((*wet[0] << 15) - *wet[0] + in_val * ((volume[0] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+            *wet[1] = clamp16(((*wet[1] << 15) - *wet[1] + in_val * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
 #else
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
             *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
@@ -483,8 +483,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             const int16_t in_val = *in;
 
 #ifdef AUDIO_USE_ACCURATE_MATH
-            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * (((volume[0] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * (((volume[1] >> 16) * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
 #else
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
             *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
