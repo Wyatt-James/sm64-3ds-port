@@ -69,9 +69,9 @@ cp /path/to/your/baserom.us.z64 ./ # change 'us' to 'eu', 'jp' or 'sh' as approp
 
 **Build with pre-baked image:**
 
-Change `VERSION=us` if applicable. It is recommended to build with optimizations enabled, as shown below.
+Change `VERSION=us` if applicable.
 ```sh
-docker run --rm -v $(pwd):/sm64 markstreet/sm64:3ds make --jobs 4 VERSION=us OPT_FLAGS="-O3" cia 
+docker run --rm -v $(pwd):/sm64 markstreet/sm64:3ds make --jobs 4 VERSION=us cia 
 ```
 
 ### Linux / WSL (Ubuntu)
@@ -229,13 +229,13 @@ cp /c/temp/baserom.us.z64 ./ && echo "OK!" # change 'us' to 'eu', 'jp' or 'sh' a
 **Compile 3dsx:**
 
 ```sh
-make VERSION=us OPT_FLAGS="-O3" --jobs 4 # Change 'us' to 'eu', 'jp' or 'sh' as appropriate. Change or remove optimizations as appropriate.
+make VERSION=us --jobs 4 # Change 'us' to 'eu', 'jp' or 'sh' as appropriate.
 ```
 
 **Create .cia:**
 
 ```sh
-make VERSION=us OPT_FLAGS="-O3" cia # Change 'us' to 'eu', 'jp' or 'sh' as appropriate. Change or remove optimizations as appropriate.
+make VERSION=us cia # Change 'us' to 'eu', 'jp' or 'sh' as appropriate.
 ```
 
 ### Other Operating Systems
