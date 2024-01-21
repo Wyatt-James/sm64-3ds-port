@@ -279,7 +279,11 @@ else
 ifeq ($(TARGET_WEB),1)
   OPT_FLAGS := -O2 -g4 --source-map-base http://localhost:8080/
 else
+ifeq ($(TARGET_N3DS),1)
+  OPT_FLAGS := -O3
+else
   OPT_FLAGS := -O2
+endif
 endif
 endif
 
@@ -505,8 +509,8 @@ ifeq ($(TARGET_N3DS),1)
   ifeq ($(DISABLE_AUDIO),1)
     PLATFORM_CFLAGS += -DDISABLE_AUDIO
   endif
-  ifeq ($(DISABLE_N3DS_FRAMESKIP),1)
-    PLATFORM_CFLAGS += -DDISABLE_N3DS_FRAMESKIP
+  ifeq ($(ENABLE_N3DS_FRAMESKIP),1)
+    PLATFORM_CFLAGS += -DENABLE_N3DS_FRAMESKIP
   endif
 endif
 

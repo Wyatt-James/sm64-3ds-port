@@ -364,7 +364,7 @@ uint8_t skip_debounce;
 
 static bool gfx_3ds_start_frame(void)
 {
-#ifndef DISABLE_N3DS_FRAMESKIP
+#ifdef ENABLE_N3DS_FRAMESKIP
     if (skip_debounce)
     {
         skip_debounce--;
