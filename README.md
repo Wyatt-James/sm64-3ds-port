@@ -8,8 +8,8 @@ A prior copy of the game is required to extract the assets.
  - Based off [Refresh 11](https://github.com/sm64-port/sm64-port/commit/9214dddabcce4723d9b6cda2ebccbac209f6447d)
  - Stereo 3D support; use the mini-menu to switch between 3D (400px) and 800px modes (800PX/AA disabled in 3D mode)
  - Multi-threaded; audio thread runs on Core 1 on O3DS and Core 2 on N3DS; needs [Luma v10.1.1](https://github.com/LumaTeam/Luma3DS/releases) or higher
- - Naïve frame-skip if frame takes longer than 33.3ms (1 / 30 FPS) to render
-     - Disable by building with `DISABLE_N3DS_FRAMESKIP=1`
+ - Naïve frame-skip if frame takes longer than 33.3ms (1 / 30 FPS) to render. This option is no longer very useful, but is still available for posterity.
+     - Enable by building with `ENABLE_N3DS_FRAMESKIP=1`
  - Enhanced RSP Audio emulation performance
      - Disable some minor performance enhancements by building with `DISABLE_ENHANCED_RSPA=1`. This should not impact quality, but may be useful for debugging.
      - Use the PC port's original audio emulation by building with `FORCE_REFERENCE_RSPA=1`. This should not impact quality, but may be useful for debugging, and will override `DISABLE_ENHANCED_RSPA`.
