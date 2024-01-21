@@ -439,6 +439,13 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     if (flags & A_AUX) {
         for (int i = 0; i < nSamples; i++, in++, wet[0]++, wet[1]++, dry[0]++, dry[1]++) {
 
+            /*
+               data usage per-volume:
+                rate:     read twice
+                vols:     read once, write once
+                target_s: read once
+                volume:   create, read once, write once
+            */
             int32_t volume[2] = {envMixerGetVolume(rate[0], vols[0][i & 7], target_s[0]),
                                  envMixerGetVolume(rate[1], vols[1][i & 7], target_s[1])};
 
@@ -457,6 +464,25 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             *wet[0] = clamp16(((*wet[0] << 15) - *wet[0] + in_val * ((volume[0] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
             *wet[1] = clamp16(((*wet[1] << 15) - *wet[1] + in_val * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
 #else
+            /*
+               static data usage:
+                - in:        read once
+
+               data usage per-output:
+                dry:       write once
+                wet:       write once
+                volume:    read once. Redundant multiply is optimized out.
+                vol_dry_s: read once
+                vol_wet_s: read once
+
+               timings per-output:
+                2x ldrsh: cache miss likely?
+                1x mul:   1-4 cycles
+                1x smull: 1-4 cycles
+                1x add:   pretty quick
+                1x ssat:  pretty quick?
+                1x strh:  cache miss likely
+            */
             // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
             *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
             *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) vol_dry_s) >> 32));
