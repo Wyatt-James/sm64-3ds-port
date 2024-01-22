@@ -480,7 +480,6 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
 #define ENV_MIXER_LOOP_AUX  for (int i = 0; i < nSamples; i++, in++, dry[0]++, dry[1]++, wet[0]++, wet[1]++)
 #define ENV_MIXER_LOOP_NORM for (int i = 0; i < nSamples; i++, in++, dry[0]++, dry[1]++)
-#define ENV_MIXER_CLAMP32(v) clamp32_upper(v)
 
     // If Aux is set, we output wet and dry, else only dry.
     // We outline rate to reduce logic within the loop.
@@ -495,8 +494,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
@@ -510,8 +509,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
@@ -526,8 +525,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
@@ -541,14 +540,16 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
             
                     envMixerProcessAudioAux(*in, dry, wet, volume, vol_dry, vol_wet);
                 }
+    
+    // AUX is not set, so ignore the wet channels
     else
         if (rate[0] >= 0x10000)
             if (rate[1] >= 0x10000)
@@ -558,8 +559,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
@@ -573,8 +574,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
@@ -589,8 +590,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
@@ -604,8 +605,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                                          envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
 
                     // Vols should never be negative
-                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
-                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+                    vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
 
                     volume[0] >>= 16;
                     volume[1] >>= 16;
