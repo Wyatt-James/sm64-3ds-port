@@ -468,7 +468,7 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             /*
                Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
 
-               The addition arguments are always 16-bit, good for SIMD32.
+               The addition arguments are always 16-bit, good for SIMD32 with qadd16.
 
                static data usage:
                 in:        read once
