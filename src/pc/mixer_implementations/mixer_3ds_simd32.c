@@ -391,6 +391,8 @@ static ALWAYS_INLINE int32_t envMixerGetVolumeDecreasing(const int32_t volume, c
 
 // Processes audio with the AUX flag, writing both dry and wet buffers.
 // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+// Of note, SIMD32 could be used for the final addition when using inaccurate math.
+// However, I implemented this, and performance was a wash.
 static ALWAYS_INLINE void envMixerProcessAudioAux (
     const int16_t in_val,
     int16_t* dry[2],
@@ -414,6 +416,8 @@ static ALWAYS_INLINE void envMixerProcessAudioAux (
 
 // Processes audio without the AUX flag, writing only dry buffers.
 // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+// Of note, SIMD32 could be used for the final addition when using inaccurate math.
+// However, I implemented this, and performance was a wash.
 static ALWAYS_INLINE void envMixerProcessAudioNormal (
     const int16_t in_val,
     int16_t* dry[2],
