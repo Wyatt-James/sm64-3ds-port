@@ -416,6 +416,7 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                   vol_wet_s = vol_wet << 2;
 #endif
 
+    // If we align this, each channel can fit nicely on a cache line.
     int32_t vols[2][8];
 
     if (isInit) {
@@ -465,8 +466,12 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
             *wet[1] = clamp16(((*wet[1] << 15) - *wet[1] + in_val * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
 #else
             /*
+               Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+
+               The addition arguments are always 16-bit, good for SIMD32.
+
                static data usage:
-                - in:        read once
+                in:        read once
 
                data usage per-output:
                 dry:       write once
@@ -475,15 +480,16 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
                 vol_dry_s: read once
                 vol_wet_s: read once
 
-               timings per-output:
-                2x ldrsh: cache miss likely?
-                1x mul:   1-4 cycles
-                1x smull: 1-4 cycles
-                1x add:   pretty quick
-                1x ssat:  pretty quick?
-                1x strh:  cache miss likely
+               instructions:
+                1x ldrsh:  for in_val, cache ok
+                2x mul:    1-4 cycles. For in_val * volume.
+
+                4x ldrsh:  cache miss likely?
+                4x smull:  1-4 cycles
+                4x add:    pretty quick
+                4x ssat:   pretty quick
+                4x strh:   cache miss likely
             */
-            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
             *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
             *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) vol_dry_s) >> 32));
             *wet[0] = clamp16(*wet[0] + (((in_val * volume[0]) * (int64_t) vol_wet_s) >> 32));
