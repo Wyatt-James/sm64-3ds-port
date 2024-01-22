@@ -1,6 +1,5 @@
 #if __ARM_FEATURE_SIMD32 == 1 && __ARM_FEATURE_SAT == 1 // Useful for debugging
 
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
