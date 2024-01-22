@@ -1,5 +1,6 @@
 #if __ARM_FEATURE_SIMD32 == 1 && __ARM_FEATURE_SAT == 1 // Useful for debugging
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -22,11 +23,14 @@
 
 #pragma GCC optimize ("unroll-loops")
 
-#define ROUND_UP_32(v) (((v) + 31) & ~31)
+#define ROUND_UP_8(v)  (((v) + 7)  & ~7)
 #define ROUND_UP_16(v) (((v) + 15) & ~15)
-#define ROUND_UP_8(v) (((v) + 7) & ~7)
+#define ROUND_UP_32(v) (((v) + 31) & ~31)
 
 #define INT16x2_LOAD(upper, lower) (int16x2_t) ((upper << 16) | ((uint16_t) lower))
+
+#define ASSUME(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
 
 static struct {
     uint16_t in;
@@ -364,24 +368,63 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     memcpy(state + 8, in, 8 * sizeof(int16_t));
 }
 
-// Prevents volume from over/under-shooting its target
-// Rate is always positive
-// Rate and target are always constant within each call to aEnvMixer
-static inline int32_t envMixerGetVolume(const int32_t rate, const int32_t volume, const int32_t target_s) {
-
-    // If rate is high enough, we might overshoot
-    if (rate >= 0x10000) {
-        if (volume > target_s)
-            return target_s;
-    }
-
-    // If rate is not high enough, we won't overshoot, so we need to check undershoot
-    else {
-        if (volume < target_s)
-            return target_s;
-    }
+// Prevents volume from over-shooting its target.
+// Called when rate >= 0x10000 (1 << 16), where volume will increase.
+// Rate and target are always constant within each call to aEnvMixer.
+static ALWAYS_INLINE int32_t envMixerGetVolumeIncreasing(const int32_t volume, const int32_t target_s) {
+    if (volume > target_s)
+        return target_s;
 
     return volume;
+}
+
+// Prevents volume from under-shooting its target.
+// Called when rate < 0x10000 (1 << 16), where volume will decrease.
+// Rate and target are always constant within each call to aEnvMixer.
+static ALWAYS_INLINE int32_t envMixerGetVolumeDecreasing(const int32_t volume, const int32_t target_s) {
+    if (volume < target_s)
+        return target_s;
+
+    return volume;
+}
+
+
+// Processes audio with the AUX flag, writing both dry and wet buffers.
+static ALWAYS_INLINE void envMixerProcessAudioAux (
+    const int16_t in_val,
+    int16_t* dry[2],
+    int16_t* wet[2],
+    int32_t volume[2],
+    const int16_t vol_dry,
+    const int16_t vol_wet)
+{
+#ifdef AUDIO_USE_ACCURATE_MATH
+    *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+    *dry[1] = clamp16(((*dry[1] << 15) - *dry[0] + in_val * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+    *wet[0] = clamp16(((*wet[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+    *wet[1] = clamp16(((*wet[1] << 15) - *dry[0] + in_val * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
+#else
+    *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) (vol_dry << 2)) >> 32));
+    *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) (vol_dry << 2)) >> 32));
+    *wet[0] = clamp16(*wet[0] + (((in_val * volume[0]) * (int64_t) (vol_wet << 2)) >> 32));
+    *wet[1] = clamp16(*wet[1] + (((in_val * volume[1]) * (int64_t) (vol_wet << 2)) >> 32));
+#endif
+}
+
+// Processes audio without the AUX flag, writing only dry buffers.
+static ALWAYS_INLINE void envMixerProcessAudioNormal (
+    const int16_t in_val,
+    int16_t* dry[2],
+    int32_t volume[2],
+    const int16_t vol_dry)
+{
+#ifdef AUDIO_USE_ACCURATE_MATH
+    *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+    *dry[1] = clamp16(((*dry[1] << 15) - *dry[0] + in_val * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
+#else
+    *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) (vol_dry << 2)) >> 32));
+    *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) (vol_dry << 2)) >> 32));
+#endif
 }
 
 // Crackpipe optimized version
@@ -410,20 +453,13 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     const int16_t vol_dry = isInit ? rspa.vol_dry : state[38],
                   vol_wet = isInit ? rspa.vol_wet : state[39];
 
-// Used only in inaccurate audio
-#ifndef AUDIO_USE_ACCURATE_MATH
-    const int32_t vol_dry_s = vol_dry << 2,
-                  vol_wet_s = vol_wet << 2;
-#endif
-
-    // If we align this, each channel can fit nicely on a cache line.
     int32_t vols[2][8];
 
     if (isInit) {
         const int32_t step_diff[2] = {rspa.vol[0] * (rate[0] - 0x10000) / 8,
                                       rspa.vol[0] * (rate[1] - 0x10000) / 8};
         
-        #pragma GCC unroll 8
+        #pragma GCC unroll 0
         for (int i = 0; i < 8; i++) {
             vols[0][i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
             vols[1][i] = clamp32((int64_t)(rspa.vol[1] << 16) + step_diff[1] * (i + 1));
@@ -436,94 +472,140 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     // Round up, and divide by 2 for sample count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
     const int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t));
 
-    // If we have the AUX flag set, use both the wet and dry channels.
-    if (flags & A_AUX) {
-        for (int i = 0; i < nSamples; i++, in++, wet[0]++, wet[1]++, dry[0]++, dry[1]++) {
+#define ENV_MIXER_LOOP_AUX  for (int i = 0; i < nSamples; i++, in++, dry[0]++, dry[1]++, wet[0]++, wet[1]++)
+#define ENV_MIXER_LOOP_NORM for (int i = 0; i < nSamples; i++, in++, dry[0]++, dry[1]++)
+#define ENV_MIXER_CLAMP32(v) clamp32_upper(v)
 
-            /*
-               data usage per-volume:
-                rate:     read twice
-                vols:     read once, write once
-                target_s: read once
-                volume:   create, read once, write once
-            */
-            int32_t volume[2] = {envMixerGetVolume(rate[0], vols[0][i & 7], target_s[0]),
-                                 envMixerGetVolume(rate[1], vols[1][i & 7], target_s[1])};
+    // If Aux is set, we output wet and dry, else only dry.
+    // We outline rate to reduce logic within the loop.
+    // This would be a decent application for self-modifying code. In fact, SMC could 
+    // completely remove the getVolume checks once the target volume has been attained.
+    if (flags & A_AUX)
+        if (rate[0] >= 0x10000)
+            if (rate[1] >= 0x10000)
+                // ++A
+                ENV_MIXER_LOOP_AUX {
+                    int32_t volume[2] = {envMixerGetVolumeIncreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
 
-            // Vols should never be negative
-            vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
-            vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
 
-            volume[0] >>= 16;
-            volume[1] >>= 16;
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
             
-            const int16_t in_val = *in;
+                    envMixerProcessAudioAux(*in, dry, wet, volume, vol_dry, vol_wet);
+                }
+            else
+                // +-A
+                ENV_MIXER_LOOP_AUX {
+                    int32_t volume[2] = {envMixerGetVolumeIncreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
 
-#ifdef AUDIO_USE_ACCURATE_MATH
-            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *wet[0] = clamp16(((*wet[0] << 15) - *wet[0] + in_val * ((volume[0] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
-            *wet[1] = clamp16(((*wet[1] << 15) - *wet[1] + in_val * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
-#else
-            /*
-               Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
 
-               The addition arguments are always 16-bit, good for SIMD32 with qadd16.
-
-               static data usage:
-                in:        read once
-
-               data usage per-output:
-                dry:       write once
-                wet:       write once
-                volume:    read once. Redundant multiply is optimized out.
-                vol_dry_s: read once
-                vol_wet_s: read once
-
-               instructions:
-                1x ldrsh:  for in_val, cache ok
-                2x mul:    1-4 cycles. For in_val * volume.
-
-                4x ldrsh:  cache miss likely?
-                4x smull:  1-4 cycles
-                4x add:    pretty quick
-                4x ssat:   pretty quick
-                4x strh:   cache miss likely
-            */
-            *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
-            *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) vol_dry_s) >> 32));
-            *wet[0] = clamp16(*wet[0] + (((in_val * volume[0]) * (int64_t) vol_wet_s) >> 32));
-            *wet[1] = clamp16(*wet[1] + (((in_val * volume[1]) * (int64_t) vol_wet_s) >> 32));
-#endif
-        }
-    }
-    
-    // Else if we do NOT have the AUX flag set, use only the dry channel
-    else {
-        for (int i = 0; i < nSamples; i++, in++, dry[0]++, dry[1]++) {
-
-            int32_t volume[2] = {envMixerGetVolume(rate[0], vols[0][i & 7], target_s[0]),
-                                 envMixerGetVolume(rate[1], vols[1][i & 7], target_s[1])};
-
-            // Vols should never be negative
-            vols[0][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[0]) * rate[0]) >> 16);
-            vols[1][i & 7] = (int32_t) clamp32_upper((((int64_t) volume[1]) * rate[1]) >> 16);
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
             
-            volume[0] >>= 16;
-            volume[1] >>= 16;
+                    envMixerProcessAudioAux(*in, dry, wet, volume, vol_dry, vol_wet);
+                }
+        else
+            if (rate[1] >= 0x10000)
+                // -+A
+                ENV_MIXER_LOOP_AUX {
+                    int32_t volume[2] = {envMixerGetVolumeDecreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
 
-            const int16_t in_val = *in;
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
 
-#ifdef AUDIO_USE_ACCURATE_MATH
-            *dry[0] = clamp16(((*dry[0] << 15) - *dry[0] + in_val * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-            *dry[1] = clamp16(((*dry[1] << 15) - *dry[1] + in_val * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-#else
-            // Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
-            *dry[0] = clamp16(*dry[0] + (((in_val * volume[0]) * (int64_t) vol_dry_s) >> 32));
-            *dry[1] = clamp16(*dry[1] + (((in_val * volume[1]) * (int64_t) vol_dry_s) >> 32));
-#endif
-        }
-    }
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
+            
+                    envMixerProcessAudioAux(*in, dry, wet, volume, vol_dry, vol_wet);
+                }
+            else
+                // --A
+                ENV_MIXER_LOOP_AUX {
+                    int32_t volume[2] = {envMixerGetVolumeDecreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
+
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
+            
+                    envMixerProcessAudioAux(*in, dry, wet, volume, vol_dry, vol_wet);
+                }
+    else
+        if (rate[0] >= 0x10000)
+            if (rate[1] >= 0x10000)
+                // ++N
+                ENV_MIXER_LOOP_NORM {
+                    int32_t volume[2] = {envMixerGetVolumeIncreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
+
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
+            
+                    envMixerProcessAudioNormal(*in, dry, volume, vol_dry);
+                }
+            else
+                // +-N
+                ENV_MIXER_LOOP_NORM {
+                    int32_t volume[2] = {envMixerGetVolumeIncreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
+
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
+            
+                    envMixerProcessAudioNormal(*in, dry, volume, vol_dry);
+                }
+        else
+            if (rate[1] >= 0x10000)
+                // -+N
+                ENV_MIXER_LOOP_NORM {
+                    int32_t volume[2] = {envMixerGetVolumeDecreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeIncreasing(vols[1][i & 7], target_s[1])};
+
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
+            
+                    envMixerProcessAudioNormal(*in, dry, volume, vol_dry);
+                }
+            else
+                // --N
+                ENV_MIXER_LOOP_NORM {
+                    int32_t volume[2] = {envMixerGetVolumeDecreasing(vols[0][i & 7], target_s[0]),
+                                         envMixerGetVolumeDecreasing(vols[1][i & 7], target_s[1])};
+
+                    // Vols should never be negative
+                    vols[0][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[0]) * rate[0]) >> 16);
+                    vols[1][i & 7] = (int32_t) ENV_MIXER_CLAMP32((((int64_t) volume[1]) * rate[1]) >> 16);
+
+                    volume[0] >>= 16;
+                    volume[1] >>= 16;
+            
+                    envMixerProcessAudioNormal(*in, dry, volume, vol_dry);
+                }
 
     memcpy(state, vols[0], 32);
     memcpy(state + 16, vols[1], 32);
