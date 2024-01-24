@@ -103,7 +103,10 @@ static void audio_3ds_play_internal(const uint8_t *src, size_t len_total, size_t
     if (len_to_copy != 0)
         memcpy(dst, src, len_to_copy);
 
-    DSP_FlushDataCache(dst, len_total);
+    // DSP_FlushDataCache is slow if AppCpuLimit is set high for some reason.
+    // svcFlushProcessDataCache is much faster and still works perfectly.
+    // DSP_FlushDataCache(dst, len_total);
+    svcFlushProcessDataCache(CUR_PROCESS_HANDLE, dst, len_total);
     
     // Actually play the data
     sDspBuffers[sNextBuffer].nsamples = len_total / 4;
