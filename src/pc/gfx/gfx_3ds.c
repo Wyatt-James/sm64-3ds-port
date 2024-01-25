@@ -94,7 +94,7 @@ static void initialise_screens()
 {
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
 
-    bool useAA = gfx_config.useAA;
+    bool useAA = gfx_config.useAA && n3dsModel != 3; // old 2DS does not support 800px
     bool useWide = gfx_config.useWide && n3dsModel != 3; // old 2DS does not support 800px
 
     u32 transferFlags = DISPLAY_TRANSFER_FLAGS;
