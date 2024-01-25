@@ -71,5 +71,11 @@ extern enum N3dsCpu s_audio_cpu;
 extern volatile __3ds_s32 s_audio_frames_to_tick;
 extern volatile __3ds_s32 s_audio_frames_to_process;
 
+// This is purely an informative value.
+// It is set to true when it acknowledges a new frame to process,
+// and to false when the audio thread begins spinning.
+// Do not use this for bi-directional synchronization!
+extern volatile bool s_audio_thread_processing;
+
 #endif
 #endif

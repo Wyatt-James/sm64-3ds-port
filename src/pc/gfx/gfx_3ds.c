@@ -213,7 +213,7 @@ static void gfx_3ds_handle_touch() {
     }
 }
 
-// Called whenever a 3DS OS event is fired.
+// Called whenever a 3DS OS event is fired. Runs synchronously on thread5.
 static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
 {
     char* eventName = "unknown";
@@ -221,22 +221,22 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
     switch (hook) {
         case APTHOOK_ONSLEEP: // Lid closed
             eventName = "sleep";
-            AtomicIncrement(&appSuspendCounter);
+            appSuspendCounter++;
             break;
 
         case APTHOOK_ONSUSPEND: // Home menu opened
             eventName = "suspend";
-            AtomicIncrement(&appSuspendCounter);
+            appSuspendCounter++;
             break;
 
         case APTHOOK_ONWAKEUP: // Lid opened
             eventName = "wake-up";
-            AtomicDecrement(&appSuspendCounter);
+            appSuspendCounter--;
             break;
 
         case APTHOOK_ONRESTORE: // Home menu closed
             eventName = "restore";
-            AtomicDecrement(&appSuspendCounter);
+            appSuspendCounter--;
             break;
 
         case APTHOOK_ONEXIT: // Application exit
@@ -255,10 +255,9 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
     printf("AptHook caught: %s.\n", eventName);
 
     // Wait for async audio to finish. Synchronous will already be done anyway.
-    if (s_audio_cpu != OLD_CORE_0) {
-        if (appSuspendCounter > 0)
-            while (s_audio_frames_to_process > 0)
-                svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+    if (!s_thread5_does_audio) {
+        while (appSuspendCounter > 0 && s_audio_thread_processing)
+            svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
     }
 
     // Lower CPU priority only if applicable
