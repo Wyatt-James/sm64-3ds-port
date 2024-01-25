@@ -262,12 +262,16 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
         while (s_audio_frames_to_process > 0)
             svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
 
-    const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
+    if (s_audio_cpu == OLD_CORE_1) {
+        const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
 
-    if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
-        printf("APT_SetAppCpuTimeLimit set to %hhd on %s.\n", limit, eventName);
-    else
-        fprintf(stderr, "Error: APT_SetAppCpuTimeLimit failed to set to %hhd on %s.\n", limit, eventName);
+        if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
+            printf("APT_SetAppCpuTimeLimit set to %hhd on %s.\n", limit, eventName);
+        else
+            fprintf(stderr, "Error: APT_SetAppCpuTimeLimit failed to set to %hhd on %s.\n", limit, eventName);
+    } else {
+        printf("Not setting AppCpuTimeLimit because audio code is %d", s_audio_cpu);
+    }
 }
 
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)
