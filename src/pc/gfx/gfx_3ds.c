@@ -270,7 +270,7 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
         else
             fprintf(stderr, "Error: APT_SetAppCpuTimeLimit failed to set to %hhd on %s.\n", limit, eventName);
     } else {
-        printf("Not setting AppCpuTimeLimit because audio code is %d", s_audio_cpu);
+        printf("Not setting AppCpuTimeLimit because audio is running on CPU %d.\n", s_audio_cpu);
     }
 }
 
