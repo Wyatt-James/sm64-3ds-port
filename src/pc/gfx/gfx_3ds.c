@@ -257,11 +257,14 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
             return;
     }
 
-    // Wait for audio to finish
-    if (appSuspendCounter > 0)
-        while (s_audio_frames_to_process > 0)
-            svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+    // Wait for async audio to finish. Synchronous will already be done anyway.
+    if (s_audio_cpu != OLD_CORE_0) {
+        if (appSuspendCounter > 0)
+            while (s_audio_frames_to_process > 0)
+                svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+    }
 
+    // Lower CPU priority only if applicable
     if (s_audio_cpu == OLD_CORE_1) {
         const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
 
