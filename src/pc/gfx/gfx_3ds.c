@@ -216,12 +216,7 @@ static void gfx_3ds_handle_touch() {
 // Called whenever a 3DS OS event is fired.
 static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
 {
-    if (s_audio_cpu != OLD_CORE_1) {
-        printf("APT hook ignored with audio CPU: %d.\n", s_audio_cpu);
-        return;
-    }
-
-    char* eventName = "unknown event";
+    char* eventName = "unknown";
 
     switch (hook) {
         case APTHOOK_ONSLEEP: // Lid closed
@@ -253,9 +248,11 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
             return;
             
         default: // Should never happen
-            perror("Unknown APT hook type.\n");
+            fprintf(stderr, "Unknown APT hook type %d.\n", hook);
             return;
     }
+
+    printf("AptHook caught: %s.\n", eventName);
 
     // Wait for async audio to finish. Synchronous will already be done anyway.
     if (s_audio_cpu != OLD_CORE_0) {
@@ -269,9 +266,9 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
         const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
 
         if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
-            printf("APT_SetAppCpuTimeLimit set to %hhd on %s.\n", limit, eventName);
+            printf("AppCpuTimeLimit set to %hhd.\n", limit);
         else
-            fprintf(stderr, "Error: APT_SetAppCpuTimeLimit failed to set to %hhd on %s.\n", limit, eventName);
+            fprintf(stderr, "Error: AppCpuTimeLimit failed to set to %hhd.\n", limit);
     } else {
         printf("Not setting AppCpuTimeLimit because audio is running on CPU %d.\n", s_audio_cpu);
     }
