@@ -94,7 +94,7 @@ static void initialise_screens()
 {
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
 
-    bool useAA = gfx_config.useAA;
+    bool useAA = gfx_config.useAA && n3dsModel != 3; // old 2DS does not support 800px
     bool useWide = gfx_config.useWide && n3dsModel != 3; // old 2DS does not support 800px
 
     u32 transferFlags = DISPLAY_TRANSFER_FLAGS;
@@ -213,35 +213,30 @@ static void gfx_3ds_handle_touch() {
     }
 }
 
-// Called whenever a 3DS OS event is fired.
+// Called whenever a 3DS OS event is fired. Runs synchronously on thread5.
 static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
 {
-    if (s_audio_cpu != OLD_CORE_1) {
-        printf("APT hook ignored with audio CPU: %d.\n", s_audio_cpu);
-        return;
-    }
-
-    char* eventName = "unknown event";
+    char* eventName = "unknown";
 
     switch (hook) {
         case APTHOOK_ONSLEEP: // Lid closed
             eventName = "sleep";
-            AtomicIncrement(&appSuspendCounter);
+            appSuspendCounter++;
             break;
 
         case APTHOOK_ONSUSPEND: // Home menu opened
             eventName = "suspend";
-            AtomicIncrement(&appSuspendCounter);
+            appSuspendCounter++;
             break;
 
         case APTHOOK_ONWAKEUP: // Lid opened
             eventName = "wake-up";
-            AtomicDecrement(&appSuspendCounter);
+            appSuspendCounter--;
             break;
 
         case APTHOOK_ONRESTORE: // Home menu closed
             eventName = "restore";
-            AtomicDecrement(&appSuspendCounter);
+            appSuspendCounter--;
             break;
 
         case APTHOOK_ONEXIT: // Application exit
@@ -253,21 +248,29 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
             return;
             
         default: // Should never happen
-            perror("Unknown APT hook type.\n");
+            fprintf(stderr, "Unknown APT hook type %d.\n", hook);
             return;
     }
 
-    // Wait for audio to finish
-    if (appSuspendCounter > 0)
-        while (s_audio_frames_to_process > 0)
+    printf("AptHook caught: %s.\n", eventName);
+
+    // Wait for async audio to finish. Synchronous will already be done anyway.
+    if (!s_thread5_does_audio) {
+        while (appSuspendCounter > 0 && s_audio_thread_processing)
             svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+    }
 
-    const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
+    // Lower CPU priority only if applicable
+    if (s_audio_cpu == OLD_CORE_1) {
+        const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
 
-    if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
-        printf("APT_SetAppCpuTimeLimit set to %hhd on %s.\n", limit, eventName);
-    else
-        fprintf(stderr, "Error: APT_SetAppCpuTimeLimit failed to set to %hhd on %s.\n", limit, eventName);
+        if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
+            printf("AppCpuTimeLimit set to %hhd.\n", limit);
+        else
+            fprintf(stderr, "Error: AppCpuTimeLimit failed to set to %hhd.\n", limit);
+    } else {
+        printf("Not setting AppCpuTimeLimit because audio is running on CPU %d.\n", s_audio_cpu);
+    }
 }
 
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)

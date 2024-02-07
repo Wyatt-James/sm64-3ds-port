@@ -334,10 +334,10 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
         const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
 
 #ifdef AUDIO_USE_ACCURATE_MATH
-        *out = ((in[0] * tbl[0] + 0x4000) >> 15) +
-               ((in[1] * tbl[1] + 0x4000) >> 15) +
-               ((in[2] * tbl[2] + 0x4000) >> 15) +
-               ((in[3] * tbl[3] + 0x4000) >> 15);
+        *out = clamp16(((in[0] * tbl[0] + 0x4000) >> 15) +
+                       ((in[1] * tbl[1] + 0x4000) >> 15) +
+                       ((in[2] * tbl[2] + 0x4000) >> 15) +
+                       ((in[3] * tbl[3] + 0x4000) >> 15));
 #else
         // Inaccurate rounding
         *out = clamp16((in[0] * tbl[0] +

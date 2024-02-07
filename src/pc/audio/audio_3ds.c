@@ -36,6 +36,7 @@ enum N3dsCpu s_audio_cpu = OLD_CORE_0;
 
 volatile __3ds_s32 s_audio_frames_to_tick = 0;
 volatile __3ds_s32 s_audio_frames_to_process = 0;
+volatile bool s_audio_thread_processing = false;
 
 // Synchronization variables
 static volatile bool running = true;
@@ -103,7 +104,10 @@ static void audio_3ds_play_internal(const uint8_t *src, size_t len_total, size_t
     if (len_to_copy != 0)
         memcpy(dst, src, len_to_copy);
 
-    DSP_FlushDataCache(dst, len_total);
+    // DSP_FlushDataCache is slow if AppCpuLimit is set high for some reason.
+    // svcFlushProcessDataCache is much faster and still works perfectly.
+    // DSP_FlushDataCache(dst, len_total);
+    svcFlushProcessDataCache(CUR_PROCESS_HANDLE, dst, len_total);
     
     // Actually play the data
     sDspBuffers[sNextBuffer].nsamples = len_total / 4;
@@ -162,7 +166,13 @@ static void audio_3ds_loop()
     
     while (running)
     {
-        if (s_audio_frames_to_process > 0)
+        s_audio_thread_processing = s_audio_frames_to_process > 0;
+
+        // In an ideal world, we would just continually run audio synthesis.
+        // This would give an N64-like behavior, with no audio choppiness on slowdown.
+        // However, due to race conditions, that is currently non-viable.
+        // If the audio thread's DMA were ripped out, it would likely work.
+        if (s_audio_thread_processing)
             audio_3ds_run_one_frame();
         else
             N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);

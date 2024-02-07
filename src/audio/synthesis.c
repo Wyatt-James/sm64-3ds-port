@@ -346,10 +346,16 @@ u64 *synthesis_execute(u64 *cmdBuf, s32 *writtenCmds, s16 *aiBuf, s32 bufLen) {
                 chunkLen += 8;
             }
         }
+
+        profiler_3ds_log_time(0);
         process_sequences(i - 1);
+        profiler_3ds_log_time(19); // Sequence Processing
+        
+        
         if (gSynthesisReverb.useReverb != 0) {
             prepare_reverb_ring_buffer(chunkLen, gAudioUpdatesPerFrame - i);
         }
+
         cmd = synthesis_do_one_audio_update((s16 *) aiBufPtr, chunkLen, cmd, gAudioUpdatesPerFrame - i);
         bufLen -= chunkLen;
         aiBufPtr += chunkLen;
