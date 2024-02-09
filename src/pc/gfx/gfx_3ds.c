@@ -257,7 +257,7 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
     // Wait for async audio to finish. Synchronous will already be done anyway.
     if (!s_thread5_does_audio) {
         while (appSuspendCounter > 0 && s_audio_thread_processing)
-            svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
     }
 
     // Lower CPU priority only if applicable
@@ -325,7 +325,7 @@ static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
         if (appSuspendCounter == 0)
             run_one_game_iter();
         else
-            svcSleepThread(N3DS_AUDIO_MILLIS_TO_NANOS(33));
+            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
     }
 
     aptSetSleepAllowed(false);
