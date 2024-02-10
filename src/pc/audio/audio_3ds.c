@@ -29,6 +29,24 @@
 #define N3DS_DSP_DMA_BUFFER_SIZE 4096 * 4
 #define N3DS_DSP_N_CHANNELS 2
 
+union NdspMix {
+    float raw[12];
+    struct {
+        float volume_left;
+        float volume_right;
+        float unknown_2;
+        float unknown_3;
+        float unknown_4;
+        float unknown_5;
+        float unknown_6;
+        float unknown_7;
+        float unknown_8;
+        float unknown_9;
+        float unknown_10;
+        float unknown_11;
+    } mix;
+};
+
 // Instructions for Thread5
 bool s_thread5_wait_for_audio_to_finish = true;
 bool s_thread5_does_audio = false;
@@ -240,6 +258,8 @@ static void audio_3ds_initialize_thread()
     }
 }
 
+union NdspMix ndsp_mix;
+
 static void audio_3ds_initialize_dsp()
 {
     ndspInit();
@@ -251,11 +271,10 @@ static void audio_3ds_initialize_dsp()
     ndspChnSetRate(0, PLAYBACK_RATE);
     ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
 
-    float mix[12];
-    memset(mix, 0, sizeof(mix));
-    mix[0] = 1.0;
-    mix[1] = 1.0;
-    ndspChnSetMix(0, mix);
+    memset(ndsp_mix.raw, 0, sizeof(ndsp_mix));
+    ndsp_mix.mix.volume_left = 1.0;
+    ndsp_mix.mix.volume_right = 1.0;
+    ndspChnSetMix(0, ndsp_mix.raw);
 
     u8* bufferData = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
     for (int i = 0; i < N3DS_DSP_DMA_BUFFER_COUNT; i++)
@@ -285,6 +304,13 @@ static void audio_3ds_stop(void)
         threadJoin(threadId, U64_MAX);
 
     ndspExit();
+}
+
+void audio_3ds_set_dsp_volume(float left, float right)
+{
+    ndsp_mix.mix.volume_left = left;
+    ndsp_mix.mix.volume_right = right;
+    ndspChnSetMix(0, ndsp_mix.raw);
 }
 
 struct AudioAPI audio_3ds =
