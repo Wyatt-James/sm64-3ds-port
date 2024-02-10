@@ -160,6 +160,8 @@ inline void audio_3ds_run_one_frame() {
     profiler_3ds_snoop(0);
 }
 
+Thread threadId = NULL;
+
 static void audio_3ds_loop()
 {
     profiler_3ds_init();
@@ -181,11 +183,64 @@ static void audio_3ds_loop()
     // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_to_process = -9999;
     s_audio_frames_to_tick = -9999;
+    threadId = NULL;
 }
 
-Thread threadId;
 
-static bool audio_3ds_init()
+// Fully initializes the audio thread
+static void audio_3ds_initialize_thread()
+{
+    // Start audio thread in a consistent state
+    s_audio_frames_to_tick = s_audio_frames_to_process = 0;
+    s_audio_thread_processing = true;
+
+    // Set main thread priority to desired value
+    if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, N3DS_DESIRED_PRIORITY_MAIN_THREAD)))
+        printf("Set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+    else
+        fprintf(perror, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+
+    // Select core to use
+    if (is_new_n3ds()) {
+        s_audio_cpu = NEW_CORE_2; // n3ds 3rd core
+    } else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT))) {
+        s_audio_cpu = OLD_CORE_1; // o3ds 2nd core (system)
+        printf("AppCpuTimeLimit is %d.\nAppCpuIdleLimit is %d.\n", N3DS_AUDIO_CORE_1_LIMIT, N3DS_AUDIO_CORE_1_LIMIT_IDLE);
+    } else {
+        s_audio_cpu = OLD_CORE_0; // Run in Thread5
+        fprintf(perror, "Failed to set AppCpuTimeLimit to %d.\n", N3DS_AUDIO_CORE_1_LIMIT);
+    }
+
+    // Create a thread if applicable
+    if (s_audio_cpu != OLD_CORE_0) {
+
+        printf("Audio thread priority: 0x%x\n", N3DS_DESIRED_PRIORITY_AUDIO_THREAD);
+
+        threadId = threadCreate(audio_3ds_loop, NULL, 64 * 1024, N3DS_DESIRED_PRIORITY_AUDIO_THREAD, s_audio_cpu, true);
+
+        if (threadId != NULL) {
+            printf("Created audio thread on core %i.\n", s_audio_cpu);
+
+            while (s_audio_thread_processing) {
+                printf("Waiting for audio thread to settle...\n");
+                N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
+            }
+            printf("Audio thread finished settling.\n");
+        } else
+            printf("Failed to create audio thread.\n");
+    }
+    
+    // If thread creation failed, or was never attempted...
+    if (threadId == NULL) {
+        s_thread5_does_audio = true;
+        s_audio_thread_processing = false;
+        printf("Using Thread5 for audio.\n");
+    } else {
+        s_thread5_does_audio = false;
+    }
+}
+
+static void audio_3ds_initialize_dsp()
 {
     ndspInit();
 
@@ -212,31 +267,12 @@ static bool audio_3ds_init()
     }
 
     sNextBuffer = 0;
-    
-    if (is_new_n3ds())
-        s_audio_cpu = NEW_CORE_2; // n3ds 3rd core
+}
 
-    else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT)))
-        s_audio_cpu = OLD_CORE_1; // o3ds 2nd core (system)
-
-    else
-        s_audio_cpu = OLD_CORE_0; // Run in Thread5
-
-    if (s_audio_cpu != OLD_CORE_0) {
-        threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, 0x18, s_audio_cpu, true);
-
-        if (threadId != NULL) {
-            s_thread5_does_audio = false;
-            printf("Created audio thread on core %i\n", s_audio_cpu);
-        } else {
-            s_thread5_does_audio = true;
-            printf("Failed to create audio thread. Using Thread5.\n");
-        }
-    } else {
-        s_thread5_does_audio = true;
-        printf("Using Thread5 for audio, as program CPU time limit failed.\n");
-    }
-
+static bool audio_3ds_init()
+{
+    audio_3ds_initialize_dsp();
+    audio_3ds_initialize_thread();
     return true;
 }
 
