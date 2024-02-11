@@ -134,7 +134,7 @@ static void audio_3ds_play_internal(const uint8_t *src, size_t len_total, size_t
     // DSP_FlushDataCache is slow if AppCpuLimit is set high for some reason.
     // svcFlushProcessDataCache is much faster and still works perfectly.
     // DSP_FlushDataCache(dst, len_total);
-    svcFlushProcessDataCache(CUR_PROCESS_HANDLE, dst, len_total);
+    svcFlushProcessDataCache(CUR_PROCESS_HANDLE, (Handle) dst, len_total);
     
     // Actually play the data
     sDspBuffers[sNextBuffer].nsamples = len_total / 4;
@@ -225,7 +225,7 @@ static void audio_3ds_initialize_thread()
     if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, N3DS_DESIRED_PRIORITY_MAIN_THREAD)))
         printf("Set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
     else
-        fprintf(perror, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+        fprintf(stderr, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
 
     // Select core to use
     if (is_new_n3ds()) {
@@ -235,7 +235,7 @@ static void audio_3ds_initialize_thread()
         printf("AppCpuTimeLimit is %d.\nAppCpuIdleLimit is %d.\n", N3DS_AUDIO_CORE_1_LIMIT, N3DS_AUDIO_CORE_1_LIMIT_IDLE);
     } else {
         s_audio_cpu = OLD_CORE_0; // Run in Thread5
-        fprintf(perror, "Failed to set AppCpuTimeLimit to %d.\n", N3DS_AUDIO_CORE_1_LIMIT);
+        fprintf(stderr, "Failed to set AppCpuTimeLimit to %d.\n", N3DS_AUDIO_CORE_1_LIMIT);
     }
 
     // Create a thread if applicable
