@@ -1,4 +1,8 @@
 #include "profiler_3ds.h"
+
+// If the profiler is disabled, functions and their headers do not exist.
+#if PROFILER_3DS_ENABLE == 1
+
 #include <string.h>
 #include <stdio.h>
 
@@ -300,9 +304,6 @@ void profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_until
 int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint32_t max_id_to_print) {
     log_string[0] = '\0';
     log_string[PROFILER_3DS_LOG_STRING_TERMINATOR] = '\0';
-
-    if (min_id_to_print < 0)
-        min_id_to_print = 0;
         
     if (min_id_to_print > PROFILER_3DS_NUM_IDS)
         min_id_to_print = PROFILER_3DS_NUM_IDS;
@@ -424,7 +425,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 19);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 19);
                     
                     i += 5; // Place a breakpoint here
                     break;
@@ -439,3 +440,5 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
     return; // Leave this here for breakpoints
 }
+
+#endif // #if PROFILER_3DS_ENABLE == 1

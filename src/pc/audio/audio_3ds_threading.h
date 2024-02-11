@@ -42,6 +42,8 @@
 // Audio sleep duration of 10 microseconds (0.01 millis). May sleep for longer.
 #define N3DS_AUDIO_SLEEP_DURATION_NANOS N3DS_AUDIO_MILLIS_TO_NANOS(0.01)
 
+#define N3DS_DESIRED_PRIORITY_MAIN_THREAD 0x19
+#define N3DS_DESIRED_PRIORITY_AUDIO_THREAD 0x18
 #define N3DS_AUDIO_CORE_1_LIMIT_IDLE 10 // Limit when in the home menu, sleeping, etc. Can be [10-80].
 #define N3DS_AUDIO_CORE_1_LIMIT 80      // Limit during gameplay. Can be [10-80].
 
@@ -71,7 +73,7 @@ extern enum N3dsCpu s_audio_cpu;
 extern volatile __3ds_s32 s_audio_frames_to_tick;
 extern volatile __3ds_s32 s_audio_frames_to_process;
 
-// This is purely an informative value.
+// This is a purely informative value.
 // It is set to true when it acknowledges a new frame to process,
 // and to false when the audio thread begins spinning.
 // Do not use this for bi-directional synchronization!

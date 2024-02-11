@@ -29,6 +29,33 @@
 #define N3DS_DSP_DMA_BUFFER_SIZE 4096 * 4
 #define N3DS_DSP_N_CHANNELS 2
 
+// Definitions taken from libctru comments
+union NdspMix {
+    float raw[12];
+    struct {
+        struct {
+            float volume_left;
+            float volume_right;
+            float volume_back_left;
+            float volume_back_right;
+        } main;
+
+        struct {
+            float volume_left;
+            float volume_right;
+            float volume_back_left;
+            float volume_back_right;
+        } aux_0;
+
+        struct {
+            float volume_left;
+            float volume_right;
+            float volume_back_left;
+            float volume_back_right;
+        } aux_1;
+    } mix;
+};
+
 // Instructions for Thread5
 bool s_thread5_wait_for_audio_to_finish = true;
 bool s_thread5_does_audio = false;
@@ -107,7 +134,7 @@ static void audio_3ds_play_internal(const uint8_t *src, size_t len_total, size_t
     // DSP_FlushDataCache is slow if AppCpuLimit is set high for some reason.
     // svcFlushProcessDataCache is much faster and still works perfectly.
     // DSP_FlushDataCache(dst, len_total);
-    svcFlushProcessDataCache(CUR_PROCESS_HANDLE, dst, len_total);
+    svcFlushProcessDataCache(CUR_PROCESS_HANDLE, (Handle) dst, len_total);
     
     // Actually play the data
     sDspBuffers[sNextBuffer].nsamples = len_total / 4;
@@ -160,6 +187,8 @@ inline void audio_3ds_run_one_frame() {
     profiler_3ds_snoop(0);
 }
 
+Thread threadId = NULL;
+
 static void audio_3ds_loop()
 {
     profiler_3ds_init();
@@ -181,11 +210,66 @@ static void audio_3ds_loop()
     // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_to_process = -9999;
     s_audio_frames_to_tick = -9999;
+    threadId = NULL;
 }
 
-Thread threadId;
 
-static bool audio_3ds_init()
+// Fully initializes the audio thread
+static void audio_3ds_initialize_thread()
+{
+    // Start audio thread in a consistent state
+    s_audio_frames_to_tick = s_audio_frames_to_process = 0;
+    s_audio_thread_processing = true;
+
+    // Set main thread priority to desired value
+    if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, N3DS_DESIRED_PRIORITY_MAIN_THREAD)))
+        printf("Set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+    else
+        fprintf(stderr, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+
+    // Select core to use
+    if (is_new_n3ds()) {
+        s_audio_cpu = NEW_CORE_2; // n3ds 3rd core
+    } else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT))) {
+        s_audio_cpu = OLD_CORE_1; // o3ds 2nd core (system)
+        printf("AppCpuTimeLimit is %d.\nAppCpuIdleLimit is %d.\n", N3DS_AUDIO_CORE_1_LIMIT, N3DS_AUDIO_CORE_1_LIMIT_IDLE);
+    } else {
+        s_audio_cpu = OLD_CORE_0; // Run in Thread5
+        fprintf(stderr, "Failed to set AppCpuTimeLimit to %d.\n", N3DS_AUDIO_CORE_1_LIMIT);
+    }
+
+    // Create a thread if applicable
+    if (s_audio_cpu != OLD_CORE_0) {
+
+        printf("Audio thread priority: 0x%x\n", N3DS_DESIRED_PRIORITY_AUDIO_THREAD);
+
+        threadId = threadCreate(audio_3ds_loop, NULL, 64 * 1024, N3DS_DESIRED_PRIORITY_AUDIO_THREAD, s_audio_cpu, true);
+
+        if (threadId != NULL) {
+            printf("Created audio thread on core %i.\n", s_audio_cpu);
+
+            while (s_audio_thread_processing) {
+                printf("Waiting for audio thread to settle...\n");
+                N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
+            }
+            printf("Audio thread finished settling.\n");
+        } else
+            printf("Failed to create audio thread.\n");
+    }
+    
+    // If thread creation failed, or was never attempted...
+    if (threadId == NULL) {
+        s_thread5_does_audio = true;
+        s_audio_thread_processing = false;
+        printf("Using Thread5 for audio.\n");
+    } else {
+        s_thread5_does_audio = false;
+    }
+}
+
+union NdspMix ndsp_mix;
+
+static void audio_3ds_initialize_dsp()
 {
     ndspInit();
 
@@ -196,11 +280,10 @@ static bool audio_3ds_init()
     ndspChnSetRate(0, PLAYBACK_RATE);
     ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
 
-    float mix[12];
-    memset(mix, 0, sizeof(mix));
-    mix[0] = 1.0;
-    mix[1] = 1.0;
-    ndspChnSetMix(0, mix);
+    memset(ndsp_mix.raw, 0, sizeof(ndsp_mix));
+    ndsp_mix.mix.main.volume_left = 1.0;
+    ndsp_mix.mix.main.volume_right = 1.0;
+    ndspChnSetMix(0, ndsp_mix.raw);
 
     u8* bufferData = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
     for (int i = 0; i < N3DS_DSP_DMA_BUFFER_COUNT; i++)
@@ -212,31 +295,12 @@ static bool audio_3ds_init()
     }
 
     sNextBuffer = 0;
-    
-    if (is_new_n3ds())
-        s_audio_cpu = NEW_CORE_2; // n3ds 3rd core
+}
 
-    else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT)))
-        s_audio_cpu = OLD_CORE_1; // o3ds 2nd core (system)
-
-    else
-        s_audio_cpu = OLD_CORE_0; // Run in Thread5
-
-    if (s_audio_cpu != OLD_CORE_0) {
-        threadId = threadCreate(audio_3ds_loop, 0, 64 * 1024, 0x18, s_audio_cpu, true);
-
-        if (threadId != NULL) {
-            s_thread5_does_audio = false;
-            printf("Created audio thread on core %i\n", s_audio_cpu);
-        } else {
-            s_thread5_does_audio = true;
-            printf("Failed to create audio thread. Using Thread5.\n");
-        }
-    } else {
-        s_thread5_does_audio = true;
-        printf("Using Thread5 for audio, as program CPU time limit failed.\n");
-    }
-
+static bool audio_3ds_init()
+{
+    audio_3ds_initialize_dsp();
+    audio_3ds_initialize_thread();
     return true;
 }
 
@@ -249,6 +313,13 @@ static void audio_3ds_stop(void)
         threadJoin(threadId, U64_MAX);
 
     ndspExit();
+}
+
+void audio_3ds_set_dsp_volume(float left, float right)
+{
+    ndsp_mix.mix.main.volume_left = left;
+    ndsp_mix.mix.main.volume_right = right;
+    ndspChnSetMix(0, ndsp_mix.raw);
 }
 
 struct AudioAPI audio_3ds =

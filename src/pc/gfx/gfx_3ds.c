@@ -9,6 +9,7 @@
 #include "gfx_citro3d.h"
 
 #include "src/pc/audio/audio_3ds_threading.h"
+#include "src/pc/audio/audio_3ds.h"
 
 #define u64 __3ds_u64
 #define s64 __3ds_s64
@@ -254,11 +255,10 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
 
     printf("AptHook caught: %s.\n", eventName);
 
-    // Wait for async audio to finish. Synchronous will already be done anyway.
-    if (!s_thread5_does_audio) {
-        while (appSuspendCounter > 0 && s_audio_thread_processing)
-            svcSleepThread(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-    }
+    // Mute audio when sleeping, unmute when waking
+    const float vol = appSuspendCounter > 0 ? 0.0f : 1.0f;
+    printf("Setting NDSP volume to: %f\n", vol);
+    audio_3ds_set_dsp_volume(vol, vol);
 
     // Lower CPU priority only if applicable
     if (s_audio_cpu == OLD_CORE_1) {
@@ -325,7 +325,7 @@ static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
         if (appSuspendCounter == 0)
             run_one_game_iter();
         else
-            svcSleepThread(N3DS_AUDIO_MILLIS_TO_NANOS(33));
+            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
     }
 
     aptSetSleepAllowed(false);

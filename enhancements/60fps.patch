@@ -1,8 +1,8 @@
 diff --git a/Makefile b/Makefile
-index 935ab8c..37cb564 100644
+index 780e51b..6033981 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -500,7 +500,7 @@ ifeq ($(TARGET_N3DS),1)
+@@ -504,7 +504,7 @@ ifeq ($(TARGET_N3DS),1)
    CTRULIB  :=  $(DEVKITPRO)/libctru
    LIBDIRS  := $(CTRULIB)
    export LIBPATHS  :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
@@ -1869,10 +1869,10 @@ index cd9f13c..abfb71e 100644
          gSPDisplayList(displayListIter++, &intro_seg7_dl_0700B3A0);
          gSPPopMatrix(displayListIter++, G_MTX_MODELVIEW);
 diff --git a/src/pc/gfx/gfx_3ds.c b/src/pc/gfx/gfx_3ds.c
-index 2d8bec7..d697910 100644
+index 008d9ec..37c1749 100644
 --- a/src/pc/gfx/gfx_3ds.c
 +++ b/src/pc/gfx/gfx_3ds.c
-@@ -34,9 +34,9 @@
+@@ -35,9 +35,9 @@
  
  // wait a quarter second between mashing
  #ifdef VERSION_EU

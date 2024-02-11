@@ -72,7 +72,7 @@ AccessControlInfo:
   IdealProcessor                : 0
   AffinityMask                  : 1
   Priority                      : 16
-  MaxCpu                        : 0
+  MaxCpu                        : 0xFF
   HandleTableSize               : 0x200
   DisableDebug                  : false
   EnableForceDebug              : false
@@ -118,6 +118,7 @@ AccessControlInfo:
     DuplicateHandle: 39
     ExitProcess: 3
     ExitThread: 9
+    FlushProcessDataCache: 84
     GetCurrentProcessorNumber: 17
     GetHandleInfo: 41
     GetProcessId: 53
