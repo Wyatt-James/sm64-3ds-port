@@ -29,21 +29,30 @@
 #define N3DS_DSP_DMA_BUFFER_SIZE 4096 * 4
 #define N3DS_DSP_N_CHANNELS 2
 
+// Definitions taken from libctru comments
 union NdspMix {
     float raw[12];
     struct {
-        float volume_left;
-        float volume_right;
-        float unknown_2;
-        float unknown_3;
-        float unknown_4;
-        float unknown_5;
-        float unknown_6;
-        float unknown_7;
-        float unknown_8;
-        float unknown_9;
-        float unknown_10;
-        float unknown_11;
+        struct {
+            float volume_left;
+            float volume_right;
+            float volume_back_left;
+            float volume_back_right;
+        } main;
+
+        struct {
+            float volume_left;
+            float volume_right;
+            float volume_back_left;
+            float volume_back_right;
+        } aux_0;
+
+        struct {
+            float volume_left;
+            float volume_right;
+            float volume_back_left;
+            float volume_back_right;
+        } aux_1;
     } mix;
 };
 
@@ -272,8 +281,8 @@ static void audio_3ds_initialize_dsp()
     ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
 
     memset(ndsp_mix.raw, 0, sizeof(ndsp_mix));
-    ndsp_mix.mix.volume_left = 1.0;
-    ndsp_mix.mix.volume_right = 1.0;
+    ndsp_mix.mix.main.volume_left = 1.0;
+    ndsp_mix.mix.main.volume_right = 1.0;
     ndspChnSetMix(0, ndsp_mix.raw);
 
     u8* bufferData = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
@@ -308,8 +317,8 @@ static void audio_3ds_stop(void)
 
 void audio_3ds_set_dsp_volume(float left, float right)
 {
-    ndsp_mix.mix.volume_left = left;
-    ndsp_mix.mix.volume_right = right;
+    ndsp_mix.mix.main.volume_left = left;
+    ndsp_mix.mix.main.volume_right = right;
     ndspChnSetMix(0, ndsp_mix.raw);
 }
 
