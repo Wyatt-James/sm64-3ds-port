@@ -41,6 +41,8 @@
 
 #endif
 
+// Function definitions and #define relays to them.
+#if PROFILER_3DS_ENABLE == 1
 
 // Loggers and Calculators
 void profiler_3ds_log_time_impl(uint32_t id); // Logs a time with the given ID.
@@ -65,8 +67,6 @@ void   profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_unt
 int    profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint32_t max_id_to_print); // Creates a log string of the circular buffer and stores it in log_string. Returns 0 if successful, or -1 if the buffer could not fit the string.
 void   profiler_3ds_snoop_impl(uint32_t snoop_id); // Computes some useful information for the timestamps. Intended for debugger use.
 
-// Relays to the actual functions
-#if PROFILER_3DS_ENABLE == 1
 
 // Loggers and Calculators
 #define profiler_3ds_log_time(id)                     profiler_3ds_log_time_impl(id) // Logs a time with the given ID.
@@ -91,7 +91,7 @@ void   profiler_3ds_snoop_impl(uint32_t snoop_id); // Computes some useful infor
 #define profiler_3ds_create_log_string_circular(min, max) profiler_3ds_create_log_string_circular_impl(min, max) // Creates a log string of the circular buffer and stores it in log_string. Returns 0 if successful, or -1 if the buffer could not fit the string.
 #define profiler_3ds_snoop(sid)                           profiler_3ds_snoop_impl(sid) // Computes some useful information for the timestamps. Intended for debugger use.
 
-// Stubs used when the profiler is disabled
+// Stubs used when the profiler is disabled. Also note that functions aren't even defined.
 #else
 
 #define profiler_3ds_log_time(id)                                    do {} while (0) // Profiler is disabled.
