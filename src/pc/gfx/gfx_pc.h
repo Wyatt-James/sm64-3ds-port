@@ -9,6 +9,7 @@ struct GfxWindowManagerAPI;
 struct GfxDimensions {
     uint32_t width, height;
     float aspect_ratio;
+    float aspect_ratio_factor; // Used to save TWO DIVISIONS A FRAME per vertex. Good enough for even PC.
 };
 
 extern struct GfxDimensions gfx_current_dimensions;

@@ -73,7 +73,7 @@ static volatile uint32_t circ_num_frames = 1; // Number of frames encountered in
 static volatile uint32_t circ_cur_frame = 0, circ_next_frame = 0; // Circular buffer indices
 
 // Updated per-snoop-ID each profiler_3ds_snoop_impl() call; used for breakpoints.
-static volatile uint8_t snoop_interval = PROFILER_3DS_NUM_CIRCULAR_FRAMES + 5;
+static volatile uint8_t snoop_interval = 180;
 static volatile uint8_t snoop_counters[PROFILER_3DS_NUM_TRACKED_SNOOP_IDS];
 
 static char log_string[PROFILER_3DS_LOG_STRING_LENGTH];
@@ -387,25 +387,13 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
     // IDs:
     // 0:  Misc
-    // 1:  ADPCM Copy
-    // 2:  ADPCM Decode
-    // 3:  Non-resample note end
-    // 4:  High-pitch part 1 end
-    // 5:  High-pitch part 2 end
-    // 6:  Final Resample
-    // 7:  Envelope
-    // 8:  Headset Pan
-    // 9:  Interleave
-    // 10: Output Copy
-    // 11: Envelope Stereo Buffer Stuff
-    // 12: Envelope volume settings
-    // 13: EnvMixer Reverb
-    // 14: Mix Reverb
-    // 15: EnvMixer Non-Reverb
-    // 16: Mix Non-Reverb
-    // 17: 3DS export to DSP
-    // 18: Dummy Wait
-    // 19: Sequence Processing
+    // 1:  Run Level Script
+    // 2:  Synchronous Audio Synthesis
+    // 3:  Render Game
+    // 4:  GFX RAPI Start Frame
+    // 5:  GFX Run DL
+    // 6:  gfx_sp_vertex
+    // 7:  gfx_sp_tri1
 
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;
@@ -425,7 +413,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 19);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 7);
                     
                     i += 5; // Place a breakpoint here
                     break;

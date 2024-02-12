@@ -10,6 +10,7 @@
 
 #include "src/pc/audio/audio_3ds_threading.h"
 #include "src/pc/audio/audio_3ds.h"
+#include "src/pc/profiler_3ds.h"
 
 #define u64 __3ds_u64
 #define s64 __3ds_s64
@@ -319,12 +320,16 @@ static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
 {
     aptHook(&apt_hook_cookie, gfx_3ds_apt_hook, NULL);
     aptSetSleepAllowed(true);
+    profiler_3ds_init();
 
     while (aptMainLoop() && gShouldRun)
     {
-        if (appSuspendCounter == 0)
+        if (appSuspendCounter == 0) {
+            profiler_3ds_linear_reset();
+            profiler_3ds_circular_advance_frame();
             run_one_game_iter();
-        else
+            profiler_3ds_snoop(0);
+        } else
             N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
     }
 

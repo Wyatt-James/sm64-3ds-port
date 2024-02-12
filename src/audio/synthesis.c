@@ -12,7 +12,6 @@
 #endif
 
 #ifdef TARGET_N3DS
-#include "src/pc/profiler_3ds.h"
 #include "src/pc/audio/audio_3ds.h"
 static s16* sCurAiBufBasePtr = NULL;
 
@@ -347,10 +346,7 @@ u64 *synthesis_execute(u64 *cmdBuf, s32 *writtenCmds, s16 *aiBuf, s32 bufLen) {
             }
         }
 
-        profiler_3ds_log_time(0);
         process_sequences(i - 1);
-        profiler_3ds_log_time(19); // Sequence Processing
-        
         
         if (gSynthesisReverb.useReverb != 0) {
             prepare_reverb_ring_buffer(chunkLen, gAudioUpdatesPerFrame - i);
@@ -1560,7 +1556,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                                 noteFinished = true;
                         }
 
-                        profiler_3ds_log_time(0);
 
 #ifdef ENHANCED_RSPA_EMULATION
 
@@ -1596,7 +1591,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                             sampleDataOffset = 0;
                         }
 #endif
-                        profiler_3ds_log_time(1); // ADPCM Copy
 
                         // If we need to restart the note, loop it
                         if (note->restart != FALSE) {
@@ -1606,8 +1600,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                         }
 
                         const s32 nSamplesInThisIteration = nUncompressedSamplesThisIteration + samplesSkippedThisIteration - s3;
-
-                        profiler_3ds_log_time(0);
 
 #ifdef ENHANCED_RSPA_EMULATION
                         
@@ -1660,7 +1652,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                                 nSamplesInThisIteration * 2); // nbytes
                         }
 #endif
-                        profiler_3ds_log_time(2); // ADPCM Decode
 
                         nAdpcmSamplesProcessed += nSamplesInThisIteration;
 
@@ -1712,16 +1703,13 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
                         // If we have one part, don't resample.
                         case 1:
-                            profiler_3ds_log_time(0);
                             noteSamplesDmemAddrBeforeResampling = DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset;
-                            profiler_3ds_log_time(3); // Non-resample note end
                             break;
 
                         // If we have two parts (high-pitched notes), resample
                         case 2:
                             switch (curPart) {
                                 case 0:
-                                    profiler_3ds_log_time(0);
                                     aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset, DMEM_ADDR_RESAMPLED, samplesLenAdjusted + 4);
                                     aResample(cmd++, A_INIT, 0xff60, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->dummyResampleState));
                                     resampledTempLen = samplesLenAdjusted + 4;
@@ -1729,11 +1717,9 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                                     if (note->finished != FALSE) {
                                         aClearBuffer(cmd++, DMEM_ADDR_RESAMPLED + resampledTempLen, samplesLenAdjusted + 0x10);
                                     }
-                                    profiler_3ds_log_time(4); // High-pitch part 1 end
                                     break;
 
                                 case 1:
-                                    profiler_3ds_log_time(0);
                                     aSetBuffer(cmd++, 0, DMEM_ADDR_UNCOMPRESSED_NOTE + samplePosAlignmentOffset,
                                                DMEM_ADDR_RESAMPLED2,
                                                samplesLenAdjusted + 8);
@@ -1743,7 +1729,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                                     aDMEMMove(cmd++, DMEM_ADDR_RESAMPLED2 + 4,
                                               DMEM_ADDR_RESAMPLED + resampledTempLen,
                                               samplesLenAdjusted + 4);
-                                    profiler_3ds_log_time(5); // High-pitch part 2 end
                                     break;
                             }
                     }
@@ -1765,26 +1750,20 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
                 note->needsInit = FALSE;
             }
 
-            profiler_3ds_log_time(0);
             cmd = final_resample(cmd, note, bufLen * 2, resamplingRateFixedPoint,
                                  noteSamplesDmemAddrBeforeResampling, flags);
-            profiler_3ds_log_time(6); // Final Resample
 
             // panRight = 1, panLeft = 2, else 0
             const u16 panRight = note->headsetPanRight | note->prevHeadsetPanRight;
             const u16 panLeft = note->headsetPanLeft | note->prevHeadsetPanLeft;
             const s32 panSettings = panRight ? 1 : (panLeft ? 2 : 0);
 
-            // profiler_3ds_log_time(0);
             // Stereo panning is handled here
             cmd = process_envelope(cmd, note, bufLen, DMEM_ADDR_TEMP, panSettings, flags);
-            // profiler_3ds_log_time(7); // Envelope
 
             // Only ever set if gSoundMode == HEADSET. Applies extra panning nonsense.
             if (note->usesHeadsetPanEffects) {
-                profiler_3ds_log_time(0);
                 cmd = note_apply_headset_pan_effects(cmd, note, bufLen * 2, flags, panSettings);
-                profiler_3ds_log_time(8); // Headset pan
             }
 
         } // end of if(data is not yet loaded) {skip note} else {process note}
@@ -1796,7 +1775,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
 
 // If possible, interleave directly into the output buf and skip the discrete copy.
 #ifdef ENHANCED_RSPA_EMULATION
-    profiler_3ds_log_time(0); // Interleave
     const s32 outputBufLen = bufLen * 2;
     aSetBuffer(cmd++, 0, 0, /*Unused OUT*/ 0, outputBufLen);
 
@@ -1809,17 +1787,13 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
     );
 
     aInterleaveAndCopy(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH, aiBuf);
-    profiler_3ds_log_time(9); // Interleave
 
 // Else if enhanced RSPA Emulation is disabled, move to the copy buf.
 #else
-    profiler_3ds_log_time(0);
     const s32 outputBufLen = bufLen * 2;
     aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, outputBufLen);
     aInterleave(cmd++, DMEM_ADDR_LEFT_CH, DMEM_ADDR_RIGHT_CH);
-    profiler_3ds_log_time(9); // Interleave
 
-    profiler_3ds_log_time(0);
     aSetBuffer(cmd++, 0, 0, DMEM_ADDR_TEMP, outputBufLen * 2);
 
     // Avoid redundant copy on 3DS when possible
@@ -1831,8 +1805,6 @@ u64 *synthesis_process_notes(s16 *aiBuf, s32 bufLen, u64 *cmd) {
     );
 
     aSaveBuffer(cmd++, VIRTUAL_TO_PHYSICAL2(aiBuf));
-
-    profiler_3ds_log_time(10); // Output copy
 #endif
 
     return cmd;
@@ -1942,7 +1914,6 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
     // in, dry left, count without A_AUX flag.
     // dry right, wet left, wet right with A_AUX flag.
 
-    profiler_3ds_log_time(0);
     if (note->usesHeadsetPanEffects) {
         aClearBuffer(cmd++, DMEM_ADDR_NOTE_PAN_TEMP, DEFAULT_LEN_1CH);
 
@@ -1982,7 +1953,6 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
             aSetBuffer(cmd++, A_AUX, DMEM_ADDR_RIGHT_CH, DMEM_ADDR_WET_LEFT_CH, DMEM_ADDR_WET_RIGHT_CH);
         }
     }
-    profiler_3ds_log_time(11); // Envelope Stereo Buffer Stuff
 
 #ifdef VERSION_EU
     if (targetLeft == sourceLeft && targetRight == sourceRight && !note->envMixerNeedsInit) {
@@ -2017,7 +1987,6 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
         aSetVolume(cmd++, A_AUX, gVolume, 0, note->reverbVol);
 #endif
     }
-    profiler_3ds_log_time(12); // Envelope volume settings
 
 #ifdef VERSION_EU
     if (gUseReverb && note->reverbVol != 0) {
@@ -2028,7 +1997,6 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
         aEnvMixer(cmd++, mixerFlags | A_AUX,
                   VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->mixEnvelopeState));
 #endif
-        profiler_3ds_log_time(13); // EnvMixer Reverb
         if (note->stereoStrongRight) {
             aSetBuffer(cmd++, 0, 0, 0, nSamples * 2);
             // 0x8000 is -100%, so subtract sound instead of adding...
@@ -2043,14 +2011,12 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
             aMix(cmd++, 0, /*gain*/ 0x8000, /*in*/ DMEM_ADDR_STEREO_STRONG_TEMP_WET,
                  /*out*/ DMEM_ADDR_WET_RIGHT_CH);
         }
-        profiler_3ds_log_time(14); // Mix Reverb
     } else {
 #ifdef VERSION_EU
         aEnvMixer(cmd++, mixerFlags, VIRTUAL_TO_PHYSICAL2(synthesisState->synthesisBuffers->mixEnvelopeState));
 #else
         aEnvMixer(cmd++, mixerFlags, VIRTUAL_TO_PHYSICAL2(note->synthesisBuffers->mixEnvelopeState));
 #endif
-        profiler_3ds_log_time(15); // EnvMixer Non-Reverb
         if (note->stereoStrongRight) {
             aSetBuffer(cmd++, 0, 0, 0, nSamples * 2);
             aMix(cmd++, 0, /*gain*/ 0x8000, /*in*/ DMEM_ADDR_STEREO_STRONG_TEMP_DRY,
@@ -2060,7 +2026,6 @@ u64 *process_envelope(u64 *cmd, struct NoteSubEu *note, struct NoteSynthesisStat
             aMix(cmd++, 0, /*gain*/ 0x8000, /*in*/ DMEM_ADDR_STEREO_STRONG_TEMP_DRY,
                  /*out*/ DMEM_ADDR_RIGHT_CH);
         }
-        profiler_3ds_log_time(16); // Mix Non-Reverb
     }
     return cmd;
 }
