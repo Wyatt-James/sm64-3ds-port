@@ -917,6 +917,7 @@ static void gfx_citro3d_start_frame(void)
     Mtx_Multiply(&projection, &projection, &DEPTH_ADD_W_MTX);
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &IDENTITY_MTX);
 }
 
 
