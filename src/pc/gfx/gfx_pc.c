@@ -48,6 +48,11 @@
 
 #define U32_AS_FLOAT(v) (*(float*) &v)
 
+const float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
+                                  {0.0f, 1.0f, 0.0f, 0.0f},
+                                  {0.0f, 0.0f, 1.0f, 0.0f},
+                                  {0.0f, 0.0f, 0.0f, 1.0f}};
+
 struct RGBA {
     uint8_t r, g, b, a;
 };
@@ -1292,6 +1297,10 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
         rdp.other_mode_h = (rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT;
     }
 
+    // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
+    gfx_flush();
+    gfx_citro3d_set_model_view_matrix(MTX_IDENTITY);
+
     // U10.2 coordinates
     float ulxf = ulx;
     float ulyf = uly;
@@ -1303,8 +1312,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     lrxf = lrxf / (4.0f * HALF_SCREEN_WIDTH) - 1.0f;
     lryf = -(lryf / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f;
 
-    ulxf = gfx_adjust_x_for_aspect_ratio(ulxf);
-    lrxf = gfx_adjust_x_for_aspect_ratio(lrxf);
+    // ulxf = gfx_adjust_x_for_aspect_ratio(ulxf);
+    // lrxf = gfx_adjust_x_for_aspect_ratio(lrxf);
 
     struct LoadedVertex* ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
     struct LoadedVertex* ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
@@ -1342,6 +1351,10 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     gfx_sp_tri1(MAX_VERTICES + 0, MAX_VERTICES + 1, MAX_VERTICES + 3);
     gfx_sp_tri1(MAX_VERTICES + 1, MAX_VERTICES + 2, MAX_VERTICES + 3);
+
+    // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
+    gfx_flush();
+    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
 
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
