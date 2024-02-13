@@ -25,4 +25,6 @@ void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum Vie
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4]);
 
+void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode);
+
 #endif

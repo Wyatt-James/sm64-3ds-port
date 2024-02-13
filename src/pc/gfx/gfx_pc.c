@@ -147,6 +147,7 @@ static struct RenderingState {
     bool depth_mask;
     bool decal_mode;
     bool alpha_blend;
+    s32 culling_mode;
     struct XYWidthHeight viewport, scissor;
     struct ShaderProgram *shader_program;
     struct TextureHashmapNode *textures[2];
@@ -733,8 +734,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->z = v->ob[2];
         d->w = 1.0f;
 
-        // WYATT_TODO implement fog in fragment shader
-        // if (rsp.geometry_mode & G_FOG) {
+        // WYATT_TODO implement fog in vertex shader
+        if (rsp.geometry_mode & G_FOG) {
         //     if (fabsf(w) < 0.001f) {
         //         // To avoid division by zero
         //         w = 0.001f;
@@ -749,9 +750,10 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         //     if (fog_z < 0) fog_z = 0;
         //     if (fog_z > 255) fog_z = 255;
         //     d->color.a = fog_z; // Use alpha variable to store fog factor
-        // } else {
-        //     d->color.a = v->cn[3];
-        // }
+            d->color.a = 0;
+        } else {
+            d->color.a = v->cn[3];
+        }
     }
     profiler_3ds_log_time(6); // gfx_sp_vertex
 }
@@ -815,6 +817,13 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 //         }
 // #endif
 //     }
+
+    uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
+    if (culling_mode != rendering_state.culling_mode) {
+        gfx_flush();
+        gfx_citro3d_set_backface_culling_mode(culling_mode);
+        rendering_state.culling_mode = culling_mode;
+    }
 
     bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (depth_test != rendering_state.depth_test) {
@@ -1749,6 +1758,7 @@ void gfx_run(Gfx *commands) {
     profiler_3ds_log_time(0);
     gfx_rapi->start_frame();
     profiler_3ds_log_time(4); // GFX RAPI Start Frame
+    gfx_citro3d_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
 
     // profiler_3ds_log_time(0);
     gfx_run_dl(commands);

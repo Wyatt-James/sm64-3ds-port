@@ -20,7 +20,10 @@
 
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v) (*(float*) &v)
-#define DEFAULT_CULL_MODE GPU_CULL_BACK_CCW
+#define DEFAULT_CULL_MODE GPU_CULL_NONE
+
+
+static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
@@ -865,6 +868,11 @@ static void gfx_citro3d_init(void)
 #else
     C3D_FrameRate(30);
 #endif
+
+    Mtx_Identity(&IDENTITY_MTX);
+    
+    Mtx_Identity(&DEPTH_ADD_W_MTX);
+    DEPTH_ADD_W_MTX.r[2].w = 1.0f;
 }
 
 void sm64_to_c3d_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
@@ -898,7 +906,6 @@ static void gfx_citro3d_start_frame(void)
     screen_clear_bufs.struc.top = 
     screen_clear_bufs.struc.bottom = VIEW_CLEAR_BUFFER_NONE;
 
-    // reset model view matrix
     Mtx_Identity(&projection);
     // 3DS screen is rotated 90 degrees
     Mtx_RotateZ(&projection, 0.75f*M_TAU, false);
@@ -906,10 +913,11 @@ static void gfx_citro3d_start_frame(void)
     // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
     const uint32_t float_as_int = 0x3F4CCCCD;
     Mtx_Scale(&projection, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
+    
+    // z = (z + w) * -0.5
+    Mtx_Multiply(&projection, &projection, &DEPTH_ADD_W_MTX);
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-    
-    C3D_CullFace(DEFAULT_CULL_MODE); // WYATT_TODO figure out proper backface culling
 }
 
 
@@ -919,12 +927,33 @@ void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
 }
 
+void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
+{
+    GPU_CULLMODE mode;
+    switch (culling_mode & G_CULL_BOTH) {
+        case 0:
+            mode = GPU_CULL_NONE;
+            break;
+        case G_CULL_FRONT:
+            mode = GPU_CULL_FRONT_CCW;
+            break;
+        default:
+            mode = GPU_CULL_BACK_CCW;
+            break;
+    }
+    C3D_CullFace(mode);
+}
+
 static void gfx_citro3d_on_resize(void)
 {
 }
 
 static void gfx_citro3d_end_frame(void)
 {
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &IDENTITY_MTX);
+    C3D_CullFace(GPU_CULL_NONE);
+
     // TOOD: draw the minimap here
     gfx_3ds_menu_draw(sVboBuffer, sBufIdx, gShowConfigMenu);
 
