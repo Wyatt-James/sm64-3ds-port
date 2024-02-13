@@ -387,9 +387,11 @@ void render_game(void) {
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush HUD, text labels and cutscene text
         gDPSet2d(gDisplayListHead++, 2); // set mode2
+#endif
 
         render_press_start(); // "press start" handler
 
+#ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush press start
         gDPSet2d(gDisplayListHead++, 3); // credits are mode3
 #endif
