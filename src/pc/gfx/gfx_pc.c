@@ -765,9 +765,9 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 
         // Calculating these here saves a few divides, and divides on 3DS are painfully slow.
         // GCC is smart enough to only do 6 divides, but we can do 3.
-        const float recip1 = 1 / v1->w,
-                    recip2 = 1 / v2->w,
-                    recip3 = 1 / v3->w;
+        const float recip1 = 1.0f / v1->w,
+                    recip2 = 1.0f / v2->w,
+                    recip3 = 1.0f / v3->w;
 
         const float dx1 = v1->x * recip1 - v2->x * recip2;
         const float dy1 = v1->y * recip1 - v2->y * recip2;
