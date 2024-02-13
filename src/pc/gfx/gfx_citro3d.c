@@ -19,6 +19,8 @@
 #define FOG_LUT_SIZE 32
 
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
+#define U32_AS_FLOAT(v) (*(float*) &v)
+#define DEFAULT_CULL_MODE GPU_CULL_BACK_CCW
 
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
@@ -853,7 +855,7 @@ static void gfx_citro3d_init(void)
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, sVboBuffer, VERTEX_SHADER_SIZE * 4, 3, 0x210);
 
-    C3D_CullFace(GPU_CULL_NONE);
+    C3D_CullFace(DEFAULT_CULL_MODE); // WYATT_TODO figure out proper backface culling
     C3D_DepthMap(true, -1.0f, 0);
     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
     C3D_AlphaTest(true, GPU_GREATER, 0x00);
@@ -863,6 +865,14 @@ static void gfx_citro3d_init(void)
 #else
     C3D_FrameRate(30);
 #endif
+}
+
+void sm64_to_c3d_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
+{ 
+    c3d_mtx->r[0].x = sm64_mtx[0][0]; c3d_mtx->r[0].y = sm64_mtx[1][0]; c3d_mtx->r[0].z = sm64_mtx[2][0]; c3d_mtx->r[0].w = sm64_mtx[3][0];
+    c3d_mtx->r[1].x = sm64_mtx[0][1]; c3d_mtx->r[1].y = sm64_mtx[1][1]; c3d_mtx->r[1].z = sm64_mtx[2][1]; c3d_mtx->r[1].w = sm64_mtx[3][1];
+    c3d_mtx->r[2].x = sm64_mtx[0][2]; c3d_mtx->r[2].y = sm64_mtx[1][2]; c3d_mtx->r[2].z = sm64_mtx[2][2]; c3d_mtx->r[2].w = sm64_mtx[3][2];
+    c3d_mtx->r[3].x = sm64_mtx[0][3]; c3d_mtx->r[3].y = sm64_mtx[1][3]; c3d_mtx->r[3].z = sm64_mtx[2][3]; c3d_mtx->r[3].w = sm64_mtx[3][3];
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -889,14 +899,24 @@ static void gfx_citro3d_start_frame(void)
     screen_clear_bufs.struc.bottom = VIEW_CLEAR_BUFFER_NONE;
 
     // reset model view matrix
-    Mtx_Identity(&modelView);
-    // 3DS screen is rotated 90 degrees
-    Mtx_RotateZ(&modelView, 0.75f*M_TAU, false);
-    // reset projection
     Mtx_Identity(&projection);
-    // set uniforms
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
+    // 3DS screen is rotated 90 degrees
+    Mtx_RotateZ(&projection, 0.75f*M_TAU, false);
+
+    // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
+    const uint32_t float_as_int = 0x3F4CCCCD;
+    Mtx_Scale(&projection, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
+
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+    
+    C3D_CullFace(DEFAULT_CULL_MODE); // WYATT_TODO figure out proper backface culling
+}
+
+
+void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
+{
+    sm64_to_c3d_mtx(mtx, &modelView);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
 }
 
 static void gfx_citro3d_on_resize(void)

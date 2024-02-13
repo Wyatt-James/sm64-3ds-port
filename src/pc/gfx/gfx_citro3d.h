@@ -23,4 +23,6 @@ void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color);
 // All flags provided will be cleared on gfx_citro3d_start_frame().
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode);
 
+void gfx_citro3d_set_model_view_matrix(float mtx[4][4]);
+
 #endif

@@ -15,6 +15,7 @@
 #include "gfx_window_manager_api.h"
 #include "gfx_rendering_api.h"
 #include "gfx_screen_config.h"
+#include "src/pc/gfx/gfx_citro3d.h"
 
 #ifdef TARGET_N3DS
 #include "gfx_3ds.h"
@@ -564,6 +565,7 @@ static void gfx_matrix_mul(float res[4][4], const float a[4][4], const float b[4
 }
 
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
+    gfx_flush();
     float matrix[4][4];
 #ifndef GBI_FLOATS
     // Original GBI where fixed point matrices are used
@@ -599,9 +601,13 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         rsp.lights_changed = 1;
     }
     gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+    
+    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
 }
 
+
 static void gfx_sp_pop_matrix(uint32_t count) {
+    gfx_flush();
     while (count--) {
         if (rsp.modelview_matrix_stack_size > 0) {
             --rsp.modelview_matrix_stack_size;
@@ -610,6 +616,8 @@ static void gfx_sp_pop_matrix(uint32_t count) {
             }
         }
     }
+
+    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
 }
 
 static float gfx_adjust_x_for_aspect_ratio(float x) {
@@ -631,12 +639,12 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         const Vtx_tn *vn = &vertices[i].n;
         struct LoadedVertex *d = &rsp.loaded_vertices[dest_index];
 
-        float x = v->ob[0] * rsp.MP_matrix[0][0] + v->ob[1] * rsp.MP_matrix[1][0] + v->ob[2] * rsp.MP_matrix[2][0] + rsp.MP_matrix[3][0];
-        float y = v->ob[0] * rsp.MP_matrix[0][1] + v->ob[1] * rsp.MP_matrix[1][1] + v->ob[2] * rsp.MP_matrix[2][1] + rsp.MP_matrix[3][1];
-        float z = v->ob[0] * rsp.MP_matrix[0][2] + v->ob[1] * rsp.MP_matrix[1][2] + v->ob[2] * rsp.MP_matrix[2][2] + rsp.MP_matrix[3][2];
-        float w = v->ob[0] * rsp.MP_matrix[0][3] + v->ob[1] * rsp.MP_matrix[1][3] + v->ob[2] * rsp.MP_matrix[2][3] + rsp.MP_matrix[3][3];
+        // float x = v->ob[0] * rsp.MP_matrix[0][0] + v->ob[1] * rsp.MP_matrix[1][0] + v->ob[2] * rsp.MP_matrix[2][0] + rsp.MP_matrix[3][0];
+        // float y = v->ob[0] * rsp.MP_matrix[0][1] + v->ob[1] * rsp.MP_matrix[1][1] + v->ob[2] * rsp.MP_matrix[2][1] + rsp.MP_matrix[3][1];
+        // float z = v->ob[0] * rsp.MP_matrix[0][2] + v->ob[1] * rsp.MP_matrix[1][2] + v->ob[2] * rsp.MP_matrix[2][2] + rsp.MP_matrix[3][2];
+        // float w = v->ob[0] * rsp.MP_matrix[0][3] + v->ob[1] * rsp.MP_matrix[1][3] + v->ob[2] * rsp.MP_matrix[2][3] + rsp.MP_matrix[3][3];
 
-        x = gfx_adjust_x_for_aspect_ratio(x);
+        // x = gfx_adjust_x_for_aspect_ratio(x);
 
         short U = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
         short V = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
@@ -697,52 +705,53 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 
         // trivial clip rejection
         d->clip_rej = 0;
-#ifdef TARGET_N3DS
-    if (gGfx3DEnabled) {
-        float wMod = w * 1.2f; // expanded w-range for testing clip rejection
-        if (x < -wMod) d->clip_rej |= 1;
-        if (x > wMod) d->clip_rej |= 2;
-        if (y < -wMod) d->clip_rej |= 4;
-        if (y > wMod) d->clip_rej |= 8;
-    }
-    else {
-        if (x < -w) d->clip_rej |= 1;
-        if (x > w) d->clip_rej |= 2;
-        if (y < -w) d->clip_rej |= 4;
-        if (y > w) d->clip_rej |= 8;
-    }
-#else
-        if (x < -w) d->clip_rej |= 1;
-        if (x > w) d->clip_rej |= 2;
-        if (y < -w) d->clip_rej |= 4;
-        if (y > w) d->clip_rej |= 8;
-#endif
-        if (z < -w) d->clip_rej |= 16;
-        if (z > w) d->clip_rej |= 32;
+// #ifdef TARGET_N3DS
+//     if (gGfx3DEnabled) {
+//         float wMod = w * 1.2f; // expanded w-range for testing clip rejection
+//         if (x < -wMod) d->clip_rej |= 1;
+//         if (x > wMod) d->clip_rej |= 2;
+//         if (y < -wMod) d->clip_rej |= 4;
+//         if (y > wMod) d->clip_rej |= 8;
+//     }
+//     else {
+//         if (x < -w) d->clip_rej |= 1;
+//         if (x > w) d->clip_rej |= 2;
+//         if (y < -w) d->clip_rej |= 4;
+//         if (y > w) d->clip_rej |= 8;
+//     }
+// #else
+//         if (x < -w) d->clip_rej |= 1;
+//         if (x > w) d->clip_rej |= 2;
+//         if (y < -w) d->clip_rej |= 4;
+//         if (y > w) d->clip_rej |= 8;
+// #endif
+//         if (z < -w) d->clip_rej |= 16;
+//         if (z > w) d->clip_rej |= 32;
 
-        d->x = x;
-        d->y = y;
-        d->z = z;
-        d->w = w;
+        d->x = v->ob[0];
+        d->y = v->ob[1];
+        d->z = v->ob[2];
+        d->w = 1.0f;
 
-        if (rsp.geometry_mode & G_FOG) {
-            if (fabsf(w) < 0.001f) {
-                // To avoid division by zero
-                w = 0.001f;
-            }
+        // WYATT_TODO implement fog in fragment shader
+        // if (rsp.geometry_mode & G_FOG) {
+        //     if (fabsf(w) < 0.001f) {
+        //         // To avoid division by zero
+        //         w = 0.001f;
+        //     }
 
-            float winv = 1.0f / w;
-            if (winv < 0.0f) {
-                winv = 32767.0f;
-            }
+        //     float winv = 1.0f / w;
+        //     if (winv < 0.0f) {
+        //         winv = 32767.0f;
+        //     }
 
-            float fog_z = z * winv * rsp.fog_mul + rsp.fog_offset;
-            if (fog_z < 0) fog_z = 0;
-            if (fog_z > 255) fog_z = 255;
-            d->color.a = fog_z; // Use alpha variable to store fog factor
-        } else {
-            d->color.a = v->cn[3];
-        }
+        //     float fog_z = z * winv * rsp.fog_mul + rsp.fog_offset;
+        //     if (fog_z < 0) fog_z = 0;
+        //     if (fog_z > 255) fog_z = 255;
+        //     d->color.a = fog_z; // Use alpha variable to store fog factor
+        // } else {
+        //     d->color.a = v->cn[3];
+        // }
     }
     profiler_3ds_log_time(6); // gfx_sp_vertex
 }
@@ -754,58 +763,58 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
     struct LoadedVertex *v_arr[3] = {v1, v2, v3};
 
-    //if (rand()%2) return;
+    // if (rand()%2) return;
 
-    if (v1->clip_rej & v2->clip_rej & v3->clip_rej) {
-        // The whole triangle lies outside the visible area
-        return;
-    }
+    // if (v1->clip_rej & v2->clip_rej & v3->clip_rej) {
+    //     // The whole triangle lies outside the visible area
+    //     return;
+    // }
 
-    if (rsp.geometry_mode & G_CULL_BOTH) {
+//     if (rsp.geometry_mode & G_CULL_BOTH) {
 
-        // Calculating these here saves a few divides, and divides on 3DS are painfully slow.
-        // GCC is smart enough to only do 6 divides, but we can do 3.
-        const float recip1 = 1.0f / v1->w,
-                    recip2 = 1.0f / v2->w,
-                    recip3 = 1.0f / v3->w;
+//         // Calculating these here saves a few divides, and divides on 3DS are painfully slow.
+//         // GCC is smart enough to only do 6 divides, but we can do 3.
+//         const float recip1 = 1.0f / v1->w,
+//                     recip2 = 1.0f / v2->w,
+//                     recip3 = 1.0f / v3->w;
 
-        const float dx1 = v1->x * recip1 - v2->x * recip2;
-        const float dy1 = v1->y * recip1 - v2->y * recip2;
-        const float dx2 = v3->x * recip3 - v2->x * recip2;
-        const float dy2 = v3->y * recip3 - v2->y * recip2;
+//         const float dx1 = v1->x * recip1 - v2->x * recip2;
+//         const float dy1 = v1->y * recip1 - v2->y * recip2;
+//         const float dx2 = v3->x * recip3 - v2->x * recip2;
+//         const float dy2 = v3->y * recip3 - v2->y * recip2;
 
-        const float cross = dx1 * dy2 - dy1 * dx2;
+//         const float cross = dx1 * dy2 - dy1 * dx2;
 
-#ifdef TARGET_N3DS
-        // Quick maffs
-        const s32 oops = *((int32_t*) &cross) ^
-                         *((int32_t*) &v1->w) ^
-                         *((int32_t*) &v2->w) ^
-                         *((int32_t*) &v3->w) ^
-                         ((rsp.geometry_mode & G_CULL_FRONT) << 22);
+// #ifdef TARGET_N3DS
+//         // Quick maffs
+//         const s32 oops = *((int32_t*) &cross) ^
+//                          *((int32_t*) &v1->w) ^
+//                          *((int32_t*) &v2->w) ^
+//                          *((int32_t*) &v3->w) ^
+//                          ((rsp.geometry_mode & G_CULL_FRONT) << 22);
 
-        if (oops >= 0) return;
-#else
-        // Slow maffs
-        if ((v1->w < 0) ^ (v2->w < 0) ^ (v3->w < 0)) {
-            // If one vertex lies behind the eye, negating cross will give the correct result.
-            // If all vertices lie behind the eye, the triangle will be rejected anyway.
-            cross = -cross;
-        }
+//         if (oops >= 0) return;
+// #else
+//         // Slow maffs
+//         if ((v1->w < 0) ^ (v2->w < 0) ^ (v3->w < 0)) {
+//             // If one vertex lies behind the eye, negating cross will give the correct result.
+//             // If all vertices lie behind the eye, the triangle will be rejected anyway.
+//             cross = -cross;
+//         }
 
-        switch (rsp.geometry_mode & G_CULL_BOTH) {
-            case G_CULL_FRONT:
-                if (cross <= 0) return;
-                break;
-            case G_CULL_BACK:
-                if (cross >= 0) return;
-                break;
-            case G_CULL_BOTH:
-                // Why is this even an option?
-                return;
-        }
-#endif
-    }
+//         switch (rsp.geometry_mode & G_CULL_BOTH) {
+//             case G_CULL_FRONT:
+//                 if (cross <= 0) return;
+//                 break;
+//             case G_CULL_BACK:
+//                 if (cross >= 0) return;
+//                 break;
+//             case G_CULL_BOTH:
+//                 // Why is this even an option?
+//                 return;
+//         }
+// #endif
+//     }
 
     bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (depth_test != rendering_state.depth_test) {
@@ -908,7 +917,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     for (int i = 0; i < 3; i++) {
 
 #ifdef TARGET_N3DS
-        float w = v_arr[i]->w, z = (v_arr[i]->z + w) / -2.0f; // 3DS is always 0 to 1
+        // float w = v_arr[i]->w, z = (v_arr[i]->z + w) / -2.0f; // 3DS is always 0 to 1
 #else
         float z = v_arr[i]->z, w = v_arr[i]->w;
         if (z_is_from_0_to_1) {
@@ -918,8 +927,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 
         buf_vbo[buf_vbo_len++] = v_arr[i]->x;
         buf_vbo[buf_vbo_len++] = v_arr[i]->y;
-        buf_vbo[buf_vbo_len++] = z;
-        buf_vbo[buf_vbo_len++] = w;
+        buf_vbo[buf_vbo_len++] = v_arr[i]->z;
+        buf_vbo[buf_vbo_len++] = v_arr[i]->w;
 
         if (use_texture) {
             float u = (v_arr[i]->u - rdp.texture_tile.uls * 8) / 32.0f;
