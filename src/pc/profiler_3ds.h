@@ -9,6 +9,7 @@
 #if PROFILER_3DS_ENABLE == 1
 
 // Maximum ID number for a timestamp.
+// WYATT_TODO off-by-one: value of 32 gives 33 entries
 #define PROFILER_3DS_NUM_IDS 32
 
 // Number of frames to average in the circular buffer.
@@ -23,8 +24,8 @@
 #define PROFILER_3DS_NUM_TRACKED_SNOOP_IDS 64
 
 // Length of the log string.
-// For the circular log, estimate 30 * <max id> * num circular frames, plus some extra for formatting.
-#define PROFILER_3DS_LOG_STRING_LENGTH 24000
+// For the circular log, estimate 10 * <max id> * num circular frames, plus some extra for formatting.
+#define PROFILER_3DS_LOG_STRING_LENGTH 20000
 
 // Convenience define. Represents where to place the buffer terminator.
 #define PROFILER_3DS_LOG_STRING_TERMINATOR (PROFILER_3DS_LOG_STRING_LENGTH - 1)

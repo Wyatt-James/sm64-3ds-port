@@ -10,8 +10,6 @@
 #include "audio_3ds.h"
 #include "src/audio/external.h"
 
-#include "src/pc/profiler_3ds.h"
-
 #define PLAYBACK_RATE 32000
 
 // We synthesize 2 * SAMPLES_HIGH or LOW each frame
@@ -152,8 +150,6 @@ static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
 }
 
 inline void audio_3ds_run_one_frame() {
-    profiler_3ds_linear_reset();
-    profiler_3ds_circular_advance_frame();
 
     // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
     u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
@@ -163,7 +159,6 @@ inline void audio_3ds_run_one_frame() {
     // Update audio state once per Thread5 frame, then let Thread5 continue
     update_game_sound_wrapper_3ds();
     AtomicDecrement(&s_audio_frames_to_tick);
-    profiler_3ds_log_time(0);
 
     // Synthesize to our audio buffer
     for (int i = 0; i < 2; i++) {
@@ -176,22 +171,13 @@ inline void audio_3ds_run_one_frame() {
     AtomicDecrement(&s_audio_frames_to_process);
 
     // Play our audio buffer. If we outrun the DSP, we wait until the DSP is ready.
-    profiler_3ds_log_time(0);
     audio_3ds_play_internal((u8 *)audio_buffer, N3DS_DSP_N_CHANNELS * num_audio_samples * 4, N3DS_DSP_N_CHANNELS * samples_to_copy * 4);
-    profiler_3ds_log_time(17); // 3DS export to DSP
-
-    // profiler_3ds_log_time(0);
-    // N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(10));
-    // profiler_3ds_log_time(18);
-
-    profiler_3ds_snoop(0);
 }
 
 Thread threadId = NULL;
 
 static void audio_3ds_loop()
 {
-    profiler_3ds_init();
     
     while (running)
     {

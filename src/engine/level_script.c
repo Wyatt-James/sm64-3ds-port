@@ -28,6 +28,7 @@
 #if defined TARGET_N3DS
 #include "pc/audio/audio_3ds_threading.h"
 #include "pc/audio/audio_3ds.h"
+#include "src/pc/profiler_3ds.h"
 #endif
 
 #define CMD_GET(type, offset) (*(type *) (CMD_PROCESS_OFFSET(offset) + (u8 *) sCurrentCmd))
@@ -848,6 +849,8 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     else
         waitForSynchronizationVar(&s_audio_frames_to_tick);
 
+
+    profiler_3ds_log_time(0);
     // Execute the script
     while (sScriptStatus == SCRIPT_RUNNING) {
         LevelScriptJumpTable[sCurrentCmd->type]();
@@ -863,6 +866,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     while (sScriptStatus == SCRIPT_RUNNING) {
         LevelScriptJumpTable[sCurrentCmd->type]();
     }
+    profiler_3ds_log_time(1); // Run Level Script
 
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
     audio_game_loop_tick(); // Sets external.c/sGameLoopTicked to 1
@@ -871,11 +875,17 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     AtomicIncrement(&s_audio_frames_to_tick);
     AtomicIncrement(&s_audio_frames_to_process);
 
+    profiler_3ds_log_time(0);
     if (s_thread5_does_audio)
         audio_3ds_run_one_frame();
+    profiler_3ds_log_time(2); // Synchronous Audio Synthesis
 
     init_render_image();
+
+    profiler_3ds_log_time(0);
     render_game();
+    profiler_3ds_log_time(3); // Render Game
+
     end_master_display_list();
     alloc_display_list(0);
 

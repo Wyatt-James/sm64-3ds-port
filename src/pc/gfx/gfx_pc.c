@@ -18,6 +18,9 @@
 
 #ifdef TARGET_N3DS
 #include "gfx_3ds.h"
+#include "src/pc/profiler_3ds.h"
+#else
+#define profiler_3ds_log_time(id) do {} while (0)
 #endif
 
 #define SUPPORT_CHECK(x) assert(x)
@@ -41,6 +44,8 @@
 #define MAX_BUFFERED 256
 #define MAX_LIGHTS 2
 #define MAX_VERTICES 64
+
+#define U32_AS_FLOAT(v) (*(float*) &v)
 
 struct RGBA {
     uint8_t r, g, b, a;
@@ -608,10 +613,19 @@ static void gfx_sp_pop_matrix(uint32_t count) {
 }
 
 static float gfx_adjust_x_for_aspect_ratio(float x) {
-    return x * (4.0f / 3.0f) / ((float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height);
+
+// 3DS has a constant aspect ratio, so hardcoding is best.
+#ifdef TARGET_N3DS
+    const uint32_t float_as_int = 0x3F4CCCCD;
+    return x * U32_AS_FLOAT(float_as_int);
+#else
+    return x * gfx_current_dimensions.aspect_ratio_factor;
+#endif
 }
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
+    profiler_3ds_log_time(0);
+
     for (size_t i = 0; i < n_vertices; i++, dest_index++) {
         const Vtx_t *v = &vertices[i].v;
         const Vtx_tn *vn = &vertices[i].n;
@@ -730,9 +744,11 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->color.a = v->cn[3];
         }
     }
+    profiler_3ds_log_time(6); // gfx_sp_vertex
 }
 
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
+    profiler_3ds_log_time(0);
     struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
     struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
@@ -745,13 +761,32 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         return;
     }
 
-    if ((rsp.geometry_mode & G_CULL_BOTH) != 0) {
-        float dx1 = v1->x / (v1->w) - v2->x / (v2->w);
-        float dy1 = v1->y / (v1->w) - v2->y / (v2->w);
-        float dx2 = v3->x / (v3->w) - v2->x / (v2->w);
-        float dy2 = v3->y / (v3->w) - v2->y / (v2->w);
-        float cross = dx1 * dy2 - dy1 * dx2;
+    if (rsp.geometry_mode & G_CULL_BOTH) {
 
+        // Calculating these here saves a few divides, and divides on 3DS are painfully slow.
+        // GCC is smart enough to only do 6 divides, but we can do 3.
+        const float recip1 = 1.0f / v1->w,
+                    recip2 = 1.0f / v2->w,
+                    recip3 = 1.0f / v3->w;
+
+        const float dx1 = v1->x * recip1 - v2->x * recip2;
+        const float dy1 = v1->y * recip1 - v2->y * recip2;
+        const float dx2 = v3->x * recip3 - v2->x * recip2;
+        const float dy2 = v3->y * recip3 - v2->y * recip2;
+
+        const float cross = dx1 * dy2 - dy1 * dx2;
+
+#ifdef TARGET_N3DS
+        // Quick maffs
+        const s32 oops = *((int32_t*) &cross) ^
+                         *((int32_t*) &v1->w) ^
+                         *((int32_t*) &v2->w) ^
+                         *((int32_t*) &v3->w) ^
+                         ((rsp.geometry_mode & G_CULL_FRONT) << 22);
+
+        if (oops >= 0) return;
+#else
+        // Slow maffs
         if ((v1->w < 0) ^ (v2->w < 0) ^ (v3->w < 0)) {
             // If one vertex lies behind the eye, negating cross will give the correct result.
             // If all vertices lie behind the eye, the triangle will be rejected anyway.
@@ -769,6 +804,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
                 // Why is this even an option?
                 return;
         }
+#endif
     }
 
     bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
@@ -862,24 +898,27 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     }
 
     bool use_texture = used_textures[0] || used_textures[1];
-    uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4) / 4;
-    uint32_t tex_height = (rdp.texture_tile.lrt - rdp.texture_tile.ult + 4) / 4;
+    uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4)  >> 2; // Shift-right is actually slightly faster on 3DS.
+    uint32_t tex_height = (rdp.texture_tile.lrt - rdp.texture_tile.ult + 4) >> 2;
 
-    bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1();
+#ifndef TARGET_N3DS
+    bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1(); // 3DS is always 0 to 1
+#endif
 
     for (int i = 0; i < 3; i++) {
+
+#ifdef TARGET_N3DS
+        float w = v_arr[i]->w, z = (v_arr[i]->z + w) / -2.0f; // 3DS is always 0 to 1
+#else
         float z = v_arr[i]->z, w = v_arr[i]->w;
         if (z_is_from_0_to_1) {
             z = (z + w) / 2.0f;
         }
+#endif
 
         buf_vbo[buf_vbo_len++] = v_arr[i]->x;
         buf_vbo[buf_vbo_len++] = v_arr[i]->y;
-#ifdef TARGET_N3DS
-        buf_vbo[buf_vbo_len++] = -z;
-#else
         buf_vbo[buf_vbo_len++] = z;
-#endif
         buf_vbo[buf_vbo_len++] = w;
 
         if (use_texture) {
@@ -952,6 +991,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     if (++buf_vbo_num_tris == MAX_BUFFERED) {
         gfx_flush();
     }
+    
+    profiler_3ds_log_time(7); // gfx_sp_tri1
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
@@ -1633,6 +1674,7 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
         gfx_current_dimensions.height = 1;
     }
     gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
+    gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
 #endif
     // Used in the 120 star TAS
     static uint32_t precomp_shaders[] = {
@@ -1682,6 +1724,7 @@ void gfx_start_frame(void) {
         gfx_current_dimensions.height = 1;
     }
     gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
+    gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
 #endif
 }
 
@@ -1694,8 +1737,14 @@ void gfx_run(Gfx *commands) {
     }
     dropped_frame = false;
 
+    profiler_3ds_log_time(0);
     gfx_rapi->start_frame();
+    profiler_3ds_log_time(4); // GFX RAPI Start Frame
+
+    // profiler_3ds_log_time(0);
     gfx_run_dl(commands);
+    // profiler_3ds_log_time(5); // GFX Run DL
+
     gfx_flush();
     gfx_rapi->end_frame();
     gfx_wapi->swap_buffers_begin();
