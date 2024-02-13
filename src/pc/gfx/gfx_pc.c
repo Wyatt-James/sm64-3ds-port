@@ -147,7 +147,7 @@ static struct RenderingState {
     bool depth_mask;
     bool decal_mode;
     bool alpha_blend;
-    s32 culling_mode;
+    uint32_t culling_mode;
     struct XYWidthHeight viewport, scissor;
     struct ShaderProgram *shader_program;
     struct TextureHashmapNode *textures[2];
