@@ -20,7 +20,6 @@
 
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v) (*(float*) &v)
-#define DEFAULT_CULL_MODE GPU_CULL_NONE
 
 
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
@@ -858,7 +857,7 @@ static void gfx_citro3d_init(void)
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, sVboBuffer, VERTEX_SHADER_SIZE * 4, 3, 0x210);
 
-    C3D_CullFace(DEFAULT_CULL_MODE); // WYATT_TODO figure out proper backface culling
+    C3D_CullFace(GPU_CULL_NONE);
     C3D_DepthMap(true, -1.0f, 0);
     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
     C3D_AlphaTest(true, GPU_GREATER, 0x00);
