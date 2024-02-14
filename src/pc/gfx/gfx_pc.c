@@ -739,8 +739,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->z = v->ob[2];
         d->w = 1.0f;
 
-        // WYATT_TODO implement fog in vertex shader
-        if (rsp.geometry_mode & G_FOG) {
+        // if (rsp.geometry_mode & G_FOG) {
         //     if (fabsf(w) < 0.001f) {
         //         // To avoid division by zero
         //         w = 0.001f;
@@ -755,10 +754,10 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         //     if (fog_z < 0) fog_z = 0;
         //     if (fog_z > 255) fog_z = 255;
         //     d->color.a = fog_z; // Use alpha variable to store fog factor
-            d->color.a = 0;
-        } else {
-            d->color.a = v->cn[3];
-        }
+        //     d->color.a = 0;
+        // } else {
+           d->color.a = v->cn[3];
+        // }
     }
     profiler_3ds_log_time(6); // gfx_sp_vertex
 }
@@ -979,11 +978,13 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
                         break;
                     case CC_LOD:
                     {
-                        float distance_frac = (v1->w - 3000.0f) / 3000.0f;
-                        if (distance_frac < 0.0f) distance_frac = 0.0f;
-                        if (distance_frac > 1.0f) distance_frac = 1.0f;
-                        tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
-                        color = &tmp;
+                        // WYATT_TODO LoD does not work in world-space
+                        // float distance_frac = (1.0f - 3000.0f) / 3000.0f;
+                        // // float distance_frac = (v1->w - 3000.0f) / 3000.0f;
+                        // if (distance_frac < 0.0f) distance_frac = 0.0f;
+                        // if (distance_frac > 1.0f) distance_frac = 1.0f;
+                        // tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
+                        // color = &tmp;
                         break;
                     }
                     default:
