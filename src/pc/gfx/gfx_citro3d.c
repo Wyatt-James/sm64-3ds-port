@@ -807,9 +807,6 @@ static void renderTwoColorTris(float buf_vbo[], size_t buf_vbo_len, size_t buf_v
     bool hasTex = sShaderProgramPool[sCurShader].cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
     bool hasAlpha = sShaderProgramPool[sCurShader].cc_features.opt_alpha;
 
-    if (sShaderProgramPool[sCurShader].cc_features.opt_fog)
-        C3D_TexEnvColor(C3D_GetTexEnv(2), vec4ToU32Color(buf_vbo[hasTex ? 6 : 4], buf_vbo[hasTex ? 7 : 5], buf_vbo[hasTex ? 8 : 6], buf_vbo[hasTex ? 9 : 7]));
-
     u32 firstColor0, firstColor1;
     bool color0Constant = true;
     bool color1Constant = true;
