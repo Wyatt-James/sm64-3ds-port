@@ -690,7 +690,7 @@ ALL_DIRS := $(BUILD_DIR) $(addprefix $(BUILD_DIR)/,$(SRC_DIRS) $(ASM_DIRS) $(GOD
 
 ifeq ($(TARGET_N3DS),1)
   # create build dir for .t3x etc
-  ALL_DIRS += $(BUILD_DIR)/$(MINIMAP_TEXTURES) $(BUILD_DIR)/3ds
+  ALL_DIRS += $(BUILD_DIR)/$(MINIMAP_TEXTURES) $(BUILD_DIR)/src/pc/gfx/shaders $(BUILD_DIR)/3ds
 endif
 
 # Make sure build directory exists before compiling anything
@@ -912,19 +912,29 @@ $(BUILD_DIR)/$(TARGET).objdump: $(ELF)
 
 else
 ifeq ($(TARGET_N3DS),1)
-# for building the vertex shader
-$(BUILD_DIR)/src/pc/gfx/shader.shbin.o : src/pc/gfx/shader.v.pica
-	$(eval CURBIN := $<.shbin)
-	$(DEVKITPRO)/tools/bin/picasso -o $(BUILD_DIR)/src/pc/gfx/shader.shbin $<
-	$(DEVKITPRO)/tools/bin/bin2s $(BUILD_DIR)/src/pc/gfx/shader.shbin | $(AS) -o $@
+
+# for building the vertex shaders
+
+PICA_DIR := src/pc/gfx/shaders
+PICA_SRC := $(wildcard $(PICA_DIR)/*.v.pica)
+PICA_SHBIN := $(foreach file,$(PICA_SRC),$(BUILD_DIR)/$(file:.v.pica=.shbin))
+PICA_O := $(foreach file,$(PICA_SHBIN),$(file:.shbin=.shbin.o))
+
+$(BUILD_DIR)/%.shbin.o: $(BUILD_DIR)/%.shbin
+	printf "$(DEVKITPRO)/tools/bin/bin2s $< | $(AS) -o $@"
+	$(DEVKITPRO)/tools/bin/bin2s $< | $(AS) -o $@
+
+$(BUILD_DIR)/%.shbin: %.v.pica
+	printf "$(DEVKITPRO)/tools/bin/picasso -o $@ $<"
+	$(DEVKITPRO)/tools/bin/picasso -o $@ $<
 
 SMDH_TITLE ?= Super Mario 64
 SMDH_DESCRIPTION ?= Super Mario 64 3DS Port
 SMDH_AUTHOR ?= mkst
 SMDH_ICON := 3ds/icon.smdh
 
-$(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(SMDH_ICON)
-	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(MINIMAP_T3X_O) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
+$(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(PICA_O) $(SMDH_ICON)
+	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(PICA_O) $(MINIMAP_T3X_O) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
 
 $(EXE): $(ELF)
 	3dsxtool $< $@ --smdh=$(BUILD_DIR)/$(SMDH_ICON)
