@@ -9,16 +9,16 @@ extern const u32 shader_shbin_size;
 
 extern const u8 shader_1_shbin[];
 extern const u32 shader_1_shbin_size;
-extern const u8 shader_3_shbin[];
-extern const u32 shader_3_shbin_size;
+// extern const u8 shader_3_shbin[]; // Disabled for fog
+// extern const u32 shader_3_shbin_size;
 extern const u8 shader_4_shbin[];
 extern const u32 shader_4_shbin_size;
 extern const u8 shader_5_shbin[];
 extern const u32 shader_5_shbin_size;
-extern const u8 shader_6_shbin[];
-extern const u32 shader_6_shbin_size;
-extern const u8 shader_7_shbin[];
-extern const u32 shader_7_shbin_size;
+// extern const u8 shader_6_shbin[]; // Disabled for fog
+// extern const u32 shader_6_shbin_size;
+// extern const u8 shader_7_shbin[]; // Disabled for fog
+// extern const u32 shader_7_shbin_size;
 extern const u8 shader_8_shbin[];
 extern const u32 shader_8_shbin_size;
 extern const u8 shader_9_shbin[];

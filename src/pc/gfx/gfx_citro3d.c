@@ -438,7 +438,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alp
                                     bool has_color, bool has_color2)
 {
     // 1 => texture
-    // 2 => fog
+    // 2 => fog (disabled)
     // 4 => 1 color RGBA
     // 8 => 1 color RGB
     // 16 => 2 colors RGBA
@@ -448,8 +448,8 @@ static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alp
 
     if (has_texture)
         shader_code += 1;
-    if (has_fog)
-        shader_code += 2;
+    // if (has_fog)
+    //     shader_code += 2;
     if (has_color)
         shader_code += has_alpha ? 4 : 8;
     if (has_color2)
@@ -476,10 +476,10 @@ static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alp
             current_shader_shbin = shader_1_shbin;
             current_shader_shbin_size = shader_1_shbin_size;
             break;
-        case 3:
-            current_shader_shbin = shader_3_shbin;
-            current_shader_shbin_size = shader_3_shbin_size;
-            break;
+        // case 3:
+        //     current_shader_shbin = shader_3_shbin;
+        //     current_shader_shbin_size = shader_3_shbin_size;
+        //     break;
         case 4:
             current_shader_shbin = shader_4_shbin;
             current_shader_shbin_size = shader_4_shbin_size;
@@ -488,14 +488,14 @@ static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alp
             current_shader_shbin = shader_5_shbin;
             current_shader_shbin_size = shader_5_shbin_size;
             break;
-        case 6:
-            current_shader_shbin = shader_6_shbin;
-            current_shader_shbin_size = shader_6_shbin_size;
-            break;
-        case 7:
-            current_shader_shbin = shader_7_shbin;
-            current_shader_shbin_size = shader_7_shbin_size;
-            break;
+        // case 6:
+        //     current_shader_shbin = shader_6_shbin;
+        //     current_shader_shbin_size = shader_6_shbin_size;
+        //     break;
+        // case 7:
+        //     current_shader_shbin = shader_7_shbin;
+        //     current_shader_shbin_size = shader_7_shbin_size;
+        //     break;
         case 8:
             current_shader_shbin = shader_8_shbin;
             current_shader_shbin_size = shader_8_shbin_size;
@@ -538,12 +538,12 @@ static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alp
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 2);
         cb->stride += 2;
     }
-    if (has_fog)
-    {
-        attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 4);
-        cb->stride += 4;
-    }
+    // if (has_fog)
+    // {
+    //     attr_mask += attr * (1 << 4 * attr);
+    //     AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 4);
+    //     cb->stride += 4;
+    // }
     if (has_color)
     {
         attr_mask += attr * (1 << 4 * attr);

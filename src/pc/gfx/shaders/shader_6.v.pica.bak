@@ -1,22 +1,19 @@
-; position, texture, fog
+; position, fog, color rgba
+; disabled for fog. Uses shader_4 instead.
 
 ; Uniforms
 .fvec projection[4], modelView[4]
-.fvec tex_scale
 .bool draw_fog
 
 ; Constants
 .constf myconst(0.0, 1.0, -1.0, -0.5)
-.constf tcofs(0.0, 1.0, 0.0, 0.0)
-
 .alias  zeros myconst.xxxx ; Vector full of zeros
 .alias  ones  myconst.yyyy ; Vector full of ones
 
 ; Inputs
 .in inpos v0
-.in intex v1
-.in infog v2
-
+.in infog v1
+.in inclr v2
 
 ; Outputs
 .out outpos position  ; xyzw
@@ -42,14 +39,14 @@ projection:
     dp4 outpos.w, projection[3], r1
 texture:
     ; outtex = intex
-    mul r2, tex_scale, intex
-    add outtc0, tcofs, r2
-    mov outtc1, outtc0
+    mov outtc0, zeros
+    mov outtc1, zeros
 color:
     ifu draw_fog
         mov outclr, infog
     .else
-        mov outclr, ones
+        ; copy color
+        mov outclr, inclr
     .end
     ; We're finished
     end

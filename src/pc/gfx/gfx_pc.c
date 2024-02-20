@@ -954,14 +954,14 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             buf_vbo[buf_vbo_len++] = u / tex_width;
             buf_vbo[buf_vbo_len++] = v / tex_height;
         }
-// #ifndef TARGET_N3DS WYATT_TODO fix fog delete with 3DS shaders
+#ifndef TARGET_N3DS
         if (use_fog) {
             buf_vbo[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
             buf_vbo[buf_vbo_len++] = v_arr[i]->color.a / 255.0f; // fog factor (not alpha)
         }
-// #endif
+#endif
         for (int j = 0; j < num_inputs; j++) {
             struct RGBA *color;
             struct RGBA tmp;

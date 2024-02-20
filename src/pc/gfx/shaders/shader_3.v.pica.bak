@@ -1,4 +1,5 @@
-; texture, fog, 1 color rgba
+; position, texture, fog
+; disabled for fog. Uses shader_1 instead.
 
 ; Uniforms
 .fvec projection[4], modelView[4]
@@ -16,7 +17,7 @@
 .in inpos v0
 .in intex v1
 .in infog v2
-.in inclr v3
+
 
 ; Outputs
 .out outpos position  ; xyzw
@@ -49,8 +50,7 @@ color:
     ifu draw_fog
         mov outclr, infog
     .else
-        ; copy color
-        mov outclr, inclr
+        mov outclr, ones
     .end
     ; We're finished
     end
