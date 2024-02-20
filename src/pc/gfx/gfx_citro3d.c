@@ -42,7 +42,6 @@ struct ShaderProgram {
     bool swap_input;
     C3D_TexEnv texenv0;
     C3D_TexEnv texenv1;
-    // C3D_TexEnv fog_texenv0;
 };
 
 struct video_buffer {
@@ -55,7 +54,6 @@ struct video_buffer {
     C3D_BufInfo buf_info;
 };
 
-static int uLoc_draw_fog;
 static int uLoc_tex_scale;
 
 static struct video_buffer *current_buffer;
@@ -356,16 +354,6 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, GPU_CONSTANT, 0, 0);
     }
 
-    // if (prg->cc_features.opt_fog)
-    // {
-    //     C3D_TexEnvInit(&prg->fog_texenv0);
-    //     C3D_TexEnvColor(&prg->fog_texenv0, 0);
-    //     C3D_TexEnvFunc(&prg->fog_texenv0, C3D_Both, GPU_REPLACE);
-    //     C3D_TexEnvSrc(&prg->fog_texenv0, C3D_Both, GPU_PRIMARY_COLOR, 0, 0);
-    //     C3D_TexEnvOpRgb(&prg->fog_texenv0, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
-    //     C3D_TexEnvOpAlpha(&prg->fog_texenv0, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA);
-    // }
-
     prg->swap_input = swap_input;
 }
 
@@ -413,11 +401,6 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     // Update uniforms
     uLoc_projection = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "projection");
     uLoc_modelView = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "modelView");
-
-    if (new_prg->cc_features.opt_fog) {
-        uLoc_draw_fog = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "draw_fog");
-        C3D_BoolUnifSet(GPU_VERTEX_SHADER, uLoc_draw_fog, false);
-    }
     
     if (new_prg->cc_features.used_textures[0] || new_prg->cc_features.used_textures[1])
         uLoc_tex_scale = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "tex_scale");
