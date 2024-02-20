@@ -417,7 +417,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     update_shader(false);
 }
 
-static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alpha,
+static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool has_alpha,
                                     bool has_color, bool has_color2)
 {
     // 1 => texture
@@ -501,7 +501,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, bool has_fog, bool has_alp
             fprintf(stderr, "Warning! Using default for %u\n", shader_code);
     }
 
-    DVLB_s* sVShaderDvlb = DVLB_ParseFile((u32*)current_shader_shbin, current_shader_shbin_size);
+    DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)current_shader_shbin, current_shader_shbin_size);
 
     shaderProgramInit(&cb->shader_program);
     shaderProgramSetVsh(&cb->shader_program, &sVShaderDvlb->DVLE[0]);
@@ -803,47 +803,21 @@ static u32 vec4ToU32Color(float r, float g, float b, float a)
 
 static void renderTwoColorTris(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    int offset = 0;
-    bool hasTex = sShaderProgramPool[sCurShader].cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
-    bool hasAlpha = sShaderProgramPool[sCurShader].cc_features.opt_alpha;
+    struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
+    bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
+    bool hasAlpha = curShader->cc_features.opt_alpha;
 
-    u32 firstColor0, firstColor1;
-    bool color0Constant = true;
-    bool color1Constant = true;
-    //determine which color is constant over all vertices
-    for (u32 i = 0; i < buf_vbo_num_tris * 3 && color0Constant && color1Constant; i++)
-    {
-        int vtxOffs = 4;
-        if (hasTex)
-            vtxOffs += 2;
-        u32 color0 = vec4ToU32Color(
-            buf_vbo[offset + vtxOffs],
-            buf_vbo[offset + vtxOffs + 1],
-            buf_vbo[offset + vtxOffs + 2],
-            hasAlpha ? buf_vbo[offset + vtxOffs + 3] : 1.0f);
-        vtxOffs += hasAlpha ? 4 : 3;
-        u32 color1 = vec4ToU32Color(
-            buf_vbo[offset + vtxOffs],
-            buf_vbo[offset + vtxOffs + 1],
-            buf_vbo[offset + vtxOffs + 2],
-            hasAlpha ? buf_vbo[offset + vtxOffs + 3] : 1.0f);
-        if (i == 0)
-        {
-            firstColor0 = color0;
-            firstColor1 = color1;
-        }
-        else
-        {
-            if (firstColor0 != color0)
-                color0Constant = false;
-            if (firstColor1 != color1)
-                color1Constant = false;
-        }
-        offset += current_buffer->stride;
-    }
 
-    update_shader(!color1Constant);
-    C3D_TexEnvColor(C3D_GetTexEnv(0), color1Constant ? firstColor1 : firstColor0);
+    const int vtxOffs = hasTex ? 6 : 4;
+    const int vtxOffs2 = vtxOffs + (hasAlpha ? 4 : 3);
+
+    // Removed a hack from before vert shaders. This new implementation
+    // probably isn't completely kosher, but it works.
+    update_shader(true);
+    C3D_TexEnvColor(C3D_GetTexEnv(0), vec4ToU32Color(buf_vbo[vtxOffs],
+                                                     buf_vbo[vtxOffs + 1],
+                                                     buf_vbo[vtxOffs + 2],
+                                                     hasAlpha ? buf_vbo[vtxOffs + 3] : 1.0f));
 
     if (hasTex)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_tex_scale,
