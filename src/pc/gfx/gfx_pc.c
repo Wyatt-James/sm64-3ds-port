@@ -62,10 +62,10 @@ struct XYWidthHeight {
 };
 
 struct LoadedVertex {
-    float x, y, z, w;
-    float u, v;
-    struct RGBA color;
-    uint8_t clip_rej;
+    float x, y, z, w;    // 16 bytes
+    float u, v;          // 8 bytes
+    struct RGBA color;   // 4 bytes
+    // uint8_t clip_rej;
 };
 
 struct TextureHashmapNode {
@@ -604,7 +604,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         } else {
             gfx_matrix_mul(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
         }
-        rsp.lights_changed = 1;
+        rsp.lights_changed = true;
     }
     gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
     
@@ -652,9 +652,6 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 
         // x = gfx_adjust_x_for_aspect_ratio(x);
 
-        short U = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
-        short V = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
-
         if (rsp.geometry_mode & G_LIGHTING) {
             if (rsp.lights_changed) {
                 for (int i = 0; i < rsp.current_num_lights - 1; i++) {
@@ -697,20 +694,23 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
                 doty += vn->n[1] * rsp.current_lookat_coeffs[1][1];
                 doty += vn->n[2] * rsp.current_lookat_coeffs[1][2];
 
-                U = (int32_t)((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
-                V = (int32_t)((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
+                d->u = (int32_t)((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
+                d->v = (int32_t)((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
+            } else {
+                d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
+                d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
             }
         } else {
             d->color.r = v->cn[0];
             d->color.g = v->cn[1];
             d->color.b = v->cn[2];
+
+            d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
+            d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
         }
 
-        d->u = U;
-        d->v = V;
-
-        // trivial clip rejection
-        d->clip_rej = 0;
+        // trivial clip rejectiona
+        // d->clip_rej = 0;
 // #ifdef TARGET_N3DS
 //     if (gGfx3DEnabled) {
 //         float wMod = w * 1.2f; // expanded w-range for testing clip rejection
