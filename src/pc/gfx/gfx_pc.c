@@ -144,7 +144,6 @@ static struct RDP {
 
     struct RGBA env_color, prim_color, fog_color, fill_color;
     struct XYWidthHeight viewport, scissor;
-    bool viewport_or_scissor_changed;
     void *z_buf_address;
     void *color_image_address;
 } rdp;
@@ -653,6 +652,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->z = v->ob[2];
         d->color.a = v->cn[3];
     }
+    profiler_3ds_log_time(8); // Vertex Copy
 
     // Calculate lighting
     if (rsp.geometry_mode & G_LIGHTING) {
@@ -666,6 +666,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1]);
             rsp.lights_changed = false;
         }
+        
+        profiler_3ds_log_time(9); // Light Recalculation
 
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_tn *vn = &vertices[vert].n;
@@ -692,6 +694,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
         }
+        
+        profiler_3ds_log_time(10); // Vertex Light Calculation
     } else {
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_t *v = &vertices[vert].v;
@@ -701,6 +705,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->color.g = v->cn[1];
             d->color.b = v->cn[2];
         }
+        profiler_3ds_log_time(11); // Unlit Vertex Color Copy
     }
     
     // Calculate texcoords
@@ -721,6 +726,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->u = ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
             d->v = ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
         }
+        profiler_3ds_log_time(12); // Texgen Calculation
     } else {
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_t *v = &vertices[vert].v;
@@ -729,8 +735,9 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
             d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
         }
+        profiler_3ds_log_time(13); // Texcoord Copy
     }
-    profiler_3ds_log_time(6); // gfx_sp_vertex
+    // profiler_3ds_log_time(6); // gfx_sp_vertex
 }
 
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
@@ -739,101 +746,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
     struct LoadedVertex *v_arr[3] = {v1, v2, v3};
-
-    // if (rand()%2) return;
-
-    // if (v1->clip_rej & v2->clip_rej & v3->clip_rej) {
-    //     // The whole triangle lies outside the visible area
-    //     return;
-    // }
-
-//     if (rsp.geometry_mode & G_CULL_BOTH) {
-
-//         // Calculating these here saves a few divides, and divides on 3DS are painfully slow.
-//         // GCC is smart enough to only do 6 divides, but we can do 3.
-//         const float recip1 = 1.0f / v1->w,
-//                     recip2 = 1.0f / v2->w,
-//                     recip3 = 1.0f / v3->w;
-
-//         const float dx1 = v1->x * recip1 - v2->x * recip2;
-//         const float dy1 = v1->y * recip1 - v2->y * recip2;
-//         const float dx2 = v3->x * recip3 - v2->x * recip2;
-//         const float dy2 = v3->y * recip3 - v2->y * recip2;
-
-//         const float cross = dx1 * dy2 - dy1 * dx2;
-
-// #ifdef TARGET_N3DS
-//         // Quick maffs
-//         const s32 oops = *((int32_t*) &cross) ^
-//                          *((int32_t*) &v1->w) ^
-//                          *((int32_t*) &v2->w) ^
-//                          *((int32_t*) &v3->w) ^
-//                          ((rsp.geometry_mode & G_CULL_FRONT) << 22);
-
-//         if (oops >= 0) return;
-// #else
-//         // Slow maffs
-//         if ((v1->w < 0) ^ (v2->w < 0) ^ (v3->w < 0)) {
-//             // If one vertex lies behind the eye, negating cross will give the correct result.
-//             // If all vertices lie behind the eye, the triangle will be rejected anyway.
-//             cross = -cross;
-//         }
-
-//         switch (rsp.geometry_mode & G_CULL_BOTH) {
-//             case G_CULL_FRONT:
-//                 if (cross <= 0) return;
-//                 break;
-//             case G_CULL_BACK:
-//                 if (cross >= 0) return;
-//                 break;
-//             case G_CULL_BOTH:
-//                 // Why is this even an option?
-//                 return;
-//         }
-// #endif
-//     }
-
-    uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
-    if (culling_mode != rendering_state.culling_mode) {
-        gfx_flush();
-        gfx_citro3d_set_backface_culling_mode(culling_mode);
-        rendering_state.culling_mode = culling_mode;
-    }
-
-    bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
-    if (depth_test != rendering_state.depth_test) {
-        gfx_flush();
-        gfx_rapi->set_depth_test(depth_test);
-        rendering_state.depth_test = depth_test;
-    }
-
-    bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
-    if (z_upd != rendering_state.depth_mask) {
-        gfx_flush();
-        gfx_rapi->set_depth_mask(z_upd);
-        rendering_state.depth_mask = z_upd;
-    }
-
-    bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
-    if (zmode_decal != rendering_state.decal_mode) {
-        gfx_flush();
-        gfx_rapi->set_zmode_decal(zmode_decal);
-        rendering_state.decal_mode = zmode_decal;
-    }
-
-    if (rdp.viewport_or_scissor_changed) {
-        if (memcmp(&rdp.viewport, &rendering_state.viewport, sizeof(rdp.viewport)) != 0) {
-            gfx_flush();
-            gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
-            rendering_state.viewport = rdp.viewport;
-        }
-        if (memcmp(&rdp.scissor, &rendering_state.scissor, sizeof(rdp.scissor)) != 0) {
-            gfx_flush();
-            gfx_rapi->set_scissor(rdp.scissor.x, rdp.scissor.y, rdp.scissor.width, rdp.scissor.height);
-            rendering_state.scissor = rdp.scissor;
-        }
-        rdp.viewport_or_scissor_changed = false;
-    }
 
     uint32_t cc_id = rdp.combine_mode;
 
@@ -858,13 +770,17 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     struct ColorCombiner *comb = gfx_lookup_or_create_color_combiner(cc_id);
     struct ShaderProgram *prg = comb->prg;
     if (prg != rendering_state.shader_program) {
+        profiler_3ds_log_time(7); // gfx_sp_tri1
         gfx_flush();
+        profiler_3ds_log_time(0);
         gfx_rapi->unload_shader(rendering_state.shader_program);
         gfx_rapi->load_shader(prg);
         rendering_state.shader_program = prg;
     }
     if (use_alpha != rendering_state.alpha_blend) {
+        profiler_3ds_log_time(7); // gfx_sp_tri1
         gfx_flush();
+        profiler_3ds_log_time(0);
         gfx_rapi->set_use_alpha(use_alpha);
         rendering_state.alpha_blend = use_alpha;
     }
@@ -875,13 +791,17 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     for (int i = 0; i < 2; i++) {
         if (used_textures[i]) {
             if (rdp.textures_changed[i]) {
+                profiler_3ds_log_time(7); // gfx_sp_tri1
                 gfx_flush();
+                profiler_3ds_log_time(0);
                 import_texture(i);
                 rdp.textures_changed[i] = false;
             }
             bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
+                profiler_3ds_log_time(7); // gfx_sp_tri1
                 gfx_flush();
+                profiler_3ds_log_time(0);
                 gfx_rapi->set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 rendering_state.textures[i]->linear_filter = linear_filter;
                 rendering_state.textures[i]->cms = rdp.texture_tile.cms;
@@ -985,7 +905,9 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = color->a / 255.0f;*/
     }
     if (++buf_vbo_num_tris == MAX_BUFFERED) {
+        profiler_3ds_log_time(7); // gfx_sp_tri1
         gfx_flush();
+        profiler_3ds_log_time(0);
     }
     
     profiler_3ds_log_time(7); // gfx_sp_tri1
@@ -994,6 +916,20 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     rsp.geometry_mode &= ~clear;
     rsp.geometry_mode |= set;
+
+    const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
+    if (culling_mode != rendering_state.culling_mode) {
+        gfx_flush();
+        gfx_citro3d_set_backface_culling_mode(culling_mode);
+        rendering_state.culling_mode = culling_mode;
+    }
+
+    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
+    if (depth_test != rendering_state.depth_test) {
+        gfx_flush();
+        gfx_rapi->set_depth_test(depth_test);
+        rendering_state.depth_test = depth_test;
+    }
 }
 
 static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
@@ -1012,8 +948,12 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
     rdp.viewport.y = y;
     rdp.viewport.width = width;
     rdp.viewport.height = height;
-
-    rdp.viewport_or_scissor_changed = true;
+    
+    if (memcmp(&rdp.viewport, &rendering_state.viewport, sizeof(rdp.viewport)) != 0) {
+        gfx_flush();
+        gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
+        rendering_state.viewport = rdp.viewport;
+    }
 }
 
 static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
@@ -1086,7 +1026,11 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     rdp.scissor.width = width;
     rdp.scissor.height = height;
 
-    rdp.viewport_or_scissor_changed = true;
+    if (memcmp(&rdp.scissor, &rendering_state.scissor, sizeof(rdp.scissor)) != 0) {
+        gfx_flush();
+        gfx_rapi->set_scissor(rdp.scissor.x, rdp.scissor.y, rdp.scissor.width, rdp.scissor.height);
+        rendering_state.scissor = rdp.scissor;
+    }
 }
 
 static void gfx_dp_set_texture_image(uint32_t format, uint32_t size, uint32_t width, const void* addr) {
@@ -1319,8 +1263,11 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     uint32_t geometry_mode_saved = rsp.geometry_mode;
 
     rdp.viewport = default_viewport;
-    rdp.viewport_or_scissor_changed = true;
     rsp.geometry_mode = 0;
+
+    gfx_flush();
+    gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
+    rendering_state.viewport = rdp.viewport;
 
     gfx_sp_tri1(MAX_VERTICES + 0, MAX_VERTICES + 1, MAX_VERTICES + 3);
     gfx_sp_tri1(MAX_VERTICES + 1, MAX_VERTICES + 2, MAX_VERTICES + 3);
@@ -1331,7 +1278,10 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
-    rdp.viewport_or_scissor_changed = true;
+
+    // gfx_flush(); // We already flushed above for the mview mtx
+    gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
+    rendering_state.viewport = rdp.viewport;
 
     if (cycle_type == G_CYC_COPY) {
         rdp.other_mode_h = saved_other_mode_h;
@@ -1428,6 +1378,20 @@ static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mo
     om = (om & ~mask) | mode;
     rdp.other_mode_l = (uint32_t)om;
     rdp.other_mode_h = (uint32_t)(om >> 32);
+
+    const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
+    if (z_upd != rendering_state.depth_mask) {
+        gfx_flush();
+        gfx_rapi->set_depth_mask(z_upd);
+        rendering_state.depth_mask = z_upd;
+    }
+
+    const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
+    if (zmode_decal != rendering_state.decal_mode) {
+        gfx_flush();
+        gfx_rapi->set_zmode_decal(zmode_decal);
+        rendering_state.decal_mode = zmode_decal;
+    }
 }
 
 static inline void *seg_addr(uintptr_t w1) {
