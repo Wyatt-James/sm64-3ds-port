@@ -767,26 +767,32 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         cc_id &= ~0xfff000;
     }
 
-    struct ColorCombiner *comb = gfx_lookup_or_create_color_combiner(cc_id);
-    struct ShaderProgram *prg = comb->prg;
-    if (prg != rendering_state.shader_program) {
-        profiler_3ds_log_time(7); // gfx_sp_tri1
-        gfx_flush();
-        profiler_3ds_log_time(0);
-        gfx_rapi->unload_shader(rendering_state.shader_program);
-        gfx_rapi->load_shader(prg);
-        rendering_state.shader_program = prg;
-    }
-    if (use_alpha != rendering_state.alpha_blend) {
-        profiler_3ds_log_time(7); // gfx_sp_tri1
-        gfx_flush();
-        profiler_3ds_log_time(0);
-        gfx_rapi->set_use_alpha(use_alpha);
-        rendering_state.alpha_blend = use_alpha;
+    static uint32_t old_cc_id = ~0;
+    static struct ColorCombiner *comb = NULL;
+    
+    if (old_cc_id != cc_id) {
+        old_cc_id = cc_id;
+        comb = gfx_lookup_or_create_color_combiner(cc_id);
+        struct ShaderProgram *prg = comb->prg;
+        if (prg != rendering_state.shader_program) {
+            profiler_3ds_log_time(7); // gfx_sp_tri1
+            gfx_flush();
+            profiler_3ds_log_time(0);
+            gfx_rapi->unload_shader(rendering_state.shader_program);
+            gfx_rapi->load_shader(prg);
+            rendering_state.shader_program = prg;
+        }
+        if (use_alpha != rendering_state.alpha_blend) {
+            profiler_3ds_log_time(7); // gfx_sp_tri1
+            gfx_flush();
+            profiler_3ds_log_time(0);
+            gfx_rapi->set_use_alpha(use_alpha);
+            rendering_state.alpha_blend = use_alpha;
+        }
     }
     uint8_t num_inputs;
     bool used_textures[2];
-    gfx_rapi->shader_get_info(prg, &num_inputs, used_textures);
+    gfx_rapi->shader_get_info(comb->prg, &num_inputs, used_textures);
 
     for (int i = 0; i < 2; i++) {
         if (used_textures[i]) {
