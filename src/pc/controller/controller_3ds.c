@@ -80,7 +80,7 @@ static u32 controller_3ds_get_held(void)
 
 static void controller_3ds_init(void)
 {
-    u32 i;
+    u32 i = 0;
     set_button_mapping(i++, A_BUTTON,     configKeyA); // n64 button => configured button
     set_button_mapping(i++, B_BUTTON,     configKeyB);
     set_button_mapping(i++, START_BUTTON, configKeyStart);
