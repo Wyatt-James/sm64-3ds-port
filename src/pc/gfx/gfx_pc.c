@@ -642,9 +642,22 @@ static float gfx_adjust_x_for_aspect_ratio(float x) {
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
     profiler_3ds_log_time(0);
 
-    for (size_t i = 0; i < n_vertices; i++, dest_index++) {
-        const Vtx_t *v = &vertices[i].v;
-        const Vtx_tn *vn = &vertices[i].n;
+    // If lights have changed, recalc their normals (WYATT_TODO move this elsewhere?)
+    if (rsp.lights_changed && (rsp.geometry_mode & G_LIGHTING)) {
+        for (int light = 0; light < rsp.current_num_lights - 1; light++)
+            calculate_normal_dir(&rsp.current_lights[light], rsp.current_lights_coeffs[light]);
+
+        static const Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
+        static const Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
+        calculate_normal_dir(&lookat_x, rsp.current_lookat_coeffs[0]);
+        calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1]);
+        rsp.lights_changed = false;
+    }
+
+    // Load and process each vert
+    for (size_t vert = 0; vert < n_vertices; vert++, dest_index++) {
+        const Vtx_t *v = &vertices[vert].v;
+        const Vtx_tn *vn = &vertices[vert].n;
         struct LoadedVertex *d = &rsp.loaded_vertices[dest_index];
 
         // float x = v->ob[0] * rsp.MP_matrix[0][0] + v->ob[1] * rsp.MP_matrix[1][0] + v->ob[2] * rsp.MP_matrix[2][0] + rsp.MP_matrix[3][0];
@@ -655,31 +668,21 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         // x = gfx_adjust_x_for_aspect_ratio(x);
 
         if (rsp.geometry_mode & G_LIGHTING) {
-            if (rsp.lights_changed) {
-                for (int i = 0; i < rsp.current_num_lights - 1; i++) {
-                    calculate_normal_dir(&rsp.current_lights[i], rsp.current_lights_coeffs[i]);
-                }
-                static const Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
-                static const Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
-                calculate_normal_dir(&lookat_x, rsp.current_lookat_coeffs[0]);
-                calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1]);
-                rsp.lights_changed = false;
-            }
 
             int r = rsp.current_lights[rsp.current_num_lights - 1].col[0];
             int g = rsp.current_lights[rsp.current_num_lights - 1].col[1];
             int b = rsp.current_lights[rsp.current_num_lights - 1].col[2];
 
-            for (int i = 0; i < rsp.current_num_lights - 1; i++) {
+            for (int light = 0; light < rsp.current_num_lights - 1; light++) {
                 float intensity = 0;
-                intensity += vn->n[0] * rsp.current_lights_coeffs[i][0];
-                intensity += vn->n[1] * rsp.current_lights_coeffs[i][1];
-                intensity += vn->n[2] * rsp.current_lights_coeffs[i][2];
+                intensity += vn->n[0] * rsp.current_lights_coeffs[light][0];
+                intensity += vn->n[1] * rsp.current_lights_coeffs[light][1];
+                intensity += vn->n[2] * rsp.current_lights_coeffs[light][2];
                 intensity /= 127.0f;
                 if (intensity > 0.0f) {
-                    r += intensity * rsp.current_lights[i].col[0];
-                    g += intensity * rsp.current_lights[i].col[1];
-                    b += intensity * rsp.current_lights[i].col[2];
+                    r += intensity * rsp.current_lights[light].col[0];
+                    g += intensity * rsp.current_lights[light].col[1];
+                    b += intensity * rsp.current_lights[light].col[2];
                 }
             }
 
