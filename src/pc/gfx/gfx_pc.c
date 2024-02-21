@@ -642,32 +642,34 @@ static float gfx_adjust_x_for_aspect_ratio(float x) {
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
     profiler_3ds_log_time(0);
 
-    // If lights have changed, recalc their normals (WYATT_TODO move this elsewhere?)
-    if (rsp.lights_changed && (rsp.geometry_mode & G_LIGHTING)) {
-        for (int light = 0; light < rsp.current_num_lights - 1; light++)
-            calculate_normal_dir(&rsp.current_lights[light], rsp.current_lights_coeffs[light]);
-
-        static const Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
-        static const Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
-        calculate_normal_dir(&lookat_x, rsp.current_lookat_coeffs[0]);
-        calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1]);
-        rsp.lights_changed = false;
-    }
-
-    // Load and process each vert
-    for (size_t vert = 0; vert < n_vertices; vert++, dest_index++) {
+    // Load each vert
+    for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
         const Vtx_t *v = &vertices[vert].v;
         const Vtx_tn *vn = &vertices[vert].n;
-        struct LoadedVertex *d = &rsp.loaded_vertices[dest_index];
+        struct LoadedVertex *d = &rsp.loaded_vertices[dest];
+        
+        d->x = v->ob[0];
+        d->y = v->ob[1];
+        d->z = v->ob[2];
+        d->color.a = v->cn[3];
+    }
 
-        // float x = v->ob[0] * rsp.MP_matrix[0][0] + v->ob[1] * rsp.MP_matrix[1][0] + v->ob[2] * rsp.MP_matrix[2][0] + rsp.MP_matrix[3][0];
-        // float y = v->ob[0] * rsp.MP_matrix[0][1] + v->ob[1] * rsp.MP_matrix[1][1] + v->ob[2] * rsp.MP_matrix[2][1] + rsp.MP_matrix[3][1];
-        // float z = v->ob[0] * rsp.MP_matrix[0][2] + v->ob[1] * rsp.MP_matrix[1][2] + v->ob[2] * rsp.MP_matrix[2][2] + rsp.MP_matrix[3][2];
-        // float w = v->ob[0] * rsp.MP_matrix[0][3] + v->ob[1] * rsp.MP_matrix[1][3] + v->ob[2] * rsp.MP_matrix[2][3] + rsp.MP_matrix[3][3];
+    // Calculate lighting
+    if (rsp.geometry_mode & G_LIGHTING) {
+        if (rsp.lights_changed) {
+            for (int light = 0; light < rsp.current_num_lights - 1; light++)
+                calculate_normal_dir(&rsp.current_lights[light], rsp.current_lights_coeffs[light]);
 
-        // x = gfx_adjust_x_for_aspect_ratio(x);
+            static const Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
+            static const Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
+            calculate_normal_dir(&lookat_x, rsp.current_lookat_coeffs[0]);
+            calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1]);
+            rsp.lights_changed = false;
+        }
 
-        if (rsp.geometry_mode & G_LIGHTING) {
+        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
+            const Vtx_tn *vn = &vertices[vert].n;
+            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
 
             int r = rsp.current_lights[rsp.current_num_lights - 1].col[0];
             int g = rsp.current_lights[rsp.current_num_lights - 1].col[1];
@@ -689,80 +691,44 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->color.r = r > 255 ? 255 : r;
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
+        }
+    } else {
+        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
+            const Vtx_t *v = &vertices[vert].v;
+            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
 
-            if (rsp.geometry_mode & G_TEXTURE_GEN) {
-                float dotx = 0, doty = 0;
-                dotx += vn->n[0] * rsp.current_lookat_coeffs[0][0];
-                dotx += vn->n[1] * rsp.current_lookat_coeffs[0][1];
-                dotx += vn->n[2] * rsp.current_lookat_coeffs[0][2];
-                doty += vn->n[0] * rsp.current_lookat_coeffs[1][0];
-                doty += vn->n[1] * rsp.current_lookat_coeffs[1][1];
-                doty += vn->n[2] * rsp.current_lookat_coeffs[1][2];
-
-                d->u = (int32_t)((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
-                d->v = (int32_t)((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
-            } else {
-                d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
-                d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
-            }
-        } else {
             d->color.r = v->cn[0];
             d->color.g = v->cn[1];
             d->color.b = v->cn[2];
+        }
+    }
+    
+    // Calculate texcoords
+    if ((rsp.geometry_mode & G_LIGHTING) && (rsp.geometry_mode & G_TEXTURE_GEN)) {
+        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
+            const Vtx_tn *vn = &vertices[vert].n;
+            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
+
+            const float
+            dotx = vn->n[0] * rsp.current_lookat_coeffs[0][0]
+                 + vn->n[1] * rsp.current_lookat_coeffs[0][1]
+                 + vn->n[2] * rsp.current_lookat_coeffs[0][2],
+
+            doty = vn->n[0] * rsp.current_lookat_coeffs[1][0]
+                 + vn->n[1] * rsp.current_lookat_coeffs[1][1]
+                 + vn->n[2] * rsp.current_lookat_coeffs[1][2];
+
+            d->u = ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
+            d->v = ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
+        }
+    } else {
+        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
+            const Vtx_t *v = &vertices[vert].v;
+            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
 
             d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
             d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
         }
-
-        // trivial clip rejectiona
-        // d->clip_rej = 0;
-// #ifdef TARGET_N3DS
-//     if (gGfx3DEnabled) {
-//         float wMod = w * 1.2f; // expanded w-range for testing clip rejection
-//         if (x < -wMod) d->clip_rej |= 1;
-//         if (x > wMod) d->clip_rej |= 2;
-//         if (y < -wMod) d->clip_rej |= 4;
-//         if (y > wMod) d->clip_rej |= 8;
-//     }
-//     else {
-//         if (x < -w) d->clip_rej |= 1;
-//         if (x > w) d->clip_rej |= 2;
-//         if (y < -w) d->clip_rej |= 4;
-//         if (y > w) d->clip_rej |= 8;
-//     }
-// #else
-//         if (x < -w) d->clip_rej |= 1;
-//         if (x > w) d->clip_rej |= 2;
-//         if (y < -w) d->clip_rej |= 4;
-//         if (y > w) d->clip_rej |= 8;
-// #endif
-//         if (z < -w) d->clip_rej |= 16;
-//         if (z > w) d->clip_rej |= 32;
-
-        d->x = v->ob[0];
-        d->y = v->ob[1];
-        d->z = v->ob[2];
-        // d->w = 1.0f;
-
-        // if (rsp.geometry_mode & G_FOG) {
-        //     if (fabsf(w) < 0.001f) {
-        //         // To avoid division by zero
-        //         w = 0.001f;
-        //     }
-
-        //     float winv = 1.0f / w;
-        //     if (winv < 0.0f) {
-        //         winv = 32767.0f;
-        //     }
-
-        //     float fog_z = z * winv * rsp.fog_mul + rsp.fog_offset;
-        //     if (fog_z < 0) fog_z = 0;
-        //     if (fog_z > 255) fog_z = 255;
-        //     d->color.a = fog_z; // Use alpha variable to store fog factor
-        //     d->color.a = 0;
-        // } else {
-           d->color.a = v->cn[3];
-        // }
     }
     profiler_3ds_log_time(6); // gfx_sp_vertex
 }
