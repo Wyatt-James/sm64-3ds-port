@@ -61,11 +61,13 @@ struct XYWidthHeight {
     uint16_t x, y, width, height;
 };
 
+// Total size: 24 bytes
 struct LoadedVertex {
-    float x, y, z, w;    // 16 bytes
+    float x, y, z;       // 12 bytes
+    // float w;          // 4 bytes
     float u, v;          // 8 bytes
     struct RGBA color;   // 4 bytes
-    // uint8_t clip_rej;
+    // uint8_t clip_rej; // 1 byte
 };
 
 struct TextureHashmapNode {
@@ -737,7 +739,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->x = v->ob[0];
         d->y = v->ob[1];
         d->z = v->ob[2];
-        d->w = 1.0f;
+        // d->w = 1.0f;
 
         // if (rsp.geometry_mode & G_FOG) {
         //     if (fabsf(w) < 0.001f) {
@@ -941,7 +943,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = v_arr[i]->x;
         buf_vbo[buf_vbo_len++] = v_arr[i]->y;
         buf_vbo[buf_vbo_len++] = v_arr[i]->z;
-        buf_vbo[buf_vbo_len++] = v_arr[i]->w;
+        buf_vbo[buf_vbo_len++] = 1.0f;  // w
+        // buf_vbo[buf_vbo_len++] = v_arr[i]->w;
 
         if (use_texture) {
             float u = (v_arr[i]->u - rdp.texture_tile.uls * 8) / 32.0f;
@@ -1324,22 +1327,22 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     ul->x = ulxf;
     ul->y = ulyf;
     ul->z = -1.0f;
-    ul->w = 1.0f;
+    // ul->w = 1.0f;
 
     ll->x = ulxf;
     ll->y = lryf;
     ll->z = -1.0f;
-    ll->w = 1.0f;
+    // ll->w = 1.0f;
 
     lr->x = lrxf;
     lr->y = lryf;
     lr->z = -1.0f;
-    lr->w = 1.0f;
+    // lr->w = 1.0f;
 
     ur->x = lrxf;
     ur->y = ulyf;
     ur->z = -1.0f;
-    ur->w = 1.0f;
+    // ur->w = 1.0f;
 
     // The coordinates for texture rectangle shall bypass the viewport setting
     struct XYWidthHeight default_viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
