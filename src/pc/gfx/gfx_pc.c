@@ -24,6 +24,10 @@
 #define profiler_3ds_log_time(id) do {} while (0)
 #endif
 
+// If enabled, shader swaps will be counter and printed each frame.
+#define COUNT_SHADER_SWAPS 0
+#define DELIBERATELY_INVALID_CC_ID ~0
+
 #define SUPPORT_CHECK(x) assert(x)
 
 // SCALE_M_N: upscale/downscale M-bit integer to N-bit
@@ -49,10 +53,16 @@
 #define U32_AS_FLOAT(v) (*(float*) &v)
 #define COMBINE_MODE(rgb, alpha) (((uint32_t) rgb) | (((uint32_t) alpha) << 12))
 
-const float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
-                                  {0.0f, 1.0f, 0.0f, 0.0f},
-                                  {0.0f, 0.0f, 1.0f, 0.0f},
-                                  {0.0f, 0.0f, 0.0f, 1.0f}};
+#if COUNT_SHADER_SWAPS == 1
+#define SHADER_COUNT_DO(stmt) do {stmt;} while (0)
+#else
+#define SHADER_COUNT_DO(stmt) do {} while (0)
+#endif
+
+float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
+                            {0.0f, 1.0f, 0.0f, 0.0f},
+                            {0.0f, 0.0f, 1.0f, 0.0f},
+                            {0.0f, 0.0f, 0.0f, 1.0f}};
 
 struct RGBA {
     uint8_t r, g, b, a;
@@ -151,11 +161,12 @@ static struct RDP {
 
 static struct ShaderState {
     uint32_t cc_id;
+    uint8_t other_flags;
     bool use_alpha;
     bool use_fog;
     bool texture_edge;
     bool use_noise;
-    struct ColorCombiner *comb;
+    struct ColorCombiner *combiner;
     uint8_t num_inputs;
     bool used_textures[2];
 } shader_state;
@@ -181,6 +192,10 @@ static size_t buf_vbo_num_tris;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
 static struct GfxRenderingAPI *gfx_rapi;
+
+#if COUNT_SHADER_SWAPS == 1
+int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_other_mode = 0, avoided_swaps_combine_mode = 0;
+#endif
 
 #ifdef TARGET_N3DS
 static void gfx_set_2d(int mode_2d)
@@ -282,21 +297,18 @@ static void gfx_generate_cc(struct ColorCombiner *comb, uint32_t cc_id) {
     memcpy(comb->shader_input_mapping, shader_input_mapping, sizeof(shader_input_mapping));
 }
 
+// This function now requires you to externally track the previous combiner,
+// else it may search unnecessarily.
 static struct ColorCombiner *gfx_lookup_or_create_color_combiner(uint32_t cc_id) {
-    static struct ColorCombiner *prev_combiner;
-    if (prev_combiner != NULL && prev_combiner->cc_id == cc_id) {
-        return prev_combiner;
-    }
-
     for (size_t i = 0; i < color_combiner_pool_size; i++) {
         if (color_combiner_pool[i].cc_id == cc_id) {
-            return prev_combiner = &color_combiner_pool[i];
+            return &color_combiner_pool[i];
         }
     }
     gfx_flush();
     struct ColorCombiner *comb = &color_combiner_pool[color_combiner_pool_size++];
     gfx_generate_cc(comb, cc_id);
-    return prev_combiner = comb;
+    return comb;
 }
 
 static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, const uint8_t *orig_addr, uint32_t fmt, uint32_t siz) {
@@ -656,7 +668,6 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     // Load each vert
     for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
         const Vtx_t *v = &vertices[vert].v;
-        const Vtx_tn *vn = &vertices[vert].n;
         struct LoadedVertex *d = &rsp.loaded_vertices[dest];
         
         d->x = v->ob[0];
@@ -759,50 +770,38 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
     struct LoadedVertex *v_arr[3] = {v1, v2, v3};
 
-    uint32_t cc_id = rdp.combine_mode;
+    bool use_fog      = shader_state.use_fog;
+    // bool texture_edge = shader_state.texture_edge;
+    bool use_alpha    = shader_state.use_alpha;
+    // bool use_noise    = shader_state.use_noise;
+    uint32_t cc_id    = shader_state.cc_id;
 
-    const bool use_fog      = shader_state.use_fog;
-    const bool texture_edge = shader_state.texture_edge;
-    const bool use_alpha    = shader_state.use_alpha;
-    const bool use_noise    = shader_state.use_noise;
+    static uint32_t prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
-    if (use_alpha) cc_id |= SHADER_OPT_ALPHA;
-    if (use_fog) cc_id |= SHADER_OPT_FOG;
-    if (texture_edge) cc_id |= SHADER_OPT_TEXTURE_EDGE;
-    if (use_noise) cc_id |= SHADER_OPT_NOISE;
+    // Unfortunately, we have to leave this here, because the variables that determine CCID
+    // are not updated atomically, i.e. in the same display list command, causing invalid GPU shaders
+    // if we update it elsewhere.
+    if (prev_cc_id != cc_id) {
+        prev_cc_id  = cc_id;
+        SHADER_COUNT_DO(num_shader_swaps++);
+        shader_state.combiner = gfx_lookup_or_create_color_combiner(cc_id);
+        struct ShaderProgram *gpu_shader_program = shader_state.combiner->prg;
 
-    if (!use_alpha)
-        cc_id &= ~0xfff000;
-
-    static uint32_t old_cc_id = ~0;
-    static struct ColorCombiner *comb = NULL;
-    
-    if (old_cc_id != cc_id) {
-        old_cc_id = cc_id;
-        comb = gfx_lookup_or_create_color_combiner(cc_id);
-        struct ShaderProgram *prg = comb->prg;
-        if (prg != rendering_state.shader_program) {
+        // Multiple CCs can share the same GPU shader program
+        if (gpu_shader_program != rendering_state.shader_program) {
             profiler_3ds_log_time(7); // gfx_sp_tri1
             gfx_flush();
             profiler_3ds_log_time(0);
             gfx_rapi->unload_shader(rendering_state.shader_program);
-            gfx_rapi->load_shader(prg);
-            rendering_state.shader_program = prg;
+            gfx_rapi->load_shader(gpu_shader_program);
+            rendering_state.shader_program = gpu_shader_program;
+            gfx_rapi->shader_get_info(gpu_shader_program, &shader_state.num_inputs, shader_state.used_textures);
         }
-        if (use_alpha != rendering_state.alpha_blend) {
-            profiler_3ds_log_time(7); // gfx_sp_tri1
-            gfx_flush();
-            profiler_3ds_log_time(0);
-            gfx_rapi->set_use_alpha(use_alpha);
-            rendering_state.alpha_blend = use_alpha;
-        }
-    }
-    uint8_t num_inputs;
-    bool used_textures[2];
-    gfx_rapi->shader_get_info(comb->prg, &num_inputs, used_textures);
+    } else
+        SHADER_COUNT_DO(avoided_swaps_recalc++);
 
     for (int i = 0; i < 2; i++) {
-        if (used_textures[i]) {
+        if (shader_state.used_textures[i]) {
             if (rdp.textures_changed[i]) {
                 profiler_3ds_log_time(7); // gfx_sp_tri1
                 gfx_flush();
@@ -823,8 +822,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         }
     }
 
-    bool use_texture = used_textures[0] || used_textures[1];
-    uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4)  >> 2; // Shift-right is actually slightly faster on 3DS.
+    bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
+    uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4)  >> 2; // Right-shift is actually slightly faster on 3DS.
     uint32_t tex_height = (rdp.texture_tile.lrt - rdp.texture_tile.ult + 4) >> 2;
 
 #ifndef TARGET_N3DS
@@ -867,11 +866,11 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             buf_vbo[buf_vbo_len++] = v_arr[i]->color.a / 255.0f; // fog factor (not alpha)
         }
 #endif
-        for (int j = 0; j < num_inputs; j++) {
+        for (int j = 0; j < shader_state.num_inputs; j++) {
             struct RGBA *color;
             struct RGBA tmp;
             for (int k = 0; k < 1 + (use_alpha ? 1 : 0); k++) {
-                switch (comb->shader_input_mapping[k][j]) {
+                switch (shader_state.combiner->shader_input_mapping[k][j]) {
                     case CC_PRIM:
                         color = &rdp.prim_color;
                         break;
@@ -1179,11 +1178,12 @@ static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d
            (color_comb_component(d) << 9);
 }
 
-shader_state_init(struct ShaderState* ss)
+static void shader_state_init(struct ShaderState* ss)
 {
-    ss->cc_id = ~0;
-    ss->comb = NULL;
+    ss->cc_id = DELIBERATELY_INVALID_CC_ID;
+    ss->combiner = NULL;
     ss->num_inputs = 0;
+    ss->other_flags = 0;
     ss->texture_edge = false;
     ss->use_alpha = false;
     ss->use_fog = false;
@@ -1192,46 +1192,17 @@ shader_state_init(struct ShaderState* ss)
     ss->used_textures[1] = false;
 }
 
-int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_other_mode = 0, avoided_swaps_combine_mode = 0;
-static void recalc_shader()
+static void calculate_cc_id()
 {
-    num_shader_swaps++;
-    // uint32_t old_cc = shader_state.shader_id;
-    // uint32_t working_ccid = rdp.combine_mode;
+    shader_state.cc_id = rdp.combine_mode;
 
-    // if (shader_state.use_alpha) working_ccid |= SHADER_OPT_ALPHA;
-    // if (shader_state.use_fog) working_ccid |= SHADER_OPT_FOG;
-    // if (shader_state.texture_edge) working_ccid |= SHADER_OPT_TEXTURE_EDGE;
-    // if (shader_state.use_noise) working_ccid |= SHADER_OPT_NOISE;
-
-    // if (!shader_state.use_alpha)
-    //     working_ccid &= ~0xfff000;
-
-    // if (old_cc != working_ccid) {
-    //     shader_state.shader_id = working_ccid;
-    //     printf("Shading to 0x%x\n", working_ccid);
-    //     num_shader_swaps++;
-    //     struct ColorCombiner *comb = gfx_lookup_or_create_color_combiner(working_ccid);
-    //     struct ShaderProgram *prg = comb->prg;
-
-    //     if (prg != rendering_state.shader_program) {
-    //         gfx_flush();
-    //         gfx_rapi->unload_shader(rendering_state.shader_program);
-    //         gfx_rapi->load_shader(prg);
-    //         rendering_state.shader_program = prg;
-    //     }
-
-    //     if (shader_state.use_alpha != rendering_state.alpha_blend) {
-    //         gfx_flush();
-    //         gfx_rapi->set_use_alpha(shader_state.use_alpha);
-    //         rendering_state.alpha_blend = shader_state.use_alpha;
-    //     }
-        
-    //     gfx_rapi->shader_get_info(prg, &shader_state.num_inputs, shader_state.used_textures);
-    // } else {
-    //     printf("Avoided shading in recalc_shader");
-    //     avoided_swaps_recalc++;
-    // }
+    if (shader_state.use_fog)      shader_state.cc_id |= SHADER_OPT_FOG;
+    if (shader_state.texture_edge) shader_state.cc_id |= SHADER_OPT_TEXTURE_EDGE;
+    if (shader_state.use_noise)    shader_state.cc_id |= SHADER_OPT_NOISE;
+    if (shader_state.use_alpha)
+        shader_state.cc_id |= SHADER_OPT_ALPHA;
+    else
+        shader_state.cc_id &= ~0xfff000;
 }
 
 static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
@@ -1239,9 +1210,9 @@ static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
     // Low savings: usually under 1%
     if (rdp.combine_mode != combine_mode) {
         rdp.combine_mode  = combine_mode;
-        recalc_shader();
+        calculate_cc_id();
     } else
-        avoided_swaps_combine_mode++;
+        SHADER_COUNT_DO(avoided_swaps_combine_mode++);
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -1467,24 +1438,29 @@ static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mo
         rendering_state.decal_mode = zmode_decal;
     }
 
-    bool old_fog =          shader_state.use_fog,
-         old_texture_edge = shader_state.texture_edge,
-         old_alpha =        shader_state.use_alpha,
-         old_noise =        shader_state.use_noise;
+    const uint8_t old_flags = shader_state.other_flags;
 
     shader_state.use_fog      = (rdp.other_mode_l >> 30) == G_BL_CLR_FOG;
-    shader_state.texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) == CVG_X_ALPHA;
+    shader_state.texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) ? 1 : 0;
     shader_state.use_alpha    = shader_state.texture_edge || ((rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0);
     shader_state.use_noise    = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
+    
+    shader_state.other_flags = shader_state.use_fog
+                           | (shader_state.texture_edge << 1)
+                           | (shader_state.use_alpha << 2)
+                           | (shader_state.use_noise << 3);
 
     // Relatively lucrative, ranging from 30-60 in most levels (10-20%)
-    if (old_fog          != shader_state.use_fog ||
-        old_texture_edge != shader_state.texture_edge ||
-        old_alpha        != shader_state.use_alpha ||
-        old_noise        != shader_state.use_noise) {
-        recalc_shader();
-    } else
-        avoided_swaps_other_mode++;
+    if (old_flags != shader_state.other_flags)
+        calculate_cc_id();
+    else
+        SHADER_COUNT_DO(avoided_swaps_other_mode++);
+    
+    if (shader_state.use_alpha != rendering_state.alpha_blend) {
+        gfx_flush();
+        gfx_rapi->set_use_alpha(shader_state.use_alpha);
+        rendering_state.alpha_blend = shader_state.use_alpha;
+    }
 }
 
 static inline void *seg_addr(uintptr_t w1) {
@@ -1814,8 +1790,10 @@ void gfx_run(Gfx *commands) {
     gfx_rapi->end_frame();
     gfx_wapi->swap_buffers_begin();
 
-    // printf("Swaps %d  RC %d  OM %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_other_mode, avoided_swaps_combine_mode);
+#if COUNT_SHADER_SWAPS == 1
+    printf("Swaps %d  RC %d  OM %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_other_mode, avoided_swaps_combine_mode);
     num_shader_swaps = avoided_swaps_recalc = avoided_swaps_other_mode = avoided_swaps_combine_mode = 0;
+#endif
 }
 
 void gfx_end_frame(void) {
