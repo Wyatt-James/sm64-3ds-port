@@ -25,8 +25,7 @@
 #endif
 
 // If enabled, shader swaps will be counter and printed each frame.
-#define COUNT_SHADER_SWAPS 0
-#define DELIBERATELY_INVALID_CC_ID ~0
+#define ENABLE_SHADER_SWAP_COUNTER 0
 
 #define SUPPORT_CHECK(x) assert(x)
 
@@ -49,11 +48,12 @@
 #define MAX_BUFFERED 256
 #define MAX_LIGHTS 2
 #define MAX_VERTICES 64
+#define DELIBERATELY_INVALID_CC_ID ~0
 
 #define U32_AS_FLOAT(v) (*(float*) &v)
 #define COMBINE_MODE(rgb, alpha) (((uint32_t) rgb) | (((uint32_t) alpha) << 12))
 
-#if COUNT_SHADER_SWAPS == 1
+#if ENABLE_SHADER_SWAP_COUNTER == 1
 #define SHADER_COUNT_DO(stmt) do {stmt;} while (0)
 #else
 #define SHADER_COUNT_DO(stmt) do {} while (0)
@@ -193,8 +193,8 @@ static size_t buf_vbo_num_tris;
 static struct GfxWindowManagerAPI *gfx_wapi;
 static struct GfxRenderingAPI *gfx_rapi;
 
-#if COUNT_SHADER_SWAPS == 1
-int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_other_mode = 0, avoided_swaps_combine_mode = 0;
+#if ENABLE_SHADER_SWAP_COUNTER == 1
+int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_combine_mode = 0;
 #endif
 
 #ifdef TARGET_N3DS
@@ -1438,23 +1438,12 @@ static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mo
         rendering_state.decal_mode = zmode_decal;
     }
 
-    const uint8_t old_flags = shader_state.other_flags;
-
     shader_state.use_fog      = (rdp.other_mode_l >> 30) == G_BL_CLR_FOG;
     shader_state.texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) ? 1 : 0;
     shader_state.use_alpha    = shader_state.texture_edge || ((rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0);
     shader_state.use_noise    = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
-    
-    shader_state.other_flags = shader_state.use_fog
-                           | (shader_state.texture_edge << 1)
-                           | (shader_state.use_alpha << 2)
-                           | (shader_state.use_noise << 3);
 
-    // Relatively lucrative, ranging from 30-60 in most levels (10-20%)
-    if (old_flags != shader_state.other_flags)
-        calculate_cc_id();
-    else
-        SHADER_COUNT_DO(avoided_swaps_other_mode++);
+    calculate_cc_id();
     
     if (shader_state.use_alpha != rendering_state.alpha_blend) {
         gfx_flush();
@@ -1790,9 +1779,9 @@ void gfx_run(Gfx *commands) {
     gfx_rapi->end_frame();
     gfx_wapi->swap_buffers_begin();
 
-#if COUNT_SHADER_SWAPS == 1
-    printf("Swaps %d  RC %d  OM %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_other_mode, avoided_swaps_combine_mode);
-    num_shader_swaps = avoided_swaps_recalc = avoided_swaps_other_mode = avoided_swaps_combine_mode = 0;
+#if ENABLE_SHADER_SWAP_COUNTER == 1
+    printf("Swaps %d  RC %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_combine_mode);
+    num_shader_swaps = avoided_swaps_recalc = avoided_swaps_combine_mode = 0;
 #endif
 }
 
