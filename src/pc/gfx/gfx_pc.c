@@ -26,6 +26,7 @@
 
 // If enabled, shader swaps will be counter and printed each frame.
 #define ENABLE_SHADER_SWAP_COUNTER 0
+#define ENABLE_OTHER_MODE_SWAP_COUNTER 0
 
 #define SUPPORT_CHECK(x) assert(x)
 
@@ -57,6 +58,12 @@
 #define SHADER_COUNT_DO(stmt) do {stmt;} while (0)
 #else
 #define SHADER_COUNT_DO(stmt) do {} while (0)
+#endif
+
+#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
+#define MODE_SWAP_COUNT_DO(stmt) do {stmt;} while (0)
+#else
+#define MODE_SWAP_COUNT_DO(stmt) do {} while (0)
 #endif
 
 float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
@@ -196,6 +203,13 @@ static struct GfxRenderingAPI *gfx_rapi;
 #if ENABLE_SHADER_SWAP_COUNTER == 1
 int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_combine_mode = 0;
 #endif
+
+#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
+static int om_h_sets = 0, om_l_sets = 0, om_h_skips = 0, om_l_skips = 0;
+#endif
+
+static void set_other_mode_h(uint32_t other_mode_h);
+static void set_other_mode_l(uint32_t other_mode_l);
 
 #ifdef TARGET_N3DS
 static void gfx_set_2d(int mode_2d)
@@ -1254,9 +1268,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     uint32_t saved_other_mode_h = rdp.other_mode_h;
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
 
-    if (cycle_type == G_CYC_COPY) {
-        rdp.other_mode_h = (rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT;
-    }
+    if (cycle_type == G_CYC_COPY)
+        set_other_mode_h((rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT);
 
     // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
     gfx_flush();
@@ -1327,9 +1340,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
-    if (cycle_type == G_CYC_COPY) {
-        rdp.other_mode_h = saved_other_mode_h;
-    }
+    if (cycle_type == G_CYC_COPY)
+        set_other_mode_h(saved_other_mode_h);
 }
 
 static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
@@ -1416,39 +1428,61 @@ static void gfx_dp_set_color_image(uint32_t format, uint32_t size, uint32_t widt
     rdp.color_image_address = address;
 }
 
+static void set_other_mode_h(uint32_t other_mode_h)
+{
+    // About 50% savings, but relatively low in count (aside from goddard)
+    if (rdp.other_mode_h != other_mode_h) {
+        rdp.other_mode_h  = other_mode_h;
+        MODE_SWAP_COUNT_DO(om_h_sets++);
+    }
+    else
+        MODE_SWAP_COUNT_DO(om_h_skips++);
+}
+
+static void set_other_mode_l(uint32_t other_mode_l)
+{
+    // About 66% savings, but relatively low in count (aside from goddard)
+    if (rdp.other_mode_l != other_mode_l) {
+        rdp.other_mode_l  = other_mode_l;
+        MODE_SWAP_COUNT_DO(om_l_sets++);
+        
+        const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
+        if (z_upd != rendering_state.depth_mask) {
+            gfx_flush();
+            gfx_rapi->set_depth_mask(z_upd);
+            rendering_state.depth_mask = z_upd;
+        }
+
+        const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
+        if (zmode_decal != rendering_state.decal_mode) {
+            gfx_flush();
+            gfx_rapi->set_zmode_decal(zmode_decal);
+            rendering_state.decal_mode = zmode_decal;
+        }
+
+        shader_state.use_fog      = (rdp.other_mode_l >> 30) == G_BL_CLR_FOG;
+        shader_state.texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) ? 1 : 0;
+        shader_state.use_alpha    = shader_state.texture_edge || ((rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0);
+        shader_state.use_noise    = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
+
+        calculate_cc_id();
+        
+        if (shader_state.use_alpha != rendering_state.alpha_blend) {
+            gfx_flush();
+            gfx_rapi->set_use_alpha(shader_state.use_alpha);
+            rendering_state.alpha_blend = shader_state.use_alpha;
+        }
+    }
+    else
+        MODE_SWAP_COUNT_DO(om_l_skips++);
+}
+
 static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mode) {
     uint64_t mask = (((uint64_t)1 << num_bits) - 1) << shift;
     uint64_t om = rdp.other_mode_l | ((uint64_t)rdp.other_mode_h << 32);
     om = (om & ~mask) | mode;
-    rdp.other_mode_l = (uint32_t)om;
-    rdp.other_mode_h = (uint32_t)(om >> 32);
-
-    const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
-    if (z_upd != rendering_state.depth_mask) {
-        gfx_flush();
-        gfx_rapi->set_depth_mask(z_upd);
-        rendering_state.depth_mask = z_upd;
-    }
-
-    const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
-    if (zmode_decal != rendering_state.decal_mode) {
-        gfx_flush();
-        gfx_rapi->set_zmode_decal(zmode_decal);
-        rendering_state.decal_mode = zmode_decal;
-    }
-
-    shader_state.use_fog      = (rdp.other_mode_l >> 30) == G_BL_CLR_FOG;
-    shader_state.texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) ? 1 : 0;
-    shader_state.use_alpha    = shader_state.texture_edge || ((rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0);
-    shader_state.use_noise    = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
-
-    calculate_cc_id();
-    
-    if (shader_state.use_alpha != rendering_state.alpha_blend) {
-        gfx_flush();
-        gfx_rapi->set_use_alpha(shader_state.use_alpha);
-        rendering_state.alpha_blend = shader_state.use_alpha;
-    }
+    set_other_mode_h((uint32_t)(om >> 32));
+    set_other_mode_l((uint32_t)om);
 }
 
 static inline void *seg_addr(uintptr_t w1) {
@@ -1779,6 +1813,11 @@ void gfx_run(Gfx *commands) {
 #if ENABLE_SHADER_SWAP_COUNTER == 1
     printf("Swaps %d  RC %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_combine_mode);
     num_shader_swaps = avoided_swaps_recalc = avoided_swaps_combine_mode = 0;
+#endif
+
+#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
+    printf("OMH %d SK %d  OML %d SK %d\n", om_h_sets, om_h_skips, om_l_sets, om_l_skips);
+    om_h_sets = om_l_sets = om_h_skips = om_l_skips = 0;
 #endif
 }
 
