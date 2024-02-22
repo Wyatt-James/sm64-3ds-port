@@ -47,6 +47,7 @@
 #define MAX_VERTICES 64
 
 #define U32_AS_FLOAT(v) (*(float*) &v)
+#define COMBINE_MODE(rgb, alpha) (((uint32_t) rgb) | (((uint32_t) alpha) << 12))
 
 const float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
                                   {0.0f, 1.0f, 0.0f, 0.0f},
@@ -147,6 +148,17 @@ static struct RDP {
     void *z_buf_address;
     void *color_image_address;
 } rdp;
+
+static struct ShaderState {
+    uint32_t cc_id;
+    bool use_alpha;
+    bool use_fog;
+    bool texture_edge;
+    bool use_noise;
+    struct ColorCombiner *comb;
+    uint8_t num_inputs;
+    bool used_textures[2];
+} shader_state;
 
 static struct RenderingState {
     bool depth_test;
@@ -749,23 +761,18 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 
     uint32_t cc_id = rdp.combine_mode;
 
-    bool use_alpha = (rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0;
-    bool use_fog = (rdp.other_mode_l >> 30) == G_BL_CLR_FOG;
-    bool texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) == CVG_X_ALPHA;
-    bool use_noise = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
-
-    if (texture_edge) {
-        use_alpha = true;
-    }
+    const bool use_fog      = shader_state.use_fog;
+    const bool texture_edge = shader_state.texture_edge;
+    const bool use_alpha    = shader_state.use_alpha;
+    const bool use_noise    = shader_state.use_noise;
 
     if (use_alpha) cc_id |= SHADER_OPT_ALPHA;
     if (use_fog) cc_id |= SHADER_OPT_FOG;
     if (texture_edge) cc_id |= SHADER_OPT_TEXTURE_EDGE;
     if (use_noise) cc_id |= SHADER_OPT_NOISE;
 
-    if (!use_alpha) {
+    if (!use_alpha)
         cc_id &= ~0xfff000;
-    }
 
     static uint32_t old_cc_id = ~0;
     static struct ColorCombiner *comb = NULL;
@@ -1172,8 +1179,69 @@ static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d
            (color_comb_component(d) << 9);
 }
 
-static void gfx_dp_set_combine_mode(uint32_t rgb, uint32_t alpha) {
-    rdp.combine_mode = rgb | (alpha << 12);
+shader_state_init(struct ShaderState* ss)
+{
+    ss->cc_id = ~0;
+    ss->comb = NULL;
+    ss->num_inputs = 0;
+    ss->texture_edge = false;
+    ss->use_alpha = false;
+    ss->use_fog = false;
+    ss->use_noise = false;
+    ss->used_textures[0] = false;
+    ss->used_textures[1] = false;
+}
+
+int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_other_mode = 0, avoided_swaps_combine_mode = 0;
+static void recalc_shader()
+{
+    num_shader_swaps++;
+    // uint32_t old_cc = shader_state.shader_id;
+    // uint32_t working_ccid = rdp.combine_mode;
+
+    // if (shader_state.use_alpha) working_ccid |= SHADER_OPT_ALPHA;
+    // if (shader_state.use_fog) working_ccid |= SHADER_OPT_FOG;
+    // if (shader_state.texture_edge) working_ccid |= SHADER_OPT_TEXTURE_EDGE;
+    // if (shader_state.use_noise) working_ccid |= SHADER_OPT_NOISE;
+
+    // if (!shader_state.use_alpha)
+    //     working_ccid &= ~0xfff000;
+
+    // if (old_cc != working_ccid) {
+    //     shader_state.shader_id = working_ccid;
+    //     printf("Shading to 0x%x\n", working_ccid);
+    //     num_shader_swaps++;
+    //     struct ColorCombiner *comb = gfx_lookup_or_create_color_combiner(working_ccid);
+    //     struct ShaderProgram *prg = comb->prg;
+
+    //     if (prg != rendering_state.shader_program) {
+    //         gfx_flush();
+    //         gfx_rapi->unload_shader(rendering_state.shader_program);
+    //         gfx_rapi->load_shader(prg);
+    //         rendering_state.shader_program = prg;
+    //     }
+
+    //     if (shader_state.use_alpha != rendering_state.alpha_blend) {
+    //         gfx_flush();
+    //         gfx_rapi->set_use_alpha(shader_state.use_alpha);
+    //         rendering_state.alpha_blend = shader_state.use_alpha;
+    //     }
+        
+    //     gfx_rapi->shader_get_info(prg, &shader_state.num_inputs, shader_state.used_textures);
+    // } else {
+    //     printf("Avoided shading in recalc_shader");
+    //     avoided_swaps_recalc++;
+    // }
+}
+
+static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
+
+    // Low savings: usually under 1%
+    if (rdp.combine_mode != combine_mode) {
+        rdp.combine_mode  = combine_mode;
+        recalc_shader();
+    } else
+        avoided_swaps_combine_mode++;
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -1302,7 +1370,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         dsdx >>= 2;
 
         // Color combiner is turned off in copy mode
-        gfx_dp_set_combine_mode(color_comb(0, 0, 0, G_CCMUX_TEXEL0), color_comb(0, 0, 0, G_ACMUX_TEXEL0));
+        gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_TEXEL0), color_comb(0, 0, 0, G_ACMUX_TEXEL0)));
 
         // Per documentation one extra pixel is added in this modes to each edge
         lrx += 1 << 2;
@@ -1343,7 +1411,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     }
 
     gfx_draw_rectangle(ulx, uly, lrx, lry);
-    rdp.combine_mode = saved_combine_mode;
+    gfx_dp_set_combine_mode(saved_combine_mode);
 }
 
 static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
@@ -1365,9 +1433,9 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
     }
 
     uint32_t saved_combine_mode = rdp.combine_mode;
-    gfx_dp_set_combine_mode(color_comb(0, 0, 0, G_CCMUX_SHADE), color_comb(0, 0, 0, G_ACMUX_SHADE));
+    gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_SHADE), color_comb(0, 0, 0, G_ACMUX_SHADE)));
     gfx_draw_rectangle(ulx, uly, lrx, lry);
-    rdp.combine_mode = saved_combine_mode;
+    gfx_dp_set_combine_mode(saved_combine_mode);
 }
 
 static void gfx_dp_set_z_image(void *z_buf_address) {
@@ -1398,6 +1466,25 @@ static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mo
         gfx_rapi->set_zmode_decal(zmode_decal);
         rendering_state.decal_mode = zmode_decal;
     }
+
+    bool old_fog =          shader_state.use_fog,
+         old_texture_edge = shader_state.texture_edge,
+         old_alpha =        shader_state.use_alpha,
+         old_noise =        shader_state.use_noise;
+
+    shader_state.use_fog      = (rdp.other_mode_l >> 30) == G_BL_CLR_FOG;
+    shader_state.texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) == CVG_X_ALPHA;
+    shader_state.use_alpha    = shader_state.texture_edge || ((rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0);
+    shader_state.use_noise    = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
+
+    // Relatively lucrative, ranging from 30-60 in most levels (10-20%)
+    if (old_fog          != shader_state.use_fog ||
+        old_texture_edge != shader_state.texture_edge ||
+        old_alpha        != shader_state.use_alpha ||
+        old_noise        != shader_state.use_noise) {
+        recalc_shader();
+    } else
+        avoided_swaps_other_mode++;
 }
 
 static inline void *seg_addr(uintptr_t w1) {
@@ -1542,9 +1629,9 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_dp_set_fill_color(cmd->words.w1);
                 break;
             case G_SETCOMBINE:
-                gfx_dp_set_combine_mode(
+                gfx_dp_set_combine_mode(COMBINE_MODE(
                     color_comb(C0(20, 4), C1(28, 4), C0(15, 5), C1(15, 3)),
-                    color_comb(C0(12, 3), C1(12, 3), C0(9, 3), C1(9, 3)));
+                    color_comb(C0(12, 3), C1(12, 3), C0(9, 3), C1(9, 3))));
                     /*color_comb(C0(5, 4), C1(24, 4), C0(0, 5), C1(6, 3)),
                     color_comb(C1(21, 3), C1(3, 3), C1(18, 3), C1(0, 3)));*/
                 break;
@@ -1650,6 +1737,9 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
     gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
 #endif
+
+    shader_state_init(&shader_state);
+
     // Used in the 120 star TAS
     static uint32_t precomp_shaders[] = {
         0x01200200,
@@ -1723,6 +1813,9 @@ void gfx_run(Gfx *commands) {
     gfx_flush();
     gfx_rapi->end_frame();
     gfx_wapi->swap_buffers_begin();
+
+    // printf("Swaps %d  RC %d  OM %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_other_mode, avoided_swaps_combine_mode);
+    num_shader_swaps = avoided_swaps_recalc = avoided_swaps_other_mode = avoided_swaps_combine_mode = 0;
 }
 
 void gfx_end_frame(void) {
