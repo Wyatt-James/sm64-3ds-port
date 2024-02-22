@@ -391,15 +391,13 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 2:  Synchronous Audio Synthesis
     // 3:  Render Game
     // 4:  GFX RAPI Start Frame
-    // 5:  GFX Run DL
-    // 6:  gfx_sp_vertex
-    // 7:  gfx_sp_tri1
-    // 8:  Vertex Copy
-    // 9:  Light Recalculation
-    // 10: Vertex Light Calculation
-    // 11: Unlit Vertex Color Copy
-    // 12: Texgen Calculation
-    // 13: Texcoord Copy
+    // 5:  Vertex Copy
+    // 6:  Light Recalculation
+    // 7:  Vertex Light Calculation
+    // 8:  Unlit Vertex Color Copy
+    // 9:  Texgen Calculation
+    // 10: Texcoord Copy
+    // 11: gfx_sp_tri1
 
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;
@@ -419,7 +417,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 13);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 11);
                     
                     i += 5; // Place a breakpoint here
                     break;
