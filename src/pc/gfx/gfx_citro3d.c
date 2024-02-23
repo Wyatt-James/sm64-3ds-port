@@ -22,6 +22,12 @@
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v) (*(float*) &v)
 
+#define STRIDE_POSITION 3
+#define STRIDE_TEXTURE  2
+#define STRIDE_RGBA     4
+#define STRIDE_RGB      3
+#define STRIDE_FOG      STRIDE_RGBA
+
 
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
@@ -499,6 +505,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
             current_shader_shbin = shader_shbin;
             current_shader_shbin_size = shader_shbin_size;
             fprintf(stderr, "Warning! Using default for %u\n", shader_code);
+            break;
     }
 
     DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)current_shader_shbin, current_shader_shbin_size);
@@ -509,23 +516,27 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     // Configure attributes for use with the vertex shader
     int attr = 0;
     uint32_t attr_mask = 0;
-    cb->stride = 3;
+    cb->stride = 0;
 
-    const int alpha_stride = has_alpha ? 4 : 3;
+    const int alpha_stride = has_alpha ? STRIDE_RGBA : STRIDE_RGB;
 
-    AttrInfo_Init(&cb->attr_info);
-    AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 3); // XYZ (W is implicitly 1.0f)
+    // Position is always present
+    {
+        AttrInfo_Init(&cb->attr_info);
+        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 3); // XYZ (W is implicitly 1.0f)
+        cb->stride += STRIDE_POSITION;
+    }
     if (has_texture)
     {
         attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 2);
-        cb->stride += 2;
+        cb->stride += STRIDE_TEXTURE;
     }
     // if (has_fog)
     // {
     //     attr_mask += attr * (1 << 4 * attr);
     //     AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 4);
-    //     cb->stride += 4;
+    //     cb->stride += STRIDE_FOG;
     // }
     if (has_color)
     {
@@ -808,8 +819,8 @@ static void renderTwoColorTris(float buf_vbo[], size_t buf_vbo_len, size_t buf_v
     bool hasAlpha = curShader->cc_features.opt_alpha;
 
 
-    const int vtxOffs = hasTex ? 6 : 4;
-    const int vtxOffs2 = vtxOffs + (hasAlpha ? 4 : 3);
+    const int vtxOffs = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
+    const int vtxOffs2 = vtxOffs + (hasAlpha ? STRIDE_RGBA : STRIDE_RGB);
 
     // Removed a hack from before vert shaders. This new implementation
     // probably isn't completely kosher, but it works.
