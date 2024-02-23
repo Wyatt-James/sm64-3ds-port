@@ -845,28 +845,28 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1(); // 3DS is always 0 to 1
 #endif
 
-    for (int i = 0; i < 3; i++) {
+    for (int vtx = 0; vtx < 3; vtx++) {
 
 #ifdef TARGET_N3DS
-        // float w = v_arr[i]->w, z = (v_arr[i]->z + w) / -2.0f; // 3DS is always 0 to 1
+        // float w = v_arr[vtx]->w, z = (v_arr[vtx]->z + w) / -2.0f; // 3DS is always 0 to 1
 #else
-        float z = v_arr[i]->z, w = v_arr[i]->w;
+        float z = v_arr[vtx]->z, w = v_arr[vtx]->w;
         if (z_is_from_0_to_1) {
             z = (z + w) / 2.0f;
         }
 #endif
 
-        buf_vbo[buf_vbo_len++] = v_arr[i]->x;
-        buf_vbo[buf_vbo_len++] = v_arr[i]->y;
-        buf_vbo[buf_vbo_len++] = v_arr[i]->z;
+        buf_vbo[buf_vbo_len++] = v_arr[vtx]->x;
+        buf_vbo[buf_vbo_len++] = v_arr[vtx]->y;
+        buf_vbo[buf_vbo_len++] = v_arr[vtx]->z;
         // buf_vbo[buf_vbo_len++] = 1.0f;  // w
-        // buf_vbo[buf_vbo_len++] = v_arr[i]->w;
+        // buf_vbo[buf_vbo_len++] = v_arr[vtx]->w;
 
         if (use_texture) {
-            float u = (v_arr[i]->u - rdp.texture_tile.uls * 8) / 32.0f;
-            float v = (v_arr[i]->v - rdp.texture_tile.ult * 8) / 32.0f;
+            float u = (v_arr[vtx]->u - rdp.texture_tile.uls * 8) / 32.0f;
+            float v = (v_arr[vtx]->v - rdp.texture_tile.ult * 8) / 32.0f;
             if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
-                // Linear filter adds 0.5f to the coordinates
+                // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
                 u += 0.5f;
                 v += 0.5f;
             }
@@ -878,45 +878,45 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             buf_vbo[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
-            buf_vbo[buf_vbo_len++] = v_arr[i]->color.a / 255.0f; // fog factor (not alpha)
+            buf_vbo[buf_vbo_len++] = v_arr[vtx]->color.a / 255.0f; // fog factor (not alpha)
         }
 #endif
-        for (int j = 0; j < shader_state.num_inputs; j++) {
+        for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
             struct RGBA *color;
             struct RGBA tmp;
-            for (int k = 0; k < 1 + (use_alpha ? 1 : 0); k++) {
-                switch (shader_state.combiner->shader_input_mapping[k][j]) {
+            for (int cc_input = 0; cc_input < 1 + (use_alpha ? 1 : 0); cc_input++) {
+                switch (shader_state.combiner->shader_input_mapping[cc_input][sh_input]) {
                     case CC_PRIM:
                         color = &rdp.prim_color;
                         break;
                     case CC_SHADE:
-                        color = &v_arr[i]->color;
+                        color = &v_arr[vtx]->color;
                         break;
                     case CC_ENV:
                         color = &rdp.env_color;
                         break;
-                    case CC_LOD:
-                    {
-                        // WYATT_TODO LoD does not work in world-space
-                        // float distance_frac = (1.0f - 3000.0f) / 3000.0f;
-                        // // float distance_frac = (v1->w - 3000.0f) / 3000.0f;
-                        // if (distance_frac < 0.0f) distance_frac = 0.0f;
-                        // if (distance_frac > 1.0f) distance_frac = 1.0f;
-                        // tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
-                        // color = &tmp;
-                        break;
-                    }
+                    // case CC_LOD:
+                    // {
+                    //     // WYATT_TODO LoD does not work in world-space
+                    //     // float distance_frac = (1.0f - 3000.0f) / 3000.0f;
+                    //     // // float distance_frac = (v1->w - 3000.0f) / 3000.0f;
+                    //     // if (distance_frac < 0.0f) distance_frac = 0.0f;
+                    //     // if (distance_frac > 1.0f) distance_frac = 1.0f;
+                    //     // tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
+                    //     // color = &tmp;
+                    //     break;
+                    // }
                     default:
                         memset(&tmp, 0, sizeof(tmp));
                         color = &tmp;
                         break;
                 }
-                if (k == 0) {
+                if (cc_input == 0) {
                     buf_vbo[buf_vbo_len++] = color->r / 255.0f;
                     buf_vbo[buf_vbo_len++] = color->g / 255.0f;
                     buf_vbo[buf_vbo_len++] = color->b / 255.0f;
                 } else {
-                    if (use_fog && color == &v_arr[i]->color) {
+                    if (use_fog && color == &v_arr[vtx]->color) {
                         // Shade alpha is 100% for fog
                         buf_vbo[buf_vbo_len++] = 1.0f;
                     } else {
@@ -925,7 +925,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
                 }
             }
         }
-        /*struct RGBA *color = &v_arr[i]->color;
+        /*struct RGBA *color = &v_arr[vtx]->color;
         buf_vbo[buf_vbo_len++] = color->r / 255.0f;
         buf_vbo[buf_vbo_len++] = color->g / 255.0f;
         buf_vbo[buf_vbo_len++] = color->b / 255.0f;
