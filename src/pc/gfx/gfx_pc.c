@@ -67,10 +67,10 @@
 #define MODE_SWAP_COUNT_DO(stmt) do {} while (0)
 #endif
 
-float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
-                            {0.0f, 1.0f, 0.0f, 0.0f},
-                            {0.0f, 0.0f, 1.0f, 0.0f},
-                            {0.0f, 0.0f, 0.0f, 1.0f}};
+float C3D_MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
+                                {0.0f, 1.0f, 0.0f, 0.0f},
+                                {0.0f, 0.0f, 1.0f, 0.0f},
+                                {0.0f, 0.0f, 0.0f, 1.0f}};
 
 union RGBA {  
     struct {
@@ -655,7 +655,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
 }
 
-
+// SM64 only ever pops 1 matrix at a time
 static void gfx_sp_pop_matrix(uint32_t count) {
     gfx_flush();
     while (count--) {
@@ -1307,7 +1307,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
     gfx_flush();
-    gfx_citro3d_set_model_view_matrix(MTX_IDENTITY);
+    gfx_citro3d_set_model_view_matrix(C3D_MTX_IDENTITY);
 
     // U10.2 coordinates
     float ulxf = ulx;
