@@ -868,12 +868,12 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
         // buf_vbo[buf_vbo_len++] = v_arr[vtx]->w;
 
         if (use_texture) {
-            float u = (v_arr[vtx]->u - rdp.texture_tile.uls8) / 32.0f;
-            float v = (v_arr[vtx]->v - rdp.texture_tile.ult8) / 32.0f;
+            float u = (v_arr[vtx]->u - rdp.texture_tile.uls8);
+            float v = (v_arr[vtx]->v - rdp.texture_tile.ult8);
             if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
                 // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
-                u += 0.5f;
-                v += 0.5f;
+                u += 16.0f;
+                v += 16.0f;
             }
             buf_vbo[buf_vbo_len++] = u * rdp.texture_tile.tex_width_recip;
             buf_vbo[buf_vbo_len++] = v * rdp.texture_tile.tex_height_recip;
@@ -1114,8 +1114,8 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
 
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
     if (tile == G_TX_RENDERTILE) {
-        rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) >> 2); 
-        rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) >> 2);
+        rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) * 8);
+        rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) * 8);
         rdp.texture_tile.uls8 = (float) (uls * 8);
         rdp.texture_tile.ult8 = (float) (ult * 8);
         rdp.textures_changed[0] = true;
@@ -1188,8 +1188,8 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
     
     // Right-shift is slightly faster on 3DS.
-    rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) >> 2); 
-    rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) >> 2);
+    rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) * 8);
+    rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) * 8);
     rdp.texture_tile.uls8 = (float) (uls * 8);
     rdp.texture_tile.ult8 = (float) (ult * 8);
 
