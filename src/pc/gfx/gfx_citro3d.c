@@ -917,7 +917,7 @@ static void gfx_citro3d_init(void)
     DEPTH_ADD_W_MTX.r[2].w = 1.0f;
 }
 
-void sm64_to_c3d_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
+void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
 { 
     c3d_mtx->r[0].x = sm64_mtx[0][0]; c3d_mtx->r[0].y = sm64_mtx[1][0]; c3d_mtx->r[0].z = sm64_mtx[2][0]; c3d_mtx->r[0].w = sm64_mtx[3][0];
     c3d_mtx->r[1].x = sm64_mtx[0][1]; c3d_mtx->r[1].y = sm64_mtx[1][1]; c3d_mtx->r[1].z = sm64_mtx[2][1]; c3d_mtx->r[1].w = sm64_mtx[3][1];
@@ -970,7 +970,7 @@ static void gfx_citro3d_start_frame(void)
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
 {
-    sm64_to_c3d_mtx(mtx, &modelView);
+    gfx_citro3d_convert_mtx(mtx, &modelView);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
 }
 
