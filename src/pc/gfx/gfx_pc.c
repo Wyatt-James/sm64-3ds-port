@@ -156,8 +156,9 @@ static struct RDP {
         uint8_t fmt;
         uint8_t siz;
         uint8_t cms, cmt;
-        uint16_t uls, ult, lrs, lrt; // U10.2
         uint32_t line_size_bytes;
+        float tex_width_recip, tex_height_recip; // Fantastic improvement
+        float uls8, ult8; // This is mostly a performance toss-up, but messing with cache alignment may help.
     } texture_tile;
     bool textures_changed[2];
 
@@ -844,8 +845,6 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
     bool use_fog      = shader_state.use_fog;
     bool use_alpha    = shader_state.use_alpha;
     bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
-    uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4)  >> 2; // Right-shift is actually slightly faster on 3DS.
-    uint32_t tex_height = (rdp.texture_tile.lrt - rdp.texture_tile.ult + 4) >> 2;
 
 #ifndef TARGET_N3DS
     bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1(); // 3DS is always 0 to 1
@@ -869,15 +868,15 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
         // buf_vbo[buf_vbo_len++] = v_arr[vtx]->w;
 
         if (use_texture) {
-            float u = (v_arr[vtx]->u - rdp.texture_tile.uls * 8) / 32.0f;
-            float v = (v_arr[vtx]->v - rdp.texture_tile.ult * 8) / 32.0f;
+            float u = (v_arr[vtx]->u - rdp.texture_tile.uls8) / 32.0f;
+            float v = (v_arr[vtx]->v - rdp.texture_tile.ult8) / 32.0f;
             if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
                 // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
                 u += 0.5f;
                 v += 0.5f;
             }
-            buf_vbo[buf_vbo_len++] = u / tex_width;
-            buf_vbo[buf_vbo_len++] = v / tex_height;
+            buf_vbo[buf_vbo_len++] = u * rdp.texture_tile.tex_width_recip;
+            buf_vbo[buf_vbo_len++] = v * rdp.texture_tile.tex_height_recip;
         }
 #ifndef TARGET_N3DS
         if (use_fog) {
@@ -1115,10 +1114,10 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
 
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
     if (tile == G_TX_RENDERTILE) {
-        rdp.texture_tile.uls = uls;
-        rdp.texture_tile.ult = ult;
-        rdp.texture_tile.lrs = lrs;
-        rdp.texture_tile.lrt = lrt;
+        rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) >> 2); 
+        rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) >> 2);
+        rdp.texture_tile.uls8 = (float) (uls * 8);
+        rdp.texture_tile.ult8 = (float) (ult * 8);
         rdp.textures_changed[0] = true;
         rdp.textures_changed[1] = true;
     }
@@ -1187,10 +1186,12 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
 
     assert(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
-    rdp.texture_tile.uls = uls;
-    rdp.texture_tile.ult = ult;
-    rdp.texture_tile.lrs = lrs;
-    rdp.texture_tile.lrt = lrt;
+    
+    // Right-shift is slightly faster on 3DS.
+    rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) >> 2); 
+    rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) >> 2);
+    rdp.texture_tile.uls8 = (float) (uls * 8);
+    rdp.texture_tile.ult8 = (float) (ult * 8);
 
     rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
 }
