@@ -802,7 +802,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 
         // Multiple CCs can share the same GPU shader program
         if (gpu_shader_program != rendering_state.shader_program) {
-            profiler_3ds_log_time(11); // gfx_sp_tri1
+            profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
             gfx_flush();
             profiler_3ds_log_time(0);
             gfx_rapi->unload_shader(rendering_state.shader_program);
@@ -816,7 +816,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     for (int i = 0; i < 2; i++) {
         if (shader_state.used_textures[i]) {
             if (rdp.textures_changed[i]) {
-                profiler_3ds_log_time(11); // gfx_sp_tri1
+                profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
                 gfx_flush();
                 profiler_3ds_log_time(0);
                 import_texture(i);
@@ -824,7 +824,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             }
             bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
-                profiler_3ds_log_time(11); // gfx_sp_tri1
+                profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
                 gfx_flush();
                 profiler_3ds_log_time(0);
                 gfx_rapi->set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
@@ -834,6 +834,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             }
         }
     }
+
+    profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
 
     bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
     uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4)  >> 2; // Right-shift is actually slightly faster on 3DS.
@@ -930,12 +932,12 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = color->a / 255.0f;*/
     }
     if (++buf_vbo_num_tris == MAX_BUFFERED) {
-        profiler_3ds_log_time(11); // gfx_sp_tri1
+        profiler_3ds_log_time(12); // gfx_sp_tri1 State Modification second half
         gfx_flush();
         profiler_3ds_log_time(0);
     }
     
-    profiler_3ds_log_time(11); // gfx_sp_tri1
+    profiler_3ds_log_time(12); // gfx_sp_tri1 State Modification second half
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
