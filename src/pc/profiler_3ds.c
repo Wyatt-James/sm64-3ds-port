@@ -397,8 +397,8 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 8:  Unlit Vertex Color Copy
     // 9:  Texgen Calculation
     // 10: Texcoord Copy
-    // 11: gfx_sp_tri1 State Modification
-    // 12: gfx_sp_tri1 VBO Creation
+    // 11: gfx_sp_tri_update_state
+    // 12: gfx_tri_create_vbo
 
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;

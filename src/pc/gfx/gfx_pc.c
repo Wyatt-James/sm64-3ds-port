@@ -46,7 +46,8 @@
 #define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
 
-#define MAX_BUFFERED 256
+#define MAX_BUFFERED_TRIS 256
+#define MAX_BUFFERED_VERTS MAX_BUFFERED_TRIS * 3
 #define MAX_LIGHTS 2
 #define MAX_VERTICES 64
 #define DELIBERATELY_INVALID_CC_ID ~0
@@ -71,8 +72,11 @@ float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
                             {0.0f, 0.0f, 1.0f, 0.0f},
                             {0.0f, 0.0f, 0.0f, 1.0f}};
 
-struct RGBA {
-    uint8_t r, g, b, a;
+union RGBA {  
+    struct {
+        uint8_t r, g, b, a;
+    } rgba;
+    uint32_t u32;
 };
 
 struct XYWidthHeight {
@@ -84,7 +88,7 @@ struct LoadedVertex {
     float x, y, z;       // 12 bytes
     // float w;          // 4 bytes
     float u, v;          // 8 bytes
-    struct RGBA color;   // 4 bytes
+    union RGBA color;   // 4 bytes
     // uint8_t clip_rej; // 1 byte
 };
 
@@ -160,7 +164,7 @@ static struct RDP {
     uint32_t other_mode_l, other_mode_h;
     uint32_t combine_mode;
 
-    struct RGBA env_color, prim_color, fog_color, fill_color;
+    union RGBA env_color, prim_color, fog_color, fill_color;
     struct XYWidthHeight viewport, scissor;
     void *z_buf_address;
     void *color_image_address;
@@ -193,9 +197,9 @@ struct GfxDimensions gfx_current_dimensions;
 
 static bool dropped_frame;
 
-static float buf_vbo[MAX_BUFFERED * (26 * 3)]; // 3 vertices in a triangle and 26 floats per vtx
+static float buf_vbo[MAX_BUFFERED_VERTS * 26]; // 26 floats per vtx
 static size_t buf_vbo_len;
-static size_t buf_vbo_num_tris;
+static size_t buf_vbo_num_verts;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
 static struct GfxRenderingAPI *gfx_rapi;
@@ -248,9 +252,9 @@ static void gfx_set_iod(unsigned int iod)
 
 static void gfx_flush(void) {
     if (buf_vbo_len > 0) {
-        gfx_rapi->draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+        gfx_rapi->draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
-        buf_vbo_num_tris = 0;
+        buf_vbo_num_verts = 0;
     }
 }
 
@@ -687,7 +691,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->x = v->ob[0];
         d->y = v->ob[1];
         d->z = v->ob[2];
-        d->color.a = v->cn[3];
+        d->color.rgba.a = v->cn[3];
     }
     profiler_3ds_log_time(5); // Vertex Copy
 
@@ -727,9 +731,9 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
                 }
             }
 
-            d->color.r = r > 255 ? 255 : r;
-            d->color.g = g > 255 ? 255 : g;
-            d->color.b = b > 255 ? 255 : b;
+            d->color.rgba.r = r > 255 ? 255 : r;
+            d->color.rgba.g = g > 255 ? 255 : g;
+            d->color.rgba.b = b > 255 ? 255 : b;
         }
         
         profiler_3ds_log_time(7); // Vertex Light Calculation
@@ -738,9 +742,9 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             const Vtx_t *v = &vertices[vert].v;
             struct LoadedVertex *d = &rsp.loaded_vertices[dest];
 
-            d->color.r = v->cn[0];
-            d->color.g = v->cn[1];
-            d->color.b = v->cn[2];
+            d->color.rgba.r = v->cn[0];
+            d->color.rgba.g = v->cn[1];
+            d->color.rgba.b = v->cn[2];
         }
         profiler_3ds_log_time(8); // Unlit Vertex Color Copy
     }
@@ -776,13 +780,9 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     }
 }
 
-static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
+static void gfx_sp_tri_update_state()
+{
     profiler_3ds_log_time(0);
-    struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
-    struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
-    struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
-    struct LoadedVertex *v_arr[3] = {v1, v2, v3};
-
     bool use_fog      = shader_state.use_fog;
     // bool texture_edge = shader_state.texture_edge;
     bool use_alpha    = shader_state.use_alpha;
@@ -802,7 +802,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 
         // Multiple CCs can share the same GPU shader program
         if (gpu_shader_program != rendering_state.shader_program) {
-            profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
+            profiler_3ds_log_time(11); // gfx_sp_tri_update_state
             gfx_flush();
             profiler_3ds_log_time(0);
             gfx_rapi->unload_shader(rendering_state.shader_program);
@@ -816,7 +816,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     for (int i = 0; i < 2; i++) {
         if (shader_state.used_textures[i]) {
             if (rdp.textures_changed[i]) {
-                profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
+                profiler_3ds_log_time(11); // gfx_sp_tri_update_state
                 gfx_flush();
                 profiler_3ds_log_time(0);
                 import_texture(i);
@@ -824,7 +824,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             }
             bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
-                profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
+                profiler_3ds_log_time(11); // gfx_sp_tri_update_state
                 gfx_flush();
                 profiler_3ds_log_time(0);
                 gfx_rapi->set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
@@ -835,8 +835,14 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         }
     }
 
-    profiler_3ds_log_time(11); // gfx_sp_tri1 State Modification
+    profiler_3ds_log_time(11); // gfx_sp_tri_update_state
+}
 
+static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
+{
+    profiler_3ds_log_time(0);
+    bool use_fog      = shader_state.use_fog;
+    bool use_alpha    = shader_state.use_alpha;
     bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
     uint32_t tex_width = (rdp.texture_tile.lrs - rdp.texture_tile.uls + 4)  >> 2; // Right-shift is actually slightly faster on 3DS.
     uint32_t tex_height = (rdp.texture_tile.lrt - rdp.texture_tile.ult + 4) >> 2;
@@ -845,7 +851,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1(); // 3DS is always 0 to 1
 #endif
 
-    for (int vtx = 0; vtx < 3; vtx++) {
+    for (int vtx = 0; vtx < numTris * 3; vtx++) {
 
 #ifdef TARGET_N3DS
         // float w = v_arr[vtx]->w, z = (v_arr[vtx]->z + w) / -2.0f; // 3DS is always 0 to 1
@@ -882,8 +888,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         }
 #endif
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
-            struct RGBA *color;
-            struct RGBA tmp;
+            union RGBA *color;
+            union RGBA tmp;
             for (int cc_input = 0; cc_input < 1 + (use_alpha ? 1 : 0); cc_input++) {
                 switch (shader_state.combiner->shader_input_mapping[cc_input][sh_input]) {
                     case CC_PRIM:
@@ -912,15 +918,15 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
                         break;
                 }
                 if (cc_input == 0) {
-                    buf_vbo[buf_vbo_len++] = color->r / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color->g / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color->b / 255.0f;
+                    buf_vbo[buf_vbo_len++] = color->rgba.r / 255.0f;
+                    buf_vbo[buf_vbo_len++] = color->rgba.g / 255.0f;
+                    buf_vbo[buf_vbo_len++] = color->rgba.b / 255.0f;
                 } else {
                     if (use_fog && color == &v_arr[vtx]->color) {
                         // Shade alpha is 100% for fog
                         buf_vbo[buf_vbo_len++] = 1.0f;
                     } else {
-                        buf_vbo[buf_vbo_len++] = color->a / 255.0f;
+                        buf_vbo[buf_vbo_len++] = color->rgba.a / 255.0f;
                     }
                 }
             }
@@ -930,14 +936,39 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = color->g / 255.0f;
         buf_vbo[buf_vbo_len++] = color->b / 255.0f;
         buf_vbo[buf_vbo_len++] = color->a / 255.0f;*/
-    }
-    if (++buf_vbo_num_tris == MAX_BUFFERED) {
-        profiler_3ds_log_time(12); // gfx_sp_tri1 State Modification second half
-        gfx_flush();
-        profiler_3ds_log_time(0);
+    
+        if (++buf_vbo_num_verts == MAX_BUFFERED_VERTS) {
+            profiler_3ds_log_time(12); // gfx_tri_create_vbo
+            gfx_flush();
+            profiler_3ds_log_time(0);
+        }
     }
     
-    profiler_3ds_log_time(12); // gfx_sp_tri1 State Modification second half
+    profiler_3ds_log_time(12); // gfx_tri_create_vbo
+}
+
+static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
+    struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
+    struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
+    struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
+    struct LoadedVertex *v_arr[3] = {v1, v2, v3};
+
+    gfx_sp_tri_update_state(vtx1_idx, vtx2_idx, vtx3_idx);
+    gfx_tri_create_vbo(v_arr, 1);
+}
+
+static void gfx_sp_tri2(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx,
+                        uint8_t vtx4_idx, uint8_t vtx5_idx, uint8_t vtx6_idx) {
+    struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
+    struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
+    struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
+    struct LoadedVertex *v4 = &rsp.loaded_vertices[vtx4_idx];
+    struct LoadedVertex *v5 = &rsp.loaded_vertices[vtx5_idx];
+    struct LoadedVertex *v6 = &rsp.loaded_vertices[vtx6_idx];
+    struct LoadedVertex *v_arr[6] = {v1, v2, v3, v4, v5, v6};
+
+    gfx_sp_tri_update_state(vtx1_idx, vtx2_idx, vtx3_idx);
+    gfx_tri_create_vbo(v_arr, 2);
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
@@ -1231,27 +1262,27 @@ static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    rdp.env_color.r = r;
-    rdp.env_color.g = g;
-    rdp.env_color.b = b;
-    rdp.env_color.a = a;
+    rdp.env_color.rgba.r = r;
+    rdp.env_color.rgba.g = g;
+    rdp.env_color.rgba.b = b;
+    rdp.env_color.rgba.a = a;
 }
 
 static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    rdp.prim_color.r = r;
-    rdp.prim_color.g = g;
-    rdp.prim_color.b = b;
-    rdp.prim_color.a = a;
+    rdp.prim_color.rgba.r = r;
+    rdp.prim_color.rgba.g = g;
+    rdp.prim_color.rgba.b = b;
+    rdp.prim_color.rgba.a = a;
 }
 
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 #ifdef TARGET_N3DS
     gfx_rapi->set_fog_color(r, g, b, a);
 #endif
-    rdp.fog_color.r = r;
-    rdp.fog_color.g = g;
-    rdp.fog_color.b = b;
-    rdp.fog_color.a = a;
+    rdp.fog_color.rgba.r = r;
+    rdp.fog_color.rgba.g = g;
+    rdp.fog_color.rgba.b = b;
+    rdp.fog_color.rgba.a = a;
 }
 
 static void gfx_dp_set_fill_color(uint32_t packed_color) {
@@ -1260,10 +1291,10 @@ static void gfx_dp_set_fill_color(uint32_t packed_color) {
     uint32_t g = (col16 >> 6) & 0x1f;
     uint32_t b = (col16 >> 1) & 0x1f;
     uint32_t a = col16 & 1;
-    rdp.fill_color.r = SCALE_5_8(r);
-    rdp.fill_color.g = SCALE_5_8(g);
-    rdp.fill_color.b = SCALE_5_8(b);
-    rdp.fill_color.a = a * 255;
+    rdp.fill_color.rgba.r = SCALE_5_8(r);
+    rdp.fill_color.rgba.g = SCALE_5_8(g);
+    rdp.fill_color.rgba.b = SCALE_5_8(b);
+    rdp.fill_color.rgba.a = a * 255;
 }
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
@@ -1578,8 +1609,8 @@ static void gfx_run_dl(Gfx* cmd) {
                 break;
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
             case (uint8_t)G_TRI2:
-                gfx_sp_tri1(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2);
-                gfx_sp_tri1(C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
+                gfx_sp_tri2(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2,
+                            C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
                 break;
 #endif
             case (uint8_t)G_SETOTHERMODE_L:
