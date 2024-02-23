@@ -1360,8 +1360,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
-    gfx_sp_tri1(MAX_VERTICES + 0, MAX_VERTICES + 1, MAX_VERTICES + 3);
-    gfx_sp_tri1(MAX_VERTICES + 1, MAX_VERTICES + 2, MAX_VERTICES + 3);
+    gfx_sp_tri2(MAX_VERTICES + 0, MAX_VERTICES + 1, MAX_VERTICES + 3,
+                MAX_VERTICES + 1, MAX_VERTICES + 2, MAX_VERTICES + 3);
 
     // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
     gfx_flush();
