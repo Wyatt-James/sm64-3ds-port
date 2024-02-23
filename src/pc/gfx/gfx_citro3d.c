@@ -509,12 +509,12 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     // Configure attributes for use with the vertex shader
     int attr = 0;
     uint32_t attr_mask = 0;
-    cb->stride = 4;
+    cb->stride = 3;
 
     const int alpha_stride = has_alpha ? 4 : 3;
 
     AttrInfo_Init(&cb->attr_info);
-    AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 4);
+    AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 3); // XYZ (W is implicitly 1.0f)
     if (has_texture)
     {
         attr_mask += attr * (1 << 4 * attr);

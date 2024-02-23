@@ -859,7 +859,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = v_arr[i]->x;
         buf_vbo[buf_vbo_len++] = v_arr[i]->y;
         buf_vbo[buf_vbo_len++] = v_arr[i]->z;
-        buf_vbo[buf_vbo_len++] = 1.0f;  // w
+        // buf_vbo[buf_vbo_len++] = 1.0f;  // w
         // buf_vbo[buf_vbo_len++] = v_arr[i]->w;
 
         if (use_texture) {

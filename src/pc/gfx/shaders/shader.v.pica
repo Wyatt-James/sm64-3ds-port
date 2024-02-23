@@ -10,8 +10,8 @@
 .alias  negs  myconst.zzzz ; Vector full of ones
 
 ; Inputs
-.in inpos v0
-.in intex v1
+.in inpos v0 ; xyz, plus garbage for w
+.in intex v1 ; uv
 .in inclr v2
 
 
@@ -27,10 +27,10 @@ setup:
     mov r0, inpos
 model:
     ; r1 = modelView * inpos
-    dp4 r1.x, modelView[0], r0
-    dp4 r1.y, modelView[1], r0
-    dp4 r1.z, modelView[2], r0
-    dp4 r1.w, modelView[3], r0
+    dphi r1.x, r0, modelView[0]
+    dphi r1.y, r0, modelView[1]
+    dphi r1.z, r0, modelView[2]
+    dphi r1.w, r0, modelView[3]
 projection:
     ; outpos = projection * inpos
     dp4 outpos.x, projection[0], r1
