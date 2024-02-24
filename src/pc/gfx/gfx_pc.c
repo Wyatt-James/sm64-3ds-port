@@ -954,7 +954,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
     struct LoadedVertex *v_arr[3] = {v1, v2, v3};
 
-    gfx_sp_tri_update_state(vtx1_idx, vtx2_idx, vtx3_idx);
+    gfx_sp_tri_update_state();
     gfx_tri_create_vbo(v_arr, 1);
 }
 
@@ -968,8 +968,13 @@ static void gfx_sp_tri2(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx,
     struct LoadedVertex *v6 = &rsp.loaded_vertices[vtx6_idx];
     struct LoadedVertex *v_arr[6] = {v1, v2, v3, v4, v5, v6};
 
-    gfx_sp_tri_update_state(vtx1_idx, vtx2_idx, vtx3_idx);
+    gfx_sp_tri_update_state();
     gfx_tri_create_vbo(v_arr, 2);
+}
+
+static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_verts) {
+    gfx_sp_tri_update_state();
+    gfx_tri_create_vbo(v_arr, num_verts / 3);
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
@@ -1533,8 +1538,16 @@ static inline void *seg_addr(uintptr_t w1) {
 #define C1(pos, width) ((cmd->words.w1 >> (pos)) & ((1U << width) - 1))
 
 static void gfx_run_dl(Gfx* cmd) {
+    static struct LoadedVertex *tri_batch[MAX_VERTICES * 3];
+    static uint32_t num_verts_batched = 0;
+
     for (;;) {
         uint32_t opcode = cmd->words.w0 >> 24;
+
+        if (opcode != G_TRI1 && opcode != G_TRI2 && num_verts_batched) {
+            gfx_sp_tri_batched(tri_batch, num_verts_batched);
+            num_verts_batched = 0;
+        }
 
         switch (opcode) {
             // RSP commands:
@@ -1607,17 +1620,33 @@ static void gfx_run_dl(Gfx* cmd) {
 #endif
             case (uint8_t)G_TRI1:
 #ifdef F3DEX_GBI_2
-                gfx_sp_tri1(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2);
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(16, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(8, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(0, 8) / 2];
+                // gfx_sp_tri1(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2);
 #elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
-                gfx_sp_tri1(C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(16, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(8, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(0, 8) / 2];
+                // gfx_sp_tri1(C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
 #else
-                gfx_sp_tri1(C1(16, 8) / 10, C1(8, 8) / 10, C1(0, 8) / 10);
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(16, 8) / 10];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(8, 8) / 10];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(0, 8) / 10];
+                // gfx_sp_tri1(C1(16, 8) / 10, C1(8, 8) / 10, C1(0, 8) / 10);
 #endif
                 break;
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
             case (uint8_t)G_TRI2:
-                gfx_sp_tri2(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2,
-                            C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(16, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(8, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(0, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(16, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(8, 8) / 2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(0, 8) / 2];
+
+                // gfx_sp_tri2(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2,
+                //             C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
                 break;
 #endif
             case (uint8_t)G_SETOTHERMODE_L:
