@@ -653,9 +653,10 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
     
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
+    gfx_citro3d_apply_model_view_mtx();
 }
 
-// SM64 only ever pops 1 matrix at a time
+// SM64 only ever pops 1 matrix at a time, and never 0.
 static void gfx_sp_pop_matrix(uint32_t count) {
     gfx_flush();
     while (count--) {
@@ -668,6 +669,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     }
 
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
+    gfx_citro3d_apply_model_view_mtx();
 }
 
 static float gfx_adjust_x_for_aspect_ratio(float x) {
@@ -1305,9 +1307,12 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     if (cycle_type == G_CYC_COPY)
         set_other_mode_h((rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT);
 
-    // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
+    // Temporarily set an identity MTX because rects are drawn with screen-space coords.
+    // WYATT_TODO why does gfx_citro3d_set_model_view_mtx_to_identity not work? Is it a race condition?
     gfx_flush();
+    // gfx_citro3d_set_model_view_mtx_to_identity();
     gfx_citro3d_set_model_view_matrix(C3D_MTX_IDENTITY);
+    gfx_citro3d_apply_model_view_mtx();
 
     // U10.2 coordinates
     float ulxf = ulx;
@@ -1356,16 +1361,17 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     rdp.viewport = default_viewport;
     rsp.geometry_mode = 0;
 
-    gfx_flush();
+    // gfx_flush(); // We already flushed above for the mview mtx
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
     gfx_sp_tri2(MAX_VERTICES + 0, MAX_VERTICES + 1, MAX_VERTICES + 3,
                 MAX_VERTICES + 1, MAX_VERTICES + 2, MAX_VERTICES + 3);
 
-    // WYATT_TODO fix this evil hack. Rectangles are drawn in screen-space but don't set an identity matrix.
+    // Restore our prior MTX
     gfx_flush();
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
+    gfx_citro3d_apply_model_view_mtx();
 
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
