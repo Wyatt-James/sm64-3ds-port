@@ -518,8 +518,6 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     uint32_t attr_mask = 0;
     cb->stride = 0;
 
-    const int alpha_stride = has_alpha ? STRIDE_RGBA : STRIDE_RGB;
-
     // Position is always present
     {
         AttrInfo_Init(&cb->attr_info);
@@ -541,14 +539,14 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     if (has_color)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, alpha_stride);
-        cb->stride += alpha_stride;
+        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
+        cb->stride += 1; // 4 bytes are packed into one u32
     }
     if (has_color2)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, alpha_stride);
-        cb->stride += alpha_stride;
+        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
+        cb->stride += 1; // 4 bytes are packed into one u32
     }
 
     // Create the VBO (vertex buffer object)
@@ -812,23 +810,26 @@ static u32 vec4ToU32Color(float r, float g, float b, float a)
     return (a2 << 24) | (b2 << 16) | (g2 << 8) | r2;
 }
 
-static void renderTwoColorTris(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
+static void renderTwoColorTris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
     struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
     bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
     bool hasAlpha = curShader->cc_features.opt_alpha;
 
 
-    const int vtxOffs = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
-    const int vtxOffs2 = vtxOffs + (hasAlpha ? STRIDE_RGBA : STRIDE_RGB);
+    const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
 
     // Removed a hack from before vert shaders. This new implementation
     // probably isn't completely kosher, but it works.
+    // The endianness used to be reversed, but I think that this was actually an error.
+    // If I set G to 0 here, it gives magenta, as expected. If endianness were reversed,
+    // it would be yellow.
+    union RGBA env_color = ((union RGBA*) buf_vbo)[color_1_offset];
+    if (!hasAlpha)
+        env_color.rgba.a = 255;
+
     update_shader(true);
-    C3D_TexEnvColor(C3D_GetTexEnv(0), vec4ToU32Color(buf_vbo[vtxOffs],
-                                                     buf_vbo[vtxOffs + 1],
-                                                     buf_vbo[vtxOffs + 2],
-                                                     hasAlpha ? buf_vbo[vtxOffs + 3] : 1.0f));
+    C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
 
     if (hasTex)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_tex_scale,

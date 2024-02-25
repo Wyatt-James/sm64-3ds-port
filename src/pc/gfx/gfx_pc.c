@@ -72,13 +72,6 @@ float C3D_MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
                                 {0.0f, 0.0f, 1.0f, 0.0f},
                                 {0.0f, 0.0f, 0.0f, 1.0f}};
 
-union RGBA {  
-    struct {
-        uint8_t r, g, b, a;
-    } rgba;
-    uint32_t u32;
-};
-
 struct XYWidthHeight {
     uint16_t x, y, width, height;
 };
@@ -198,7 +191,12 @@ struct GfxDimensions gfx_current_dimensions;
 
 static bool dropped_frame;
 
-static float buf_vbo[MAX_BUFFERED_VERTS * 26]; // 26 floats per vtx
+static union VBOBuffer {
+    float as_float[MAX_BUFFERED_VERTS * 26];
+    uint32_t as_u32[MAX_BUFFERED_VERTS * 26];
+    uint8_t as_u8[MAX_BUFFERED_VERTS * 26 * 4];
+} buf_vbo;
+// static ; 
 static size_t buf_vbo_len;
 static size_t buf_vbo_num_verts;
 
@@ -253,7 +251,7 @@ static void gfx_set_iod(unsigned int iod)
 
 static void gfx_flush(void) {
     if (buf_vbo_len > 0) {
-        gfx_rapi->draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_verts / 3);
+        gfx_rapi->draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;
     }
@@ -786,9 +784,9 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 static void gfx_sp_tri_update_state()
 {
     profiler_3ds_log_time(0);
-    bool use_fog      = shader_state.use_fog;
+    // bool use_fog      = shader_state.use_fog;
     // bool texture_edge = shader_state.texture_edge;
-    bool use_alpha    = shader_state.use_alpha;
+    // bool use_alpha    = shader_state.use_alpha;
     // bool use_noise    = shader_state.use_noise;
     uint32_t cc_id    = shader_state.cc_id;
 
@@ -863,11 +861,11 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         }
 #endif
 
-        buf_vbo[buf_vbo_len++] = v_arr[vtx]->x;
-        buf_vbo[buf_vbo_len++] = v_arr[vtx]->y;
-        buf_vbo[buf_vbo_len++] = v_arr[vtx]->z;
-        // buf_vbo[buf_vbo_len++] = 1.0f;  // w
-        // buf_vbo[buf_vbo_len++] = v_arr[vtx]->w;
+        buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->x;
+        buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->y;
+        buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->z;
+        // buf_vbo.as_float[buf_vbo_len++] = 1.0f;  // w
+        // buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->w;
 
         if (use_texture) {
             float u = (v_arr[vtx]->u - rdp.texture_tile.uls8);
@@ -877,18 +875,19 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                 u += 16.0f;
                 v += 16.0f;
             }
-            buf_vbo[buf_vbo_len++] = u * rdp.texture_tile.tex_width_recip;
-            buf_vbo[buf_vbo_len++] = v * rdp.texture_tile.tex_height_recip;
+            buf_vbo.as_float[buf_vbo_len++] = u * rdp.texture_tile.tex_width_recip;
+            buf_vbo.as_float[buf_vbo_len++] = v * rdp.texture_tile.tex_height_recip;
         }
 #ifndef TARGET_N3DS
         if (use_fog) {
-            buf_vbo[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
-            buf_vbo[buf_vbo_len++] = v_arr[vtx]->color.a / 255.0f; // fog factor (not alpha)
+            buf_vbo.as_float[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
+            buf_vbo.as_float[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
+            buf_vbo.as_float[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
+            buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->color.a / 255.0f; // fog factor (not alpha)
         }
 #endif
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
+            union RGBA outColor;
             for (int cc_input = 0; cc_input < (use_alpha ? 2 : 1); cc_input++) {
                 union RGBA color;
                 bool is_cc_shade = false;
@@ -919,23 +918,22 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                         break;
                 }
                 if (cc_input == 0) {
-                    buf_vbo[buf_vbo_len++] = color.rgba.r / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color.rgba.g / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color.rgba.b / 255.0f;
+                    outColor = color;
                 } else {
                     // Shade alpha is 100% for fog
                     if (use_fog && is_cc_shade)
-                        buf_vbo[buf_vbo_len++] = 1.0f;
+                        outColor.rgba.a = 255;
                     else
-                        buf_vbo[buf_vbo_len++] = color.rgba.a / 255.0f;
+                        outColor.rgba.a = color.rgba.a;
                 }
             }
+            buf_vbo.as_u32[buf_vbo_len++] = outColor.u32;
         }
         /*struct RGBA *color = &v_arr[vtx]->color;
-        buf_vbo[buf_vbo_len++] = color->r / 255.0f;
-        buf_vbo[buf_vbo_len++] = color->g / 255.0f;
-        buf_vbo[buf_vbo_len++] = color->b / 255.0f;
-        buf_vbo[buf_vbo_len++] = color->a / 255.0f;*/
+        buf_vbo.as_float[buf_vbo_len++] = color->r / 255.0f;
+        buf_vbo.as_float[buf_vbo_len++] = color->g / 255.0f;
+        buf_vbo.as_float[buf_vbo_len++] = color->b / 255.0f;
+        buf_vbo.as_float[buf_vbo_len++] = color->a / 255.0f;*/
     
         if (++buf_vbo_num_verts == MAX_BUFFERED_VERTS) {
             profiler_3ds_log_time(12); // gfx_tri_create_vbo

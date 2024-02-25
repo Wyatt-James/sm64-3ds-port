@@ -5,11 +5,12 @@
 .fvec tex_scale
 
 ; Constants
-.constf myconst(0.0, 1.0, -1.0, -0.5)
+.constf myconst(0.0, 1.0, -1.0, 0.00392156862)
 .constf tcofs(0.0, 1.0, 0.0, 0.0)
 
-.alias  zeros myconst.xxxx ; Vector full of zeros
-.alias  ones  myconst.yyyy ; Vector full of ones
+.alias  zeros       myconst.xxxx ; Vector full of zeros
+.alias  ones        myconst.yyyy ; Vector full of ones
+.alias  color_scale myconst.wwww ; Vector full of 1/255
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
@@ -45,8 +46,8 @@ texture:
     add outtc0, tcofs, r2
     mov outtc1, outtc0
 color:
-    ; copy color
-    mov outclr, inclr2
+    ; copy color, scaling it by 1/255
+    mul outclr, color_scale, inclr2
 
     ; We're finished
     end

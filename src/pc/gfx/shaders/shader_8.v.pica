@@ -4,9 +4,11 @@
 .fvec projection[4], modelView[4]
 
 ; Constants
-.constf myconst(0.0, 1.0, -1.0, -0.5)
-.alias  zeros myconst.xxxx ; Vector full of zeros
-.alias  ones  myconst.yyyy ; Vector full of ones
+.constf myconst(0.0, 1.0, -1.0, 0.00392156862)
+
+.alias  zeros       myconst.xxxx ; Vector full of zeros
+.alias  ones        myconst.yyyy ; Vector full of ones
+.alias  color_scale myconst.wwww ; Vector full of 1/255
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
@@ -39,8 +41,8 @@ texture:
     mov outtc0, zeros
     mov outtc1, zeros
 color:
-    ; copy color
-    mov outclr.xyz, inclr.xyz
+    ; copy color, scaling it by 1/255
+    mul outclr.xyz, color_scale, inclr.xyz
     mov outclr.w, ones
 
     ; We're finished
