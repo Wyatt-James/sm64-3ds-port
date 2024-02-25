@@ -969,9 +969,9 @@ static void gfx_sp_tri2(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx,
     gfx_tri_create_vbo(v_arr, 2);
 }
 
-static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_verts) {
+static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_tris) {
     gfx_sp_tri_update_state();
-    gfx_tri_create_vbo(v_arr, num_verts / 3);
+    gfx_tri_create_vbo(v_arr, num_tris);
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
@@ -1337,23 +1337,31 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     ul->x = ulxf;
     ul->y = ulyf;
-    ul->z = -1.0f;
+    // ul->z = -1.0f;
     // ul->w = 1.0f;
 
     ll->x = ulxf;
     ll->y = lryf;
-    ll->z = -1.0f;
+    // ll->z = -1.0f;
     // ll->w = 1.0f;
 
     lr->x = lrxf;
     lr->y = lryf;
-    lr->z = -1.0f;
+    // lr->z = -1.0f;
     // lr->w = 1.0f;
 
     ur->x = lrxf;
     ur->y = ulyf;
-    ur->z = -1.0f;
+    // ur->z = -1.0f;
     // ur->w = 1.0f;
+
+    static struct LoadedVertex* rect_vtx_array[] = {
+        &rsp.loaded_vertices[MAX_VERTICES + 0],
+        &rsp.loaded_vertices[MAX_VERTICES + 1],
+        &rsp.loaded_vertices[MAX_VERTICES + 3],
+        &rsp.loaded_vertices[MAX_VERTICES + 1],
+        &rsp.loaded_vertices[MAX_VERTICES + 2],
+        &rsp.loaded_vertices[MAX_VERTICES + 3]};
 
     // The coordinates for texture rectangle shall bypass the viewport setting
     struct XYWidthHeight default_viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
@@ -1367,8 +1375,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
-    gfx_sp_tri2(MAX_VERTICES + 0, MAX_VERTICES + 1, MAX_VERTICES + 3,
-                MAX_VERTICES + 1, MAX_VERTICES + 2, MAX_VERTICES + 3);
+    gfx_sp_tri_batched(rect_vtx_array, 2);
 
     // Restore our prior MTX
     gfx_flush();
@@ -1542,7 +1549,7 @@ static void gfx_run_dl(Gfx* cmd) {
         uint32_t opcode = cmd->words.w0 >> 24;
 
         if (opcode != G_TRI1 && opcode != G_TRI2 && num_verts_batched) {
-            gfx_sp_tri_batched(tri_batch, num_verts_batched);
+            gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
             num_verts_batched = 0;
         }
 
@@ -1803,6 +1810,12 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
 #endif
 
     shader_state_init(&shader_state);
+
+    // Screen-space rect Z will always be -1.0f
+    rsp.loaded_vertices[MAX_VERTICES + 0].z =
+    rsp.loaded_vertices[MAX_VERTICES + 1].z =
+    rsp.loaded_vertices[MAX_VERTICES + 2].z =
+    rsp.loaded_vertices[MAX_VERTICES + 3].z = -1.0f;
 
     // Used in the 120 star TAS
     static uint32_t precomp_shaders[] = {
