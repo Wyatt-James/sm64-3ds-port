@@ -889,18 +889,19 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
         }
 #endif
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
-            union RGBA *color;
-            union RGBA tmp;
             for (int cc_input = 0; cc_input < 1 + (use_alpha ? 1 : 0); cc_input++) {
+                union RGBA color;
+                bool is_cc_shade = false;
                 switch (shader_state.combiner->shader_input_mapping[cc_input][sh_input]) {
                     case CC_PRIM:
-                        color = &rdp.prim_color;
+                        color = rdp.prim_color;
                         break;
                     case CC_SHADE:
-                        color = &v_arr[vtx]->color;
+                        color = v_arr[vtx]->color;
+                        is_cc_shade = true;
                         break;
                     case CC_ENV:
-                        color = &rdp.env_color;
+                        color = rdp.env_color;
                         break;
                     // case CC_LOD:
                     // {
@@ -914,21 +915,19 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
                     //     break;
                     // }
                     default:
-                        memset(&tmp, 0, sizeof(tmp));
-                        color = &tmp;
+                        color.u32 = 0;
                         break;
                 }
                 if (cc_input == 0) {
-                    buf_vbo[buf_vbo_len++] = color->rgba.r / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color->rgba.g / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color->rgba.b / 255.0f;
+                    buf_vbo[buf_vbo_len++] = color.rgba.r / 255.0f;
+                    buf_vbo[buf_vbo_len++] = color.rgba.g / 255.0f;
+                    buf_vbo[buf_vbo_len++] = color.rgba.b / 255.0f;
                 } else {
-                    if (use_fog && color == &v_arr[vtx]->color) {
-                        // Shade alpha is 100% for fog
+                    // Shade alpha is 100% for fog
+                    if (use_fog && is_cc_shade)
                         buf_vbo[buf_vbo_len++] = 1.0f;
-                    } else {
-                        buf_vbo[buf_vbo_len++] = color->rgba.a / 255.0f;
-                    }
+                    else
+                        buf_vbo[buf_vbo_len++] = color.rgba.a / 255.0f;
                 }
             }
         }
