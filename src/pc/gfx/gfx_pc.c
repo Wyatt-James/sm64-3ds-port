@@ -841,7 +841,7 @@ static void gfx_sp_tri_update_state()
     profiler_3ds_log_time(11); // gfx_sp_tri_update_state
 }
 
-static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
+static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 {
     profiler_3ds_log_time(0);
     bool use_fog      = shader_state.use_fog;
@@ -852,7 +852,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
     bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1(); // 3DS is always 0 to 1
 #endif
 
-    for (int vtx = 0; vtx < numTris * 3; vtx++) {
+    for (uint32_t vtx = 0; vtx < numTris * 3; vtx++) {
 
 #ifdef TARGET_N3DS
         // float w = v_arr[vtx]->w, z = (v_arr[vtx]->z + w) / -2.0f; // 3DS is always 0 to 1
@@ -889,7 +889,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex **v_arr, uint32_t numTris)
         }
 #endif
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
-            for (int cc_input = 0; cc_input < 1 + (use_alpha ? 1 : 0); cc_input++) {
+            for (int cc_input = 0; cc_input < (use_alpha ? 2 : 1); cc_input++) {
                 union RGBA color;
                 bool is_cc_shade = false;
                 switch (shader_state.combiner->shader_input_mapping[cc_input][sh_input]) {
