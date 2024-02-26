@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#ifdef TARGET_N3DS
+#include <arm_acle.h>
+#endif
+
 #ifndef _LANGUAGE_C
 #define _LANGUAGE_C
 #endif
@@ -57,6 +61,11 @@
 #define MAX_VERTICES 64
 #define DELIBERATELY_INVALID_CC_ID ~0
 
+#ifdef TARGET_N3DS
+#define UCLAMP8(v) ((uint8_t) __usat(v, 8))
+#else
+#define UCLAMP8(v) ((uint8_t) (r > 255 ? 255 : r))
+#endif
 #define U32_AS_FLOAT(v) (*(float*) &v)
 #define COMBINE_MODE(rgb, alpha) (((uint32_t) rgb) | (((uint32_t) alpha) << 12))
 
@@ -753,6 +762,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
                 }
             }
 
+            // Why is UCLAMP8 slower here? It should be faster, but it's like 150us slower.
             d->color.rgba.r = r > 255 ? 255 : r;
             d->color.rgba.g = g > 255 ? 255 : g;
             d->color.rgba.b = b > 255 ? 255 : b;
