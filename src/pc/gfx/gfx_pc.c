@@ -27,8 +27,13 @@
 // If enabled, shader swaps will be counter and printed each frame.
 #define ENABLE_SHADER_SWAP_COUNTER 0
 #define ENABLE_OTHER_MODE_SWAP_COUNTER 0
+#define ENABLE_ASSERTIONS 0
 
+#if ENABLE_ASSERTIONS == 1
 #define SUPPORT_CHECK(x) assert(x)
+#else
+#define SUPPORT_CHECK(x) do {} while (0)
+#endif
 
 // SCALE_M_N: upscale/downscale M-bit integer to N-bit
 #define SCALE_5_8(VAL_) (((VAL_) * 0xFF) / 0x1F)
