@@ -599,6 +599,24 @@ static void calculate_normal_dir(const Light_t *light, float coeffs[3]) {
     gfx_normalize_vector(coeffs);
 }
 
+// lookat_x = {1, 0, 0};
+static void calculate_lookat_x(float res[3], const float b[4][4])
+{
+    res[0] = b[0][0];
+    res[1] = b[1][0];
+    res[2] = b[2][0];
+    gfx_normalize_vector(res);
+}
+
+// lookat_y = {0, 1, 0};
+static void calculate_lookat_y(float res[3], const float b[4][4])
+{
+    res[0] = b[0][1];
+    res[1] = b[1][1];
+    res[2] = b[2][1];
+    gfx_normalize_vector(res);
+}
+
 static void gfx_matrix_mul(float res[4][4], const float a[4][4], const float b[4][4]) {
     float tmp[4][4];
     for (int i = 0; i < 4; i++) {
@@ -699,14 +717,12 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     // Calculate lighting
     if (rsp.geometry_mode & G_LIGHTING) {
         if (rsp.lights_changed) {
+            rsp.lights_changed = false;
             for (int light = 0; light < rsp.current_num_lights - 1; light++)
                 calculate_normal_dir(&rsp.current_lights[light], rsp.current_lights_coeffs[light]);
 
-            static const Light_t lookat_x = {{0, 0, 0}, 0, {0, 0, 0}, 0, {127, 0, 0}, 0};
-            static const Light_t lookat_y = {{0, 0, 0}, 0, {0, 0, 0}, 0, {0, 127, 0}, 0};
-            calculate_normal_dir(&lookat_x, rsp.current_lookat_coeffs[0]);
-            calculate_normal_dir(&lookat_y, rsp.current_lookat_coeffs[1]);
-            rsp.lights_changed = false;
+            calculate_lookat_x(rsp.current_lookat_coeffs[0], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+            calculate_lookat_y(rsp.current_lookat_coeffs[1], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
         }
         
         profiler_3ds_log_time(6); // Light Recalculation
