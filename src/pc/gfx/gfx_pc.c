@@ -1318,13 +1318,17 @@ static void calculate_cc_id()
 }
 
 static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
-
+#if ENABLE_SHADER_SWAP_COUNTER == 1
     // Low savings: usually under 1%
     if (rdp.combine_mode != combine_mode) {
         rdp.combine_mode  = combine_mode;
         calculate_cc_id();
     } else
-        SHADER_COUNT_DO(avoided_swaps_combine_mode++);
+        avoided_swaps_combine_mode++;
+#else
+    rdp.combine_mode  = combine_mode;
+    calculate_cc_id();
+#endif
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
