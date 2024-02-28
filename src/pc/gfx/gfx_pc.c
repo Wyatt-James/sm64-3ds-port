@@ -1038,6 +1038,7 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     rsp.geometry_mode &= ~clear;
     rsp.geometry_mode |= set;
 
+    // 75% savings with good numbers
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
     if (culling_mode != rendering_state.culling_mode) {
         gfx_flush();
@@ -1045,6 +1046,7 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
         rendering_state.culling_mode = culling_mode;
     }
 
+    // Nearly 100% savings with good numbers
     const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (depth_test != rendering_state.depth_test) {
         gfx_flush();
