@@ -176,7 +176,12 @@ static struct RDP {
     uint32_t other_mode_l, other_mode_h;
     uint32_t combine_mode;
 
+// 3DS handles fog natively, so we don't need this.
+#ifdef TARGET_N3DS
+    union RGBA env_color, prim_color, fill_color;
+#else
     union RGBA env_color, prim_color, fog_color, fill_color;
+#endif
     struct XYWidthHeight viewport, scissor;
     void *z_buf_address;
     void *color_image_address;
@@ -1338,11 +1343,12 @@ static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 #ifdef TARGET_N3DS
     gfx_rapi->set_fog_color(r, g, b, a);
-#endif
+#else
     rdp.fog_color.rgba.r = r;
     rdp.fog_color.rgba.g = g;
     rdp.fog_color.rgba.b = b;
     rdp.fog_color.rgba.a = a;
+#endif
 }
 
 static void gfx_dp_set_fill_color(uint32_t packed_color) {
