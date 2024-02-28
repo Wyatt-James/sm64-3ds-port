@@ -1160,7 +1160,8 @@ static void gfx_dp_set_texture_image(uint32_t format, uint32_t size, uint32_t wi
 }
 
 static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t tmem, uint8_t tile, uint32_t palette, uint32_t cmt, uint32_t maskt, uint32_t shiftt, uint32_t cms, uint32_t masks, uint32_t shifts) {
-    if (tile == G_TX_RENDERTILE) {
+    // G_TX_RENDERTILE is always >= G_TX_LOADTILE
+    if (LIKELY(tile == G_TX_RENDERTILE)) {
         SUPPORT_CHECK(palette == 0); // palette should set upper 4 bits of color index in 4b mode
         rdp.texture_tile.fmt = fmt;
         rdp.texture_tile.siz = siz;
@@ -1171,9 +1172,9 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         rdp.textures_changed[1] = true;
     }
 
-    if (tile == G_TX_LOADTILE) {
+    // Only valid data is ever sent.
+    else // if (tile == G_TX_LOADTILE) {
         rdp.texture_to_load.tile_number = tmem / 256;
-    }
 }
 
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
@@ -1217,7 +1218,7 @@ static void gfx_dp_load_block(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t
     }
     uint32_t size_bytes = (lrs + 1) << word_size_shift;
     rdp.loaded_texture[rdp.texture_to_load.tile_number].size_bytes = size_bytes;
-    assert(size_bytes <= 4096 && "bug: too big texture");
+    SUPPORT_CHECK(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
 
     rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
@@ -1248,7 +1249,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     uint32_t size_bytes = (((lrs >> G_TEXTURE_IMAGE_FRAC) + 1) * ((lrt >> G_TEXTURE_IMAGE_FRAC) + 1)) << word_size_shift;
     rdp.loaded_texture[rdp.texture_to_load.tile_number].size_bytes = size_bytes;
 
-    assert(size_bytes <= 4096 && "bug: too big texture");
+    SUPPORT_CHECK(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
     
     // Right-shift is slightly faster on 3DS.
