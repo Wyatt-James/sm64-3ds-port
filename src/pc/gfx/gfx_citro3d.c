@@ -103,6 +103,7 @@ static int scissor_width, scissor_height;
 static bool scissor;
 
 static C3D_Mtx modelView, projection;
+static C3D_Mtx* currentModelView = &modelView;
 
 static int original_offset;
 static int s2DMode;
@@ -418,7 +419,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     gfx_citro3d_vertex_array_set_attribs(new_prg);
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
+    gfx_citro3d_apply_model_view_matrix();
 
     update_shader(false);
 }
@@ -974,14 +975,14 @@ void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
     gfx_citro3d_convert_mtx(mtx, &modelView);
 }
 
-void gfx_citro3d_set_model_view_mtx_to_identity()
+void gfx_citro3d_temporarily_use_identity_matrix(bool use_identity)
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &IDENTITY_MTX);
+    currentModelView = use_identity ? &IDENTITY_MTX : &modelView;
 }
 
-void gfx_citro3d_apply_model_view_mtx()
+void gfx_citro3d_apply_model_view_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, currentModelView);
 }
 
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)

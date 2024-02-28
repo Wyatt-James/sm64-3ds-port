@@ -689,7 +689,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
     
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
-    gfx_citro3d_apply_model_view_mtx();
+    gfx_citro3d_apply_model_view_matrix();
 }
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
@@ -702,7 +702,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
 
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
-    gfx_citro3d_apply_model_view_mtx();
+    gfx_citro3d_apply_model_view_matrix();
 }
 
 static float gfx_adjust_x_for_aspect_ratio(float x) {
@@ -1365,11 +1365,9 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
         set_other_mode_h((rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT);
 
     // Temporarily set an identity MTX because rects are drawn with screen-space coords.
-    // WYATT_TODO why does gfx_citro3d_set_model_view_mtx_to_identity not work? Is it a race condition?
     gfx_flush();
-    // gfx_citro3d_set_model_view_mtx_to_identity();
-    gfx_citro3d_set_model_view_matrix(C3D_MTX_IDENTITY);
-    gfx_citro3d_apply_model_view_mtx();
+    gfx_citro3d_temporarily_use_identity_matrix(true);
+    gfx_citro3d_apply_model_view_matrix();
 
     // U10.2 coordinates
     float ulxf = ulx;
@@ -1434,8 +1432,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     // Restore our prior MTX
     gfx_flush();
-    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
-    gfx_citro3d_apply_model_view_mtx();
+    gfx_citro3d_temporarily_use_identity_matrix(false);
+    gfx_citro3d_apply_model_view_matrix();
 
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
