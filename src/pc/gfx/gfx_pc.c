@@ -635,23 +635,25 @@ static void calculate_lookat_y(float res[3], const float b[4][4])
     gfx_normalize_vector(res);
 }
 
-static void gfx_matrix_mul(float res[4][4], const float a[4][4], const float b[4][4]) {
-    float tmp[4][4];
+static void gfx_matrix_mul_unsafe(float res[4][4], const float a[4][4], const float b[4][4]) {
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
-            tmp[i][j] = a[i][0] * b[0][j] +
-                        a[i][1] * b[1][j] +
-                        a[i][2] * b[2][j] +
-                        a[i][3] * b[3][j];
+            res[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j] + a[i][3] * b[3][j];
         }
     }
+}
+
+static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const float b[4][4]) {
+    float tmp[4][4];
+    gfx_matrix_mul_unsafe(tmp, a, b);
     memcpy(res, tmp, sizeof(tmp));
 }
 
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     gfx_flush();
-    float matrix[4][4];
+
 #ifndef GBI_FLOATS
+    const float matrix[4][4];
     // Original GBI where fixed point matrices are used
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j += 2) {
@@ -662,29 +664,29 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         }
     }
 #else
-    // For a modified GBI where fixed point values are replaced with floats
-    memcpy(matrix, addr, sizeof(matrix));
+    const float* matrix = addr; // SHUT UP, COMPILER! UB but it works.
 #endif
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
-        if (parameters & G_MTX_LOAD) {
-            memcpy(rsp.P_matrix, matrix, sizeof(matrix));
-        } else {
-            gfx_matrix_mul(rsp.P_matrix, matrix, rsp.P_matrix);
-        }
+        if (parameters & G_MTX_LOAD)
+            memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
+        else
+            gfx_matrix_mul_safe(rsp.P_matrix, matrix, rsp.P_matrix);
+
     } else { // G_MTX_MODELVIEW
-        if ((parameters & G_MTX_PUSH) && rsp.modelview_matrix_stack_size < 11) {
+        const float* src = &rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
+        
+        if ((parameters & G_MTX_PUSH) && rsp.modelview_matrix_stack_size < 11)
             ++rsp.modelview_matrix_stack_size;
-            memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 2], sizeof(matrix));
-        }
-        if (parameters & G_MTX_LOAD) {
-            memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(matrix));
-        } else {
-            gfx_matrix_mul(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-        }
+
+        if (parameters & G_MTX_LOAD)
+            memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
+        else
+            gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
+
         rsp.lights_changed = true;
     }
-    gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+    gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
     
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
     gfx_citro3d_apply_model_view_mtx();
@@ -697,7 +699,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
     rsp.modelview_matrix_stack_size -= count;
-    gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+    gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
 
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
     gfx_citro3d_apply_model_view_mtx();
