@@ -61,6 +61,10 @@
 #define MAX_VERTICES 64
 #define DELIBERATELY_INVALID_CC_ID ~0
 
+#define ASSUME(cond) if (!(cond)) __builtin_unreachable()
+#define LIKELY(cond)       __builtin_expect(!!(cond), 1)
+#define UNLIKELY(cond)     __builtin_expect(!!(cond), 0)
+
 #ifdef TARGET_N3DS
 #define UCLAMP8(v) ((uint8_t) __usat(v, 8))
 #else
@@ -264,7 +268,7 @@ static void gfx_set_iod(unsigned int iod)
 #endif
 
 static void gfx_flush(void) {
-    if (buf_vbo_len > 0) {
+    if (LIKELY(buf_vbo_len > 0)) {
         gfx_rapi->draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;
@@ -273,7 +277,7 @@ static void gfx_flush(void) {
 
 static struct ShaderProgram *gfx_lookup_or_create_shader_program(uint32_t shader_id) {
     struct ShaderProgram *prg = gfx_rapi->lookup_shader(shader_id);
-    if (prg == NULL) {
+    if (UNLIKELY(prg == NULL)) {
         gfx_rapi->unload_shader(rendering_state.shader_program);
         prg = gfx_rapi->create_and_load_new_shader(shader_id);
         rendering_state.shader_program = prg;
@@ -332,7 +336,7 @@ static void gfx_generate_cc(struct ColorCombiner *comb, uint32_t cc_id) {
 // else it may search unnecessarily.
 static struct ColorCombiner *gfx_lookup_or_create_color_combiner(uint32_t cc_id) {
     for (size_t i = 0; i < color_combiner_pool_size; i++) {
-        if (color_combiner_pool[i].cc_id == cc_id) {
+        if (UNLIKELY(color_combiner_pool[i].cc_id == cc_id)) {
             return &color_combiner_pool[i];
         }
     }
@@ -662,7 +666,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     memcpy(matrix, addr, sizeof(matrix));
 #endif
 
-    if (parameters & G_MTX_PROJECTION) {
+    if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
         if (parameters & G_MTX_LOAD) {
             memcpy(rsp.P_matrix, matrix, sizeof(matrix));
         } else {
@@ -689,14 +693,11 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 // SM64 only ever pops 1 matrix at a time, and never 0.
 static void gfx_sp_pop_matrix(uint32_t count) {
     gfx_flush();
-    while (count--) {
-        if (rsp.modelview_matrix_stack_size > 0) {
-            --rsp.modelview_matrix_stack_size;
-            if (rsp.modelview_matrix_stack_size > 0) {
-                gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
-            }
-        }
-    }
+
+    // If you go below 0, you're already going to get UB, so we might as well not check the range.
+    // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
+    rsp.modelview_matrix_stack_size -= count;
+    gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
 
     gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
     gfx_citro3d_apply_model_view_mtx();
@@ -729,7 +730,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     profiler_3ds_log_time(5); // Vertex Copy
 
     // Calculate lighting
-    if (rsp.geometry_mode & G_LIGHTING) {
+    if (LIKELY(rsp.geometry_mode & G_LIGHTING)) {
         if (rsp.lights_changed) {
             rsp.lights_changed = false;
             for (int light = 0; light < rsp.current_num_lights - 1; light++)
@@ -782,7 +783,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     }
     
     // Calculate texcoords
-    if ((rsp.geometry_mode & G_LIGHTING) && (rsp.geometry_mode & G_TEXTURE_GEN)) {
+    if (UNLIKELY((rsp.geometry_mode & G_LIGHTING) && (rsp.geometry_mode & G_TEXTURE_GEN))) {
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_tn *vn = &vertices[vert].n;
             struct LoadedVertex *d = &rsp.loaded_vertices[dest];
@@ -819,7 +820,7 @@ static void gfx_sp_tri_update_state()
     // bool texture_edge = shader_state.texture_edge;
     // bool use_alpha    = shader_state.use_alpha;
     // bool use_noise    = shader_state.use_noise;
-    uint32_t cc_id    = shader_state.cc_id;
+    uint32_t cc_id       = shader_state.cc_id;
 
     static uint32_t prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
@@ -833,7 +834,7 @@ static void gfx_sp_tri_update_state()
         struct ShaderProgram *gpu_shader_program = shader_state.combiner->prg;
 
         // Multiple CCs can share the same GPU shader program
-        if (gpu_shader_program != rendering_state.shader_program) {
+        if (LIKELY(gpu_shader_program != rendering_state.shader_program)) {
             profiler_3ds_log_time(11); // gfx_sp_tri_update_state
             gfx_flush();
             profiler_3ds_log_time(0);
@@ -917,21 +918,50 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
             buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->color.a / 255.0f; // fog factor (not alpha)
         }
 #endif
+
+#ifdef TARGET_N3DS
+        ASSUME(shader_state.num_inputs >= 0 && shader_state.num_inputs <= 2);
+#endif
+
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
-            union RGBA outColor;
-            for (int cc_input = 0; cc_input < (use_alpha ? 2 : 1); cc_input++) {
-                union RGBA color;
-                bool is_cc_shade = false;
-                switch (shader_state.combiner->shader_input_mapping[cc_input][sh_input]) {
+            union RGBA color;
+            switch (shader_state.combiner->shader_input_mapping[0][sh_input]) {
+                case CC_PRIM:
+                    color = rdp.prim_color;
+                    break;
+                case CC_SHADE:
+                    color = v_arr[vtx]->color;
+                    break;
+                case CC_ENV:
+                    color = rdp.env_color;
+                    break;
+                // case CC_LOD:
+                // {
+                //     // WYATT_TODO LoD does not work in world-space
+                //     // float distance_frac = (1.0f - 3000.0f) / 3000.0f;
+                //     // // float distance_frac = (v1->w - 3000.0f) / 3000.0f;
+                //     // if (distance_frac < 0.0f) distance_frac = 0.0f;
+                //     // if (distance_frac > 1.0f) distance_frac = 1.0f;
+                //     // tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
+                //     // color = &tmp;
+                //     break;
+                // }
+                default:
+                    color.u32 = 0;
+                    break;
+            }
+
+            if (use_alpha) {
+                switch (shader_state.combiner->shader_input_mapping[1][sh_input]) {
                     case CC_PRIM:
-                        color = rdp.prim_color;
+                        color.rgba.a = rdp.prim_color.rgba.a;
                         break;
                     case CC_SHADE:
-                        color = v_arr[vtx]->color;
-                        is_cc_shade = true;
+                        if (use_fog)
+                            color.rgba.a = 255;
                         break;
                     case CC_ENV:
-                        color = rdp.env_color;
+                        color.rgba.a = rdp.env_color.rgba.a;
                         break;
                     // case CC_LOD:
                     // {
@@ -945,20 +975,12 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                     //     break;
                     // }
                     default:
-                        color.u32 = 0;
+                        color.rgba.a = 0;
                         break;
                 }
-                if (cc_input == 0) {
-                    outColor = color;
-                } else {
-                    // Shade alpha is 100% for fog
-                    if (use_fog && is_cc_shade)
-                        outColor.rgba.a = 255;
-                    else
-                        outColor.rgba.a = color.rgba.a;
-                }
             }
-            buf_vbo.as_u32[buf_vbo_len++] = outColor.u32;
+
+            buf_vbo.as_u32[buf_vbo_len++] = color.u32;
         }
         /*struct RGBA *color = &v_arr[vtx]->color;
         buf_vbo.as_float[buf_vbo_len++] = color->r / 255.0f;
@@ -966,7 +988,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         buf_vbo.as_float[buf_vbo_len++] = color->b / 255.0f;
         buf_vbo.as_float[buf_vbo_len++] = color->a / 255.0f;*/
     
-        if (++buf_vbo_num_verts == MAX_BUFFERED_VERTS) {
+        if (UNLIKELY(++buf_vbo_num_verts == MAX_BUFFERED_VERTS)) {
             profiler_3ds_log_time(12); // gfx_tri_create_vbo
             gfx_flush();
             profiler_3ds_log_time(0);
@@ -976,29 +998,29 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     profiler_3ds_log_time(12); // gfx_tri_create_vbo
 }
 
-static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
-    struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
-    struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
-    struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
-    struct LoadedVertex *v_arr[3] = {v1, v2, v3};
+// static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
+//     struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
+//     struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
+//     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
+//     struct LoadedVertex *v_arr[3] = {v1, v2, v3};
 
-    gfx_sp_tri_update_state();
-    gfx_tri_create_vbo(v_arr, 1);
-}
+//     gfx_sp_tri_update_state();
+//     gfx_tri_create_vbo(v_arr, 1);
+// }
 
-static void gfx_sp_tri2(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx,
-                        uint8_t vtx4_idx, uint8_t vtx5_idx, uint8_t vtx6_idx) {
-    struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
-    struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
-    struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
-    struct LoadedVertex *v4 = &rsp.loaded_vertices[vtx4_idx];
-    struct LoadedVertex *v5 = &rsp.loaded_vertices[vtx5_idx];
-    struct LoadedVertex *v6 = &rsp.loaded_vertices[vtx6_idx];
-    struct LoadedVertex *v_arr[6] = {v1, v2, v3, v4, v5, v6};
+// static void gfx_sp_tri2(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx,
+//                         uint8_t vtx4_idx, uint8_t vtx5_idx, uint8_t vtx6_idx) {
+//     struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
+//     struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
+//     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
+//     struct LoadedVertex *v4 = &rsp.loaded_vertices[vtx4_idx];
+//     struct LoadedVertex *v5 = &rsp.loaded_vertices[vtx5_idx];
+//     struct LoadedVertex *v6 = &rsp.loaded_vertices[vtx6_idx];
+//     struct LoadedVertex *v_arr[6] = {v1, v2, v3, v4, v5, v6};
 
-    gfx_sp_tri_update_state();
-    gfx_tri_create_vbo(v_arr, 2);
-}
+//     gfx_sp_tri_update_state();
+//     gfx_tri_create_vbo(v_arr, 2);
+// }
 
 static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_tris) {
     gfx_sp_tri_update_state();
@@ -1361,10 +1383,10 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     // ulxf = gfx_adjust_x_for_aspect_ratio(ulxf);
     // lrxf = gfx_adjust_x_for_aspect_ratio(lrxf);
 
-    struct LoadedVertex* ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
-    struct LoadedVertex* ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
-    struct LoadedVertex* lr = &rsp.loaded_vertices[MAX_VERTICES + 2];
-    struct LoadedVertex* ur = &rsp.loaded_vertices[MAX_VERTICES + 3];
+    static struct LoadedVertex* const ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
+    static struct LoadedVertex* const ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
+    static struct LoadedVertex* const lr = &rsp.loaded_vertices[MAX_VERTICES + 2];
+    static struct LoadedVertex* const ur = &rsp.loaded_vertices[MAX_VERTICES + 3];
 
     ul->x = ulxf;
     ul->y = ulyf;
@@ -1386,8 +1408,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     // ur->z = -1.0f;
     // ur->w = 1.0f;
 
-    static struct LoadedVertex* rect_vtx_array[] = {
-        &rsp.loaded_vertices[MAX_VERTICES + 0],
+    static struct LoadedVertex* rect_vtx_array[] =
+       {&rsp.loaded_vertices[MAX_VERTICES + 0],
         &rsp.loaded_vertices[MAX_VERTICES + 1],
         &rsp.loaded_vertices[MAX_VERTICES + 3],
         &rsp.loaded_vertices[MAX_VERTICES + 1],
@@ -1452,10 +1474,10 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     float lrs = ((uls << 7) + dsdx * width) >> 7;
     float lrt = ((ult << 7) + dtdy * height) >> 7;
 
-    struct LoadedVertex* ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
-    struct LoadedVertex* ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
-    struct LoadedVertex* lr = &rsp.loaded_vertices[MAX_VERTICES + 2];
-    struct LoadedVertex* ur = &rsp.loaded_vertices[MAX_VERTICES + 3];
+    static struct LoadedVertex* const ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
+    static struct LoadedVertex* const ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
+    static struct LoadedVertex* const lr = &rsp.loaded_vertices[MAX_VERTICES + 2];
+    static struct LoadedVertex* const ur = &rsp.loaded_vertices[MAX_VERTICES + 3];
     ul->u = uls;
     ul->v = ult;
     lr->u = lrs;
@@ -1477,7 +1499,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
 }
 
 static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
-    if (rdp.color_image_address == rdp.z_buf_address) {
+    if (UNLIKELY(rdp.color_image_address == rdp.z_buf_address)) {
         // Don't clear Z buffer here since we already did it with glClear
         return;
     }
@@ -1510,19 +1532,23 @@ static void gfx_dp_set_color_image(uint32_t format, uint32_t size, uint32_t widt
 
 static void set_other_mode_h(uint32_t other_mode_h)
 {
+#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
     // About 50% savings, but relatively low in count (aside from goddard)
     if (rdp.other_mode_h != other_mode_h) {
         rdp.other_mode_h  = other_mode_h;
-        MODE_SWAP_COUNT_DO(om_h_sets++);
+        om_h_sets++;
     }
     else
-        MODE_SWAP_COUNT_DO(om_h_skips++);
+        om_h_skips++;
+#else
+    rdp.other_mode_h  = other_mode_h;
+#endif
 }
 
 static void set_other_mode_l(uint32_t other_mode_l)
 {
     // About 66% savings, but relatively low in count (aside from goddard)
-    if (rdp.other_mode_l != other_mode_l) {
+    if (LIKELY(rdp.other_mode_l != other_mode_l)) {
         rdp.other_mode_l  = other_mode_l;
         MODE_SWAP_COUNT_DO(om_l_sets++);
         
