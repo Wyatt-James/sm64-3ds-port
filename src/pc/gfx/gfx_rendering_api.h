@@ -5,13 +5,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-union RGBA {  
-    struct {
-        uint8_t r, g, b, a;
-    } rgba;
-    uint32_t u32;
-};
-
 struct ShaderProgram;
 
 struct GfxRenderingAPI {

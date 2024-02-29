@@ -15,6 +15,7 @@
 
 #include "gfx_citro3d.h"
 #include "color_conversion.h"
+#include "texture_conversion.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
@@ -827,7 +828,7 @@ static void renderTwoColorTris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_
     // The endianness used to be reversed, but I think that this was actually an error.
     // If I set G to 0 here, it gives magenta, as expected. If endianness were reversed,
     // it would be yellow.
-    union RGBA env_color = ((union RGBA*) buf_vbo)[color_1_offset];
+    union RGBA32 env_color = ((union RGBA32*) buf_vbo)[color_1_offset];
     if (!hasAlpha)
         env_color.rgba.a = 255;
 
