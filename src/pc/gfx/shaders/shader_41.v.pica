@@ -1,7 +1,7 @@
 ; position, texture, 2 colors rgb
 
 ; Uniforms
-.fvec projection[4], modelView[4]
+.fvec projection[4], modelView[4], gameProjection[4]
 .fvec tex_scale
 
 ; Constants
@@ -34,12 +34,18 @@ model:
     dphi r1.y, r0, modelView[1]
     dphi r1.z, r0, modelView[2]
     dphi r1.w, r0, modelView[3]
+game_projection:
+    ; r0 = gameProjection * inpos
+    dp4 r0.x, gameProjection[0], r1
+    dp4 r0.y, gameProjection[1], r1
+    dp4 r0.z, gameProjection[2], r1
+    dp4 r0.w, gameProjection[3], r1
 projection:
     ; outpos = projection * inpos
-    dp4 outpos.x, projection[0], r1
-    dp4 outpos.y, projection[1], r1
-    dp4 outpos.z, projection[2], r1
-    dp4 outpos.w, projection[3], r1
+    dp4 outpos.x, projection[0], r0
+    dp4 outpos.y, projection[1], r0
+    dp4 outpos.z, projection[2], r0
+    dp4 outpos.w, projection[3], r0
 texture:
     ; outtex = intex
     mul r2, tex_scale, intex

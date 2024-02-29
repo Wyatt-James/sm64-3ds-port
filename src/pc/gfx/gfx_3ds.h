@@ -55,7 +55,7 @@ extern C3D_RenderTarget *gTargetBottom;
 
 extern bool gBottomScreenNeedsRender;
 
-extern int uLoc_projection, uLoc_modelView;
+extern int uLoc_projection, uLoc_modelView, uLoc_gameProjection;
 
 extern float gSliderLevel;
 

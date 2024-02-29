@@ -133,7 +133,7 @@ static struct RSP {
     float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
     uint8_t modelview_matrix_stack_size;
 
-    float MP_matrix[4][4];
+    // float MP_matrix[4][4];
     float P_matrix[4][4];
 
     Light_t current_lights[MAX_LIGHTS + 1];
@@ -657,15 +657,6 @@ static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const floa
     memcpy(res, tmp, sizeof(tmp));
 }
 
-// Recalculates the MP matrix and sends it to the GPU.
-static void gfx_recalc_mp_matrix()
-{
-    gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
-    
-    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
-    gfx_citro3d_apply_model_view_matrix();
-}
-
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     gfx_flush();
 
@@ -689,6 +680,9 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
             memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
         else
             gfx_matrix_mul_safe(rsp.P_matrix, matrix, rsp.P_matrix);
+        
+        gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
+        gfx_citro3d_apply_game_projection_matrix();
 
     } else { // G_MTX_MODELVIEW
         const float* src = &rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
@@ -701,10 +695,10 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         else
             gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
 
+        gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+        gfx_citro3d_apply_model_view_matrix();
         rsp.lights_changed = true;
     }
-
-    gfx_recalc_mp_matrix();
 }
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
@@ -714,7 +708,8 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
     rsp.modelview_matrix_stack_size -= count;
-    gfx_recalc_mp_matrix();
+    gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+    gfx_citro3d_apply_model_view_matrix();
 }
 
 static float gfx_adjust_x_for_aspect_ratio(float x) {
@@ -1388,6 +1383,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_flush();
     gfx_citro3d_temporarily_use_identity_matrix(true);
     gfx_citro3d_apply_model_view_matrix();
+    gfx_citro3d_apply_game_projection_matrix();
 
     // U10.2 coordinates
     float ulxf = ulx;
@@ -1454,6 +1450,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_flush();
     gfx_citro3d_temporarily_use_identity_matrix(false);
     gfx_citro3d_apply_model_view_matrix();
+    gfx_citro3d_apply_game_projection_matrix();
 
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
@@ -1898,8 +1895,7 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     for (int i = 0; i < MAT_STACK_SIZE; i++)
         memcpy(rsp.modelview_matrix_stack[i], MTX_IDENTITY, sizeof(MTX_IDENTITY));
     
-    memcpy(rsp.MP_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
-    memcpy(rsp.P_matrix,  MTX_IDENTITY, sizeof(MTX_IDENTITY));
+    memcpy(rsp.P_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
 
     // Used in the 120 star TAS
     static uint32_t precomp_shaders[] = {

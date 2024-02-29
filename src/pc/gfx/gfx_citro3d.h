@@ -24,8 +24,13 @@ void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color);
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode);
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4]);
-void gfx_citro3d_temporarily_use_identity_matrix(bool use_identity); // While this flag is active, apply_model_view_mtx will only set to identity.
+void gfx_citro3d_set_game_projection_matrix(float mtx[4][4]);
 void gfx_citro3d_apply_model_view_matrix();
+void gfx_citro3d_apply_game_projection_matrix();
+
+// While this flag is active, apply_model_view_matrix and apply_game_projection_matrix will set to identity.
+void gfx_citro3d_temporarily_use_identity_matrix(bool use_identity);
+
 
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode);
 

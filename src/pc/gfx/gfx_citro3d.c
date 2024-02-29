@@ -102,8 +102,9 @@ static int scissor_x, scissor_y;
 static int scissor_width, scissor_height;
 static bool scissor;
 
-static C3D_Mtx modelView, projection;
-static C3D_Mtx* currentModelView = &modelView;
+static C3D_Mtx modelView, gameProjection, projection;
+static C3D_Mtx *currentModelView      = &modelView,
+               *currentGameProjection = &gameProjection;
 
 static int original_offset;
 static int s2DMode;
@@ -406,8 +407,9 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     C3D_BindProgram(&current_buffer->shader_program);
 
     // Update uniforms
-    uLoc_projection = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "projection");
-    uLoc_modelView = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "modelView");
+    uLoc_projection =     shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "projection");
+    uLoc_modelView =      shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "modelView");
+    uLoc_gameProjection = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "gameProjection");
     
     if (new_prg->cc_features.used_textures[0] || new_prg->cc_features.used_textures[1])
         uLoc_tex_scale = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "tex_scale");
@@ -958,8 +960,9 @@ static void gfx_citro3d_start_frame(void)
     // z = (z + w) * -0.5
     Mtx_Multiply(&projection, &projection, &DEPTH_ADD_W_MTX);
 
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection,     &projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, &IDENTITY_MTX);
 }
 
 void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
@@ -975,14 +978,25 @@ void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
     gfx_citro3d_convert_mtx(mtx, &modelView);
 }
 
-void gfx_citro3d_temporarily_use_identity_matrix(bool use_identity)
+void gfx_citro3d_set_game_projection_matrix(float mtx[4][4])
 {
-    currentModelView = use_identity ? &IDENTITY_MTX : &modelView;
+    gfx_citro3d_convert_mtx(mtx, &gameProjection);
 }
 
 void gfx_citro3d_apply_model_view_matrix()
 {
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, currentModelView);
+}
+
+void gfx_citro3d_apply_game_projection_matrix()
+{
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, currentGameProjection);
+}
+
+void gfx_citro3d_temporarily_use_identity_matrix(bool use_identity)
+{
+    currentModelView      = use_identity ? &IDENTITY_MTX : &modelView;
+    currentGameProjection = use_identity ? &IDENTITY_MTX : &gameProjection;
 }
 
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
@@ -1008,8 +1022,9 @@ static void gfx_citro3d_on_resize(void)
 
 static void gfx_citro3d_end_frame(void)
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection,     &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, &IDENTITY_MTX);
     C3D_CullFace(GPU_CULL_NONE);
 
     // TOOD: draw the minimap here
