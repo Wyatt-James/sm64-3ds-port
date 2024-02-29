@@ -60,6 +60,7 @@
 #define MAX_LIGHTS 2
 #define MAX_VERTICES 64
 #define DELIBERATELY_INVALID_CC_ID ~0
+#define MAT_STACK_SIZE 11
 
 #define ASSUME(cond) if (!(cond)) __builtin_unreachable()
 #define LIKELY(cond)       __builtin_expect(!!(cond), 1)
@@ -85,10 +86,10 @@
 #define MODE_SWAP_COUNT_DO(stmt) do {} while (0)
 #endif
 
-float C3D_MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
-                                {0.0f, 1.0f, 0.0f, 0.0f},
-                                {0.0f, 0.0f, 1.0f, 0.0f},
-                                {0.0f, 0.0f, 0.0f, 1.0f}};
+float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
+                            {0.0f, 1.0f, 0.0f, 0.0f},
+                            {0.0f, 0.0f, 1.0f, 0.0f},
+                            {0.0f, 0.0f, 0.0f, 1.0f}};
 
 struct XYWidthHeight {
     uint16_t x, y, width, height;
@@ -129,7 +130,7 @@ static struct ColorCombiner color_combiner_pool[64];
 static uint8_t color_combiner_pool_size;
 
 static struct RSP {
-    float modelview_matrix_stack[11][4][4];
+    float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
     uint8_t modelview_matrix_stack_size;
 
     float MP_matrix[4][4];
@@ -640,18 +641,29 @@ static void calculate_lookat_y(float res[3], const float b[4][4])
     gfx_normalize_vector(res);
 }
 
+// Multiplies the whole matrix.
 static void gfx_matrix_mul_unsafe(float res[4][4], const float a[4][4], const float b[4][4]) {
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            res[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j] + a[i][3] * b[3][j];
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            res[r][c] = a[r][0] * b[0][c] + a[r][1] * b[1][c] + a[r][2] * b[2][c] + a[r][3] * b[3][c];
         }
     }
 }
 
+// Multiplies the whole matrix, using a temporary variable. Use only when a == res || b == res.
 static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const float b[4][4]) {
     float tmp[4][4];
     gfx_matrix_mul_unsafe(tmp, a, b);
     memcpy(res, tmp, sizeof(tmp));
+}
+
+// Recalculates the MP matrix and sends it to the GPU.
+static void gfx_recalc_mp_matrix()
+{
+    gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+    
+    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
+    gfx_citro3d_apply_model_view_matrix();
 }
 
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
@@ -691,10 +703,8 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
         rsp.lights_changed = true;
     }
-    gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
-    
-    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
-    gfx_citro3d_apply_model_view_matrix();
+
+    gfx_recalc_mp_matrix();
 }
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
@@ -704,10 +714,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
     rsp.modelview_matrix_stack_size -= count;
-    gfx_matrix_mul_unsafe(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
-
-    gfx_citro3d_set_model_view_matrix(rsp.MP_matrix);
-    gfx_citro3d_apply_model_view_matrix();
+    gfx_recalc_mp_matrix();
 }
 
 static float gfx_adjust_x_for_aspect_ratio(float x) {
@@ -1886,6 +1893,13 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     rsp.loaded_vertices[MAX_VERTICES + 1].z =
     rsp.loaded_vertices[MAX_VERTICES + 2].z =
     rsp.loaded_vertices[MAX_VERTICES + 3].z = -1.0f;
+
+    // Initialize the matstack to identity
+    for (int i = 0; i < MAT_STACK_SIZE; i++)
+        memcpy(rsp.modelview_matrix_stack[i], MTX_IDENTITY, sizeof(MTX_IDENTITY));
+    
+    memcpy(rsp.MP_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
+    memcpy(rsp.P_matrix,  MTX_IDENTITY, sizeof(MTX_IDENTITY));
 
     // Used in the 120 star TAS
     static uint32_t precomp_shaders[] = {
