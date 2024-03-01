@@ -70,36 +70,36 @@ void convert_ia16_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_b
     }
 }
 
+// Unused by SM64
 void convert_i4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
 {
-    for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
-        uint8_t byte = data[i / 2];
-        uint8_t part = (byte >> (4 - (i % 2) * 4)) & 0xf;
-        uint8_t intensity = part;
-        uint8_t r = intensity;
-        uint8_t g = intensity;
-        uint8_t b = intensity;
-        output->rgba.r = SCALE_4_8(r);
-        output->rgba.g = SCALE_4_8(g);
-        output->rgba.b = SCALE_4_8(b);
-        output->rgba.a = 255;
+    for (uint32_t i = 0; i < size_bytes; i++, output += 2) {
+        uint8_t byte = data[i];
+        union I4x2 i4x2 = (union I4x2) byte; // Reverse order? Why?
+        output[0].rgba.r = SCALE_4_8(i4x2.intensity.i2);
+        output[0].rgba.g = SCALE_4_8(i4x2.intensity.i2);
+        output[0].rgba.b = SCALE_4_8(i4x2.intensity.i2);
+        output[0].rgba.a = 255;
+        output[1].rgba.r = SCALE_4_8(i4x2.intensity.i1);
+        output[1].rgba.g = SCALE_4_8(i4x2.intensity.i1);
+        output[1].rgba.b = SCALE_4_8(i4x2.intensity.i1);
+        output[1].rgba.a = 255;
     }
 }
 
+// Unused by SM64
 void convert_i8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
-        uint8_t intensity = data[i];
-        uint8_t r = intensity;
-        uint8_t g = intensity;
-        uint8_t b = intensity;
-        output->rgba.r = r;
-        output->rgba.g = g;
-        output->rgba.b = b;
+        uint8_t intensity = data[i]; // Not gonna bother using the struct here
+        output->rgba.r = intensity;
+        output->rgba.g = intensity;
+        output->rgba.b = intensity;
         output->rgba.a = 255;
     }
 }
 
+// Unused by SM64
 void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
@@ -114,6 +114,7 @@ void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
     }
 }
 
+// Unused by SM64
 void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
@@ -127,6 +128,7 @@ void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
     }
 }
 
+// Unused by SM64
 void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
@@ -137,6 +139,7 @@ void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_by
     }
 }
 
+// Unused by SM64
 void convert_ci8_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
