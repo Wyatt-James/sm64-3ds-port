@@ -1,4 +1,11 @@
-#include "src/pc/gfx/texture_conversion.h"
+#include "platform_info.h"
+#include "texture_conversion.h"
+
+#if IS_BIG_ENDIAN == 1
+#define BIG_ENDIAN_LOAD(v_) (v_)
+#else
+#define BIG_ENDIAN_LOAD(v_) (__builtin_bswap16(v_))
+#endif
 
 void convert_rgba16_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
 {
@@ -95,10 +102,11 @@ void convert_i8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_byt
 
 void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
+    const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
         uint8_t byte = data[i / 2];
         uint8_t idx = (byte >> (4 - (i % 2) * 4)) & 0xf;
-        uint16_t col16 = (palette[idx * 2] << 8) | palette[idx * 2 + 1]; // Big endian load
+        uint16_t col16 = BIG_ENDIAN_LOAD(palette_as_u16[idx]);
         uint8_t a = col16 & 1;
         uint8_t r = col16 >> 11;
         uint8_t g = (col16 >> 6) & 0x1f;
@@ -112,9 +120,10 @@ void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
 
 void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
+    const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
         uint8_t idx = data[i];
-        uint16_t col16 = (palette[idx * 2] << 8) | palette[idx * 2 + 1]; // Big endian load
+        uint16_t col16 = BIG_ENDIAN_LOAD(palette_as_u16[idx]);
         uint8_t a = col16 & 1;
         uint8_t r = col16 >> 11;
         uint8_t g = (col16 >> 6) & 0x1f;
@@ -128,10 +137,11 @@ void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
 
 void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
+    const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
         uint8_t byte = data[i / 2];
         uint8_t idx = (byte >> (4 - (i % 2) * 4)) & 0xf;
-        uint16_t col16 = (palette[idx * 2] << 8) | palette[idx * 2 + 1]; // Big endian load
+        uint16_t col16 = BIG_ENDIAN_LOAD(palette_as_u16[idx]);
         uint8_t a = col16 & 1;
         uint8_t r = col16 >> 11;
         uint8_t g = (col16 >> 6) & 0x1f;
@@ -145,10 +155,11 @@ void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_by
 
 void convert_ci8_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
+    const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
         uint8_t byte = data[i / 2];
         uint8_t idx = (byte >> (4 - (i % 2) * 4)) & 0xf;
-        uint16_t col16 = (palette[idx * 2] << 8) | palette[idx * 2 + 1]; // Big endian load
+        uint16_t col16 = BIG_ENDIAN_LOAD(palette_as_u16[idx]);
         uint8_t a = col16 & 1;
         uint8_t r = col16 >> 11;
         uint8_t g = (col16 >> 6) & 0x1f;
