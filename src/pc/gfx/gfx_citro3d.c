@@ -22,12 +22,15 @@
 
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v) (*(float*) &v)
+#define ARR_INDEX(x_, y_, w_) (y_ * w_ + x_)
 
 #define STRIDE_POSITION 3
 #define STRIDE_TEXTURE  2
 #define STRIDE_RGBA     4
 #define STRIDE_RGB      3
 #define STRIDE_FOG      STRIDE_RGBA
+
+#define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 
 
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
@@ -630,74 +633,69 @@ static int sTileOrder[] =
     10, 11, 14, 15
 };
 
-static void performTexSwizzle(const u8* src, u32* dst, u32 w, u32 h)
+// Performs a texture swizzle from RGBA32 to RGBA32.
+// Pads the texture from w * h to new_w * new_h by simply repeating data.
+static void performTexSwizzle(union RGBA32* src, union RGBA32* dest, u32 src_w, u32 src_h, u32 new_w, u32 new_h)
 {
-    int offs = 0;
-    for (u32 y = 0; y < h; y += 8)
+    for (u32 y = 0; y < new_h; y += 8)
     {
-        for (u32 x = 0; x < w; x += 8)
+        for (u32 x = 0; x < new_w; x += 8)
         {
-            for (int i = 0; i < 64; i++)
+            for (u32 i = 0; i < 64; i++)
             {
-                int x2 = i & 7;
-                int y2 = i >> 3;
-                int pos = sTileOrder[(x2 & 3) + ((y2 & 3) << 2)] + ((x2 >> 2) << 4) + ((y2 >> 2) << 5);
-                u32 c = ((const u32*)src)[(y + y2) * w + x + x2];
-                dst[offs + pos] = ((c & 0xFF) << 24) | (((c >> 8) & 0xFF) << 16) | (((c >> 16) & 0xFF) << 8) | (c >> 24);
+                int x2 = i % 8; // Tiling nonsense
+                int y2 = i / 8;
+
+                // src_x = (x + x2) % src_w. Fills padding with repeat texture.
+                u32 src_x = x + x2;
+                if (src_x >= src_w)
+                    src_x -= src_w;
+
+                // src_y = (y + y2) % src_h. Fills padding with repeat texture.
+                u32 src_y = y + y2;
+                if (src_y >= src_h)
+                    src_y -= src_h;
+
+                union RGBA32 color = src[ARR_INDEX(src_x, src_y, src_w)];
+                u32 out_index = sTileOrder[x2 % 4 + y2 % 4 * 4] + 16 * (x2 / 4) + 32 * (y2 / 4);
+
+                dest[out_index].rgba.r = color.rgba.a;
+                dest[out_index].rgba.g = color.rgba.b;
+                dest[out_index].rgba.b = color.rgba.g;
+                dest[out_index].rgba.a = color.rgba.r;
             }
-            dst += 64;
+            dest += 64;
         }
     }
 }
 
 static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int height)
 {
-    if (width < 8 || height < 8 || (width & (width - 1)) || (height & (height - 1)))
-    {
-        u32 newWidth = width < 8 ? 8 : (1 << (32 - __builtin_clz(width - 1)));
-        u32 newHeight = height < 8 ? 8 : (1 << (32 - __builtin_clz(height - 1)));
-        if (newWidth * newHeight * 4 > sizeof(sTexBuf))
-        {
-            printf("Tex buffer overflow!\n");
+    union RGBA32* src_as_rgba32 = (union RGBA32*) rgba32_buf;
+    union RGBA32* dest_as_rgba32 = (union RGBA32*) sTexBuf;
+    u32 output_width = width, output_height = height;
+
+    // Dimensions must each be a power-of-2 >= 8.
+    if (width < 8 || height < 8 || (width & (width - 1)) || (height & (height - 1))) {
+        // Round the dimensions up to the nearest power-of-2 >= 8
+        output_width  = width  < 8 ? 8 : (1 << (32 - NUM_LEADING_ZEROES(width  - 1)));
+        output_height = height < 8 ? 8 : (1 << (32 - NUM_LEADING_ZEROES(height - 1)));
+
+        if (output_width * output_height > ARRAY_COUNT(sTexBuf)) {
+            printf("Scaled texture too big: %d,%d\n", output_width, output_height);
             return;
         }
-        int offs = 0;
-        for (u32 y = 0; y < newHeight; y += 8)
-        {
-            for (u32 x = 0; x < newWidth; x += 8)
-            {
-                for (int i = 0; i < 64; i++)
-                {
-                    int x2 = i % 8;
-                    int y2 = i / 8;
-
-                    int realX = x + x2;
-                    if (realX >= width)
-                        realX -= width;
-
-                    int realY = y + y2;
-                    if (realY >= height)
-                        realY -= height;
-
-                    int pos = sTileOrder[x2 % 4 + y2 % 4 * 4] + 16 * (x2 / 4) + 32 * (y2 / 4);
-                    u32 c = ((u32*)rgba32_buf)[realY * width + realX];
-                    ((u32*)sTexBuf)[offs + pos] = ((c & 0xFF) << 24) | (((c >> 8) & 0xFF) << 16) | (((c >> 16) & 0xFF) << 8) | (c >> 24);
-                }
-                offs += 64;
-            }
+    } else {
+        if (width * height > ARRAY_COUNT(sTexBuf)) {
+            printf("Unscaled texture too big: %d,%d\n", width, height);
+            return;
         }
-        sTexturePoolScaleS[sCurTex] = width / (float)newWidth;
-        sTexturePoolScaleT[sCurTex] = height / (float)newHeight;
-        width = newWidth;
-        height = newHeight;
     }
-    else
-    {
-        sTexturePoolScaleS[sCurTex] = 1.f;
-        sTexturePoolScaleT[sCurTex] = 1.f;
-        performTexSwizzle(rgba32_buf, sTexBuf, width, height);
-    }
-    C3D_TexInit(&sTexturePool[sCurTex], width, height, GPU_RGBA8);
+
+    sTexturePoolScaleS[sCurTex] = width / (float)output_width;
+    sTexturePoolScaleT[sCurTex] = height / (float)output_height;
+    performTexSwizzle(src_as_rgba32, dest_as_rgba32, width, height, output_width, output_height);
+    C3D_TexInit(&sTexturePool[sCurTex], output_width, output_height, GPU_RGBA8);
     C3D_TexUpload(&sTexturePool[sCurTex], sTexBuf);
     C3D_TexFlush(&sTexturePool[sCurTex]);
 }
