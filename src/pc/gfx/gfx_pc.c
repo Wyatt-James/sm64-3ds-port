@@ -357,7 +357,7 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
         }
         node = &(*node)->next;
     }
-    if (gfx_texture_cache.pool_pos == sizeof(gfx_texture_cache.pool) / sizeof(struct TextureHashmapNode)) {
+    if (gfx_texture_cache.pool_pos == ARRAY_COUNT(gfx_texture_cache.pool)) {
         // Pool is full. We just invalidate everything and start over.
         gfx_texture_cache.pool_pos = 0;
         node = &gfx_texture_cache.hashmap[hash];
@@ -391,6 +391,7 @@ static void import_texture_rgba16(int tile) {
     gfx_rapi->upload_texture(rgba32_buf, width, height);
 }
 
+// Unused by SM64
 static void import_texture_rgba32(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes / 2;
     uint32_t height = (rdp.loaded_texture[tile].size_bytes / 2) / rdp.texture_tile.line_size_bytes;
@@ -424,6 +425,7 @@ static void import_texture_ia16(int tile) {
     gfx_rapi->upload_texture(rgba32_buf, width, height);
 }
 
+// Unused by SM64
 static void import_texture_i4(int tile) {
     convert_i4_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
 
@@ -433,6 +435,7 @@ static void import_texture_i4(int tile) {
     gfx_rapi->upload_texture(rgba32_buf, width, height);
 }
 
+// Unused by SM64
 static void import_texture_i8(int tile) {
     convert_i8_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
 
@@ -442,7 +445,7 @@ static void import_texture_i8(int tile) {
     gfx_rapi->upload_texture(rgba32_buf, width, height);
 }
 
-
+// Unused by SM64
 static void import_texture_ci4(int tile) {
     convert_ci4_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes, rdp.palette);
 
@@ -452,6 +455,7 @@ static void import_texture_ci4(int tile) {
     gfx_rapi->upload_texture(rgba32_buf, width, height);
 }
 
+// Unused by SM64
 static void import_texture_ci8(int tile) {
     convert_ci8_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes, rdp.palette);
 
@@ -473,12 +477,12 @@ static void import_texture(int tile) {
         if (siz == G_IM_SIZ_16b) {
             import_texture_rgba16(tile);
         } else if (siz == G_IM_SIZ_32b) {
-            import_texture_rgba32(tile);
+            import_texture_rgba32(tile); // Unused by SM64
         } else {
             abort();
         }
     } else if (fmt == G_IM_FMT_IA) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz == G_IM_SIZ_4b) {        // Used by text only
             import_texture_ia4(tile);
         } else if (siz == G_IM_SIZ_8b) {
             import_texture_ia8(tile);
@@ -487,6 +491,8 @@ static void import_texture(int tile) {
         } else {
             abort();
         }
+        
+    // Unused by SM64
     } else if (fmt == G_IM_FMT_CI) {
         if (siz == G_IM_SIZ_4b) {
             import_texture_ci4(tile);
@@ -495,6 +501,8 @@ static void import_texture(int tile) {
         } else {
             abort();
         }
+    
+    // Unused by SM64
     } else if (fmt == G_IM_FMT_I) {
         if (siz == G_IM_SIZ_4b) {
             import_texture_i4(tile);
@@ -1792,6 +1800,9 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
 #endif
 
     shader_state_init(&shader_state);
+
+    for (int i = 0; i < ARRAY_COUNT(fake_palette); i++)
+        fake_palette[i] = rand();
 
     // Screen-space rect Z will always be -1.0f
     rsp.loaded_vertices[MAX_VERTICES + 0].z =
