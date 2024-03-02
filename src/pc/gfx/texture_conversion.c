@@ -99,6 +99,7 @@ void convert_i8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_byt
     }
 }
 
+// WYATT_TODO fix up this loop to use CI4x2
 // Unused by SM64
 void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
@@ -128,6 +129,7 @@ void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
     }
 }
 
+// WYATT_TODO fix up this loop to use CI4x2
 // Unused by SM64
 void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
