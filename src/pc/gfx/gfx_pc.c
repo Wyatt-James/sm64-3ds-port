@@ -803,46 +803,22 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     bool use_alpha    = shader_state.use_alpha;
     bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
 
-#ifndef TARGET_N3DS
-    bool z_is_from_0_to_1 = gfx_rapi->z_is_from_0_to_1(); // 3DS is always 0 to 1
-#endif
-
     for (uint32_t vtx = 0; vtx < numTris * 3; vtx++) {
-
-#ifdef TARGET_N3DS
-        // float w = v_arr[vtx]->w, z = (v_arr[vtx]->z + w) / -2.0f; // 3DS is always 0 to 1
-#else
-        float z = v_arr[vtx]->z, w = v_arr[vtx]->w;
-        if (z_is_from_0_to_1) {
-            z = (z + w) / 2.0f;
-        }
-#endif
 
         buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->x;
         buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->y;
         buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->z;
-        // buf_vbo.as_float[buf_vbo_len++] = 1.0f;  // w
-        // buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->w;
 
         if (use_texture) {
             float u = (v_arr[vtx]->u - rdp.texture_tile.uls8);
             float v = (v_arr[vtx]->v - rdp.texture_tile.ult8);
             if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
-                // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
-                u += 16.0f;
+                u += 16.0f; // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
                 v += 16.0f;
             }
             buf_vbo.as_float[buf_vbo_len++] = u * rdp.texture_tile.tex_width_recip;
             buf_vbo.as_float[buf_vbo_len++] = v * rdp.texture_tile.tex_height_recip;
         }
-#ifndef TARGET_N3DS
-        if (use_fog) {
-            buf_vbo.as_float[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
-            buf_vbo.as_float[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
-            buf_vbo.as_float[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
-            buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->color.a / 255.0f; // fog factor (not alpha)
-        }
-#endif
 
 #ifdef TARGET_N3DS
         ASSUME(shader_state.num_inputs >= 0 && shader_state.num_inputs <= 2);
@@ -861,16 +837,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                     color = rdp.env_color;
                     break;
                 // case CC_LOD:
-                // {
-                //     // WYATT_TODO LoD does not work in world-space
-                //     // float distance_frac = (1.0f - 3000.0f) / 3000.0f;
-                //     // // float distance_frac = (v1->w - 3000.0f) / 3000.0f;
-                //     // if (distance_frac < 0.0f) distance_frac = 0.0f;
-                //     // if (distance_frac > 1.0f) distance_frac = 1.0f;
-                //     // tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
-                //     // color = &tmp;
-                //     break;
-                // }
+                    // WYATT_TODO LoD does not work in world-space
                 default:
                     color.u32 = 0;
                     break;
@@ -889,16 +856,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                         color.rgba.a = rdp.env_color.rgba.a;
                         break;
                     // case CC_LOD:
-                    // {
-                    //     // WYATT_TODO LoD does not work in world-space
-                    //     // float distance_frac = (1.0f - 3000.0f) / 3000.0f;
-                    //     // // float distance_frac = (v1->w - 3000.0f) / 3000.0f;
-                    //     // if (distance_frac < 0.0f) distance_frac = 0.0f;
-                    //     // if (distance_frac > 1.0f) distance_frac = 1.0f;
-                    //     // tmp.r = tmp.g = tmp.b = tmp.a = distance_frac * 255.0f;
-                    //     // color = &tmp;
-                    //     break;
-                    // }
+                        // WYATT_TODO LoD does not work in world-space
                     default:
                         color.rgba.a = 0;
                         break;
@@ -907,11 +865,6 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 
             buf_vbo.as_u32[buf_vbo_len++] = color.u32;
         }
-        /*struct RGBA *color = &v_arr[vtx]->color;
-        buf_vbo.as_float[buf_vbo_len++] = color->r / 255.0f;
-        buf_vbo.as_float[buf_vbo_len++] = color->g / 255.0f;
-        buf_vbo.as_float[buf_vbo_len++] = color->b / 255.0f;
-        buf_vbo.as_float[buf_vbo_len++] = color->a / 255.0f;*/
     
         if (UNLIKELY(++buf_vbo_num_verts == MAX_BUFFERED_VERTS)) {
             profiler_3ds_log_time(12); // gfx_tri_create_vbo
