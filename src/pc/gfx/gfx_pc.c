@@ -1566,36 +1566,47 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_sp_geometry_mode(cmd->words.w1, 0);
                 break;
 #endif
-            case (uint8_t)G_TRI1:
+            case (uint8_t)G_TRI1: {
 #ifdef F3DEX_GBI_2
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(16, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(8, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(0, 8) / 2];
+                const uint8_t i1 = C0(16, 8) / 2,
+                              i2 = C0(8, 8)  / 2,
+                              i3 = C0(0, 8)  / 2;
                 // gfx_sp_tri1(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2);
 #elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(16, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(8, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(0, 8) / 2];
+                const uint8_t i1 = C1(16, 8) / 2,
+                              i2 = C1(8, 8)  / 2,
+                              i3 = C1(0, 8)  / 2;
                 // gfx_sp_tri1(C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
 #else
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(16, 8) / 10];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(8, 8) / 10];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(0, 8) / 10];
+                const uint8_t i1 = C1(16, 8) / 10,
+                              i2 = C1(8, 8)  / 10,
+                              i3 = C1(0, 8)  / 10;
                 // gfx_sp_tri1(C1(16, 8) / 10, C1(8, 8) / 10, C1(0, 8) / 10);
 #endif
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i1];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i3];
                 break;
+            }
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
-            case (uint8_t)G_TRI2:
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(16, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(8, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C0(0, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(16, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(8, 8) / 2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[C1(0, 8) / 2];
+            case (uint8_t)G_TRI2: {
+                const uint8_t i1 = C0(16, 8) / 2,
+                              i2 = C0(8, 8)  / 2,
+                              i3 = C0(0, 8)  / 2,
+                              i4 = C1(16, 8) / 2,
+                              i5 = C1(8, 8)  / 2,
+                              i6 = C1(0, 8)  / 2;
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i1];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i2];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i3];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i4];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i5];
+                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i6];
 
                 // gfx_sp_tri2(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2,
                 //             C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
                 break;
+            }
 #endif
             case (uint8_t)G_SETOTHERMODE_L:
 #ifdef F3DEX_GBI_2
