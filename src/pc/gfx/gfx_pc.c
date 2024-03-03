@@ -1801,9 +1801,6 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
 
     shader_state_init(&shader_state);
 
-    for (int i = 0; i < ARRAY_COUNT(fake_palette); i++)
-        fake_palette[i] = rand();
-
     // Screen-space rect Z will always be -1.0f
     rsp.loaded_vertices[MAX_VERTICES + 0].z =
     rsp.loaded_vertices[MAX_VERTICES + 1].z =
