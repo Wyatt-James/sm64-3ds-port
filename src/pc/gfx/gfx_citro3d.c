@@ -638,10 +638,8 @@ static int sTileOrder[] =
 // Pads the texture from w * h to new_w * new_h by simply repeating data.
 static void performTexSwizzle(union RGBA32* src, union RGBA32* dest, u32 src_w, u32 src_h, u32 new_w, u32 new_h)
 {
-    for (u32 y = 0; y < new_h; y += 8)
-    {
-        for (u32 x = 0; x < new_w; x += 8)
-        {
+    for (u32 y = 0; y < new_h; y += 8) {
+        for (u32 x = 0; x < new_w; x += 8) {
             for (u32 i = 0; i < 64; i++)
             {
                 int x2 = i % 8; // Tiling nonsense
