@@ -675,6 +675,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             int g = rsp.current_lights[rsp.current_num_lights - 1].col[1];
             int b = rsp.current_lights[rsp.current_num_lights - 1].col[2];
 
+            ASSUME(rsp.current_num_lights <= 3);
             for (int light = 0; light < rsp.current_num_lights - 1; light++) {
                 float intensity = 0;
                 intensity += vn->n[0] * rsp.current_lights_coeffs[light][0];
