@@ -22,7 +22,8 @@
 
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v) (*(float*) &v)
-#define ARR_INDEX(x_, y_, w_) (y_ * w_ + x_)
+#define ARR_INDEX_2D(x_, y_, w_) (y_ * w_ + x_)
+#define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
 
 #define STRIDE_POSITION 3
 #define STRIDE_TEXTURE  2
@@ -646,17 +647,10 @@ static void performTexSwizzle(union RGBA32* src, union RGBA32* dest, u32 src_w, 
                 int x2 = i % 8; // Tiling nonsense
                 int y2 = i / 8;
 
-                // src_x = (x + x2) % src_w. Fills padding with repeat texture.
-                u32 src_x = x + x2;
-                if (src_x >= src_w)
-                    src_x -= src_w;
+                u32 src_x = FAST_SINGLE_MOD(x + x2, src_w);
+                u32 src_y = FAST_SINGLE_MOD(y + y2, src_h);
 
-                // src_y = (y + y2) % src_h. Fills padding with repeat texture.
-                u32 src_y = y + y2;
-                if (src_y >= src_h)
-                    src_y -= src_h;
-
-                union RGBA32 color = src[ARR_INDEX(src_x, src_y, src_w)];
+                union RGBA32 color = src[ARR_INDEX_2D(src_x, src_y, src_w)];
                 u32 out_index = sTileOrder[x2 % 4 + y2 % 4 * 4] + 16 * (x2 / 4) + 32 * (y2 / 4);
 
                 dest[out_index].rgba.r = color.rgba.a;
