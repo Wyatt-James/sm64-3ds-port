@@ -1130,7 +1130,6 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     SUPPORT_CHECK(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
     
-    // Right-shift is slightly faster on 3DS.
     rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) * 8);
     rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) * 8);
     rdp.texture_tile.uls8 = (float) (uls * 8);
