@@ -394,11 +394,10 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 5:  Vertex Copy
     // 6:  Light Recalculation
     // 7:  Vertex Light Calculation
-    // 8:  Unlit Vertex Color Copy
-    // 9:  Texgen Calculation
-    // 10: Texcoord Copy
-    // 11: gfx_sp_tri_update_state
-    // 12: gfx_tri_create_vbo
+    // 8:  Texgen Calculation
+    // 9:  Texcoord Copy
+    // 10: gfx_sp_tri_update_state
+    // 11: gfx_tri_create_vbo
 
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;
@@ -418,7 +417,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 12);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 11);
                     
                     i += 5; // Place a breakpoint here
                     break;

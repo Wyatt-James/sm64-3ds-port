@@ -650,7 +650,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->x = v->ob[0];
         d->y = v->ob[1];
         d->z = v->ob[2];
-        d->color.rgba.a = v->cn[3];
+        d->color.u32 = *((uint32_t*) v->cn);
     }
     profiler_3ds_log_time(5); // Vertex Copy
 
@@ -696,16 +696,6 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         }
         
         profiler_3ds_log_time(7); // Vertex Light Calculation
-    } else {
-        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
-            const Vtx_t *v = &vertices[vert].v;
-            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
-
-            d->color.rgba.r = v->cn[0];
-            d->color.rgba.g = v->cn[1];
-            d->color.rgba.b = v->cn[2];
-        }
-        profiler_3ds_log_time(8); // Unlit Vertex Color Copy
     }
     
     // Calculate texcoords
@@ -726,7 +716,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->u = ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
             d->v = ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
         }
-        profiler_3ds_log_time(9); // Texgen Calculation
+        profiler_3ds_log_time(8); // Texgen Calculation
     } else {
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_t *v = &vertices[vert].v;
@@ -735,7 +725,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
             d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
         }
-        profiler_3ds_log_time(10); // Texcoord Copy
+        profiler_3ds_log_time(9); // Texcoord Copy
     }
 }
 
@@ -761,7 +751,7 @@ static void gfx_sp_tri_update_state()
 
         // Multiple CCs can share the same GPU shader program
         if (LIKELY(gpu_shader_program != rendering_state.shader_program)) {
-            profiler_3ds_log_time(11); // gfx_sp_tri_update_state
+            profiler_3ds_log_time(10); // gfx_sp_tri_update_state
             gfx_flush();
             profiler_3ds_log_time(0);
             gfx_rapi->unload_shader(rendering_state.shader_program);
@@ -775,7 +765,7 @@ static void gfx_sp_tri_update_state()
     for (int i = 0; i < 2; i++) {
         if (shader_state.used_textures[i]) {
             if (rdp.textures_changed[i]) {
-                profiler_3ds_log_time(11); // gfx_sp_tri_update_state
+                profiler_3ds_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush();
                 profiler_3ds_log_time(0);
                 import_texture(i);
@@ -783,7 +773,7 @@ static void gfx_sp_tri_update_state()
             }
             bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
-                profiler_3ds_log_time(11); // gfx_sp_tri_update_state
+                profiler_3ds_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush();
                 profiler_3ds_log_time(0);
                 gfx_rapi->set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
@@ -794,7 +784,7 @@ static void gfx_sp_tri_update_state()
         }
     }
 
-    profiler_3ds_log_time(11); // gfx_sp_tri_update_state
+    profiler_3ds_log_time(10); // gfx_sp_tri_update_state
 }
 
 static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
@@ -868,13 +858,13 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         }
     
         if (UNLIKELY(++buf_vbo_num_verts == MAX_BUFFERED_VERTS)) {
-            profiler_3ds_log_time(12); // gfx_tri_create_vbo
+            profiler_3ds_log_time(11); // gfx_tri_create_vbo
             gfx_flush();
             profiler_3ds_log_time(0);
         }
     }
     
-    profiler_3ds_log_time(12); // gfx_tri_create_vbo
+    profiler_3ds_log_time(11); // gfx_tri_create_vbo
 }
 
 // static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
