@@ -143,7 +143,8 @@ static struct RSP {
         uint16_t s, t;
     } texture_scaling_factor;
 
-    struct LoadedVertex loaded_vertices[MAX_VERTICES + 4];
+    struct LoadedVertex loaded_vertices[MAX_VERTICES];
+    struct LoadedVertex rect_vertices[4]; // Used only for rectangle drawing
 } rsp;
 
 static struct RDP {
@@ -1261,10 +1262,10 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     // ulxf = gfx_adjust_x_for_aspect_ratio(ulxf);
     // lrxf = gfx_adjust_x_for_aspect_ratio(lrxf);
 
-    static struct LoadedVertex* const ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
-    static struct LoadedVertex* const ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
-    static struct LoadedVertex* const lr = &rsp.loaded_vertices[MAX_VERTICES + 2];
-    static struct LoadedVertex* const ur = &rsp.loaded_vertices[MAX_VERTICES + 3];
+    static struct LoadedVertex* const ul = &rsp.rect_vertices[0];
+    static struct LoadedVertex* const ll = &rsp.rect_vertices[1];
+    static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
+    static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
 
     ul->x = ulxf;
     ul->y = ulyf;
@@ -1286,14 +1287,6 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     // ur->z = -1.0f;
     // ur->w = 1.0f;
 
-    static struct LoadedVertex* rect_vtx_array[] =
-       {&rsp.loaded_vertices[MAX_VERTICES + 0],
-        &rsp.loaded_vertices[MAX_VERTICES + 1],
-        &rsp.loaded_vertices[MAX_VERTICES + 3],
-        &rsp.loaded_vertices[MAX_VERTICES + 1],
-        &rsp.loaded_vertices[MAX_VERTICES + 2],
-        &rsp.loaded_vertices[MAX_VERTICES + 3]};
-
     // The coordinates for texture rectangle shall bypass the viewport setting
     struct XYWidthHeight default_viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
     struct XYWidthHeight viewport_saved = rdp.viewport;
@@ -1306,7 +1299,15 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
-    gfx_sp_tri_batched(rect_vtx_array, 2);
+    static struct LoadedVertex* rect_triangles[] =
+       {&rsp.rect_vertices[0],
+        &rsp.rect_vertices[1],
+        &rsp.rect_vertices[3],
+        &rsp.rect_vertices[1],
+        &rsp.rect_vertices[2],
+        &rsp.rect_vertices[3]};
+
+    gfx_sp_tri_batched(rect_triangles, 2);
 
     // Restore our prior MTX
     gfx_flush();
@@ -1353,10 +1354,11 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     float lrs = ((uls << 7) + dsdx * width) >> 7;
     float lrt = ((ult << 7) + dtdy * height) >> 7;
 
-    static struct LoadedVertex* const ul = &rsp.loaded_vertices[MAX_VERTICES + 0];
-    static struct LoadedVertex* const ll = &rsp.loaded_vertices[MAX_VERTICES + 1];
-    static struct LoadedVertex* const lr = &rsp.loaded_vertices[MAX_VERTICES + 2];
-    static struct LoadedVertex* const ur = &rsp.loaded_vertices[MAX_VERTICES + 3];
+    static struct LoadedVertex* const ul = &rsp.rect_vertices[0];
+    static struct LoadedVertex* const ll = &rsp.rect_vertices[1];
+    static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
+    static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
+    
     ul->u = uls;
     ul->v = ult;
     lr->u = lrs;
@@ -1390,10 +1392,8 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
         lry += 1 << 2;
     }
 
-    for (int i = MAX_VERTICES; i < MAX_VERTICES + 4; i++) {
-        struct LoadedVertex* v = &rsp.loaded_vertices[i];
-        v->color = rdp.fill_color;
-    }
+    for (int i = 0; i < ARRAY_COUNT(rsp.rect_vertices); i++)
+        rsp.rect_vertices[i].color = rdp.fill_color;
 
     uint32_t saved_combine_mode = rdp.combine_mode;
     gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_SHADE), color_comb(0, 0, 0, G_ACMUX_SHADE)));
@@ -1759,10 +1759,10 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     shader_state_init(&shader_state);
 
     // Screen-space rect Z will always be -1.0f
-    rsp.loaded_vertices[MAX_VERTICES + 0].z =
-    rsp.loaded_vertices[MAX_VERTICES + 1].z =
-    rsp.loaded_vertices[MAX_VERTICES + 2].z =
-    rsp.loaded_vertices[MAX_VERTICES + 3].z = -1.0f;
+    rsp.rect_vertices[0].z =
+    rsp.rect_vertices[1].z =
+    rsp.rect_vertices[2].z =
+    rsp.rect_vertices[3].z = -1.0f;
 
     // Initialize the matstack to identity
     for (int i = 0; i < MAT_STACK_SIZE; i++)
