@@ -469,13 +469,13 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
 
     /* 
      * Used shaders
-     * 4:  1 input
-     * 9:  1 input
-     * 8:  1 input
-     * 5:  1 input
      * 1:  0 inputs
-     * 41: 2 inputs
+     * 4:  1 input
+     * 5:  1 input
+     * 8:  1 input
+     * 9:  1 input
      * 20: 2 inputs
+     * 41: 2 inputs
      */
     switch(shader_code)
     {
