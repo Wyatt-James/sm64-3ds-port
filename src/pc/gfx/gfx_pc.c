@@ -667,6 +667,19 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             profiler_3ds_log_time(6); // Light Recalculation
         }
 
+        /* Required uniforms:
+         * rsp.current_lights color:  u8vec[3]
+         * rsp.current_lights_coeffs: fvec[2] (ambient does not need one)
+         * rsp.current_num_lights:    u8
+         * lighting enable flag:      bool
+         * fallback color and alpha:  fvec
+         * 
+         * Required VBO values:
+         * Vertex normals (u8[3], can replace current CC_SHADE colors)
+         * Vertex alpha (u8[1], retain)
+         * 
+         * Shaders required: all with color inputs
+         */
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_tn *vn = &vertices[vert].n;
             struct LoadedVertex *d = &rsp.loaded_vertices[dest];
@@ -812,6 +825,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         }
 
 #ifdef TARGET_N3DS
+        // One u32 input per color, instead of <RGB> <A> floats per color.
         ASSUME(shader_state.num_inputs >= 0 && shader_state.num_inputs <= 2);
 #endif
 
