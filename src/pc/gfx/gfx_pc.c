@@ -388,7 +388,7 @@ static void import_texture_rgba16(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes / 2;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 // Unused by SM64
@@ -404,7 +404,7 @@ static void import_texture_ia4(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes * 2;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 static void import_texture_ia8(int tile) {
@@ -413,7 +413,7 @@ static void import_texture_ia8(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 static void import_texture_ia16(int tile) {
@@ -422,7 +422,7 @@ static void import_texture_ia16(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes / 2;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 // Unused by SM64
@@ -432,7 +432,7 @@ static void import_texture_i4(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes * 2;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 // Unused by SM64
@@ -442,7 +442,7 @@ static void import_texture_i8(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 // Unused by SM64
@@ -452,7 +452,7 @@ static void import_texture_ci4(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes * 2;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 // Unused by SM64
@@ -462,7 +462,7 @@ static void import_texture_ci8(int tile) {
     uint32_t width = rdp.texture_tile.line_size_bytes;
     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
 
-    gfx_rapi->upload_texture(rgba32_buf, width, height);
+    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
 }
 
 static void import_texture(int tile) {
@@ -588,7 +588,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         }
     }
 #else
-    const float* matrix = addr; // SHUT UP, COMPILER! UB but it works.
+    const float* matrix = (float*) addr; // SHUT UP, COMPILER! UB but it works.
 #endif
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {

@@ -7,7 +7,7 @@
 #define BIG_ENDIAN_LOAD(v_) (__builtin_bswap16(v_))
 #endif
 
-void convert_rgba16_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
+void convert_rgba16_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes / 2; i++, output++) {
         uint16_t col16 = (data[2 * i] << 8) | data[2 * i + 1];
@@ -23,7 +23,7 @@ void convert_rgba16_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size
 }
 
 
-void convert_ia4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
+void convert_ia4_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
         uint8_t byte = data[i / 2];
@@ -40,7 +40,7 @@ void convert_ia4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
     }
 }
 
-void convert_ia8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
+void convert_ia8_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
         uint8_t intensity = data[i] >> 4;
@@ -55,7 +55,7 @@ void convert_ia8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
     }
 }
 
-void convert_ia16_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
+void convert_ia16_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes / 2; i++, output++) {
         uint8_t intensity = data[2 * i];
@@ -71,7 +71,7 @@ void convert_ia16_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_b
 }
 
 // Unused by SM64
-void convert_i4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
+void convert_i4_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes; i++, output += 2) {
         uint8_t byte = data[i];
@@ -88,7 +88,7 @@ void convert_i4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_byt
 }
 
 // Unused by SM64
-void convert_i8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes)
+void convert_i8_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes)
 {
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
         uint8_t intensity = data[i]; // Not gonna bother using the struct here
@@ -101,7 +101,7 @@ void convert_i8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_byt
 
 // WYATT_TODO fix up this loop to use CI4x2
 // Unused by SM64
-void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
+void convert_ci4_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
@@ -116,7 +116,7 @@ void convert_ci4_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
 }
 
 // Unused by SM64
-void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
+void convert_ci8_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
@@ -131,7 +131,7 @@ void convert_ci8_to_rgba32(union RGBA32* output, uint8_t* data, uint32_t size_by
 
 // WYATT_TODO fix up this loop to use CI4x2
 // Unused by SM64
-void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
+void convert_ci4_to_rgba16(union RGBA16* output, const uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
@@ -142,7 +142,7 @@ void convert_ci4_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_by
 }
 
 // Unused by SM64
-void convert_ci8_to_rgba16(union RGBA16* output, uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
+void convert_ci8_to_rgba16(union RGBA16* output, const uint8_t* data, uint32_t size_bytes, const uint8_t* palette)
 {
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
