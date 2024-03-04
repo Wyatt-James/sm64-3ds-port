@@ -1002,6 +1002,7 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uint32_t data) {
             rsp.fog_mul = (int16_t)(data >> 16);
             rsp.fog_offset = (int16_t)data;
 #ifdef TARGET_N3DS
+            // WYATT_TODO we should probably flush here.
             gfx_rapi->set_fog(rsp.fog_mul, rsp.fog_offset);
 #endif
             break;
