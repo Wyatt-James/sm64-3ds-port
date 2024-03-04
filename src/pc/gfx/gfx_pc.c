@@ -663,9 +663,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 
             calculate_lookat_x(rsp.current_lookat_coeffs[0], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
             calculate_lookat_y(rsp.current_lookat_coeffs[1], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+            profiler_3ds_log_time(6); // Light Recalculation
         }
-        
-        profiler_3ds_log_time(6); // Light Recalculation
 
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_tn *vn = &vertices[vert].n;
