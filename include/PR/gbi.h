@@ -2738,6 +2738,8 @@ typedef union {
 	 gsDma1p(    G_MOVEMEM, l, sizeof(Light),G_MV_LOOKATY)
 #endif	/* F3DEX_GBI_2 */
 
+// The port ignores lookat mats anyway, so we can dummy out these commands.
+#ifdef TARGET_N64
 #define gSPLookAt(pkt, la)						\
 {									\
 	gSPLookAtX(pkt,la)						\
@@ -2746,6 +2748,11 @@ typedef union {
 #define gsSPLookAt(la)							\
 	gsSPLookAtX(la),						\
 	gsSPLookAtY((char *)(la)+16)
+#else
+#define gSPLookAt(pkt, la) do {} while (0)
+#define gsSPLookAt(la) gsSPNoOp()
+#endif
+
 
 #define gDPSetHilite1Tile(pkt, tile, hilite, width, height)		\
 	gDPSetTileSize(pkt, tile, (hilite)->h.x1 & 0xfff, (hilite)->h.y1 & 0xfff, 	\

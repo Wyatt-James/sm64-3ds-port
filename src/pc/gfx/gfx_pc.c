@@ -675,7 +675,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             int g = rsp.current_lights[rsp.current_num_lights - 1].col[1];
             int b = rsp.current_lights[rsp.current_num_lights - 1].col[2];
 
-            ASSUME(rsp.current_num_lights <= 3);
+            ASSUME(rsp.current_num_lights <= (MAX_LIGHTS + 1));
             for (int light = 0; light < rsp.current_num_lights - 1; light++) {
                 float intensity = 0;
                 intensity += vn->n[0] * rsp.current_lights_coeffs[light][0];
@@ -800,9 +800,9 @@ static void gfx_sp_tri_update_state()
 static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 {
     profiler_3ds_log_time(0);
-    bool use_fog      = shader_state.use_fog;
-    bool use_alpha    = shader_state.use_alpha;
-    bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
+    const bool use_fog     = shader_state.use_fog;
+    const bool use_alpha   = shader_state.use_alpha;
+    const bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
 
     for (uint32_t vtx = 0; vtx < numTris * 3; vtx++) {
 
@@ -952,6 +952,19 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
 }
 
 static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
+#ifdef F3DEX_GBI_2
+
+    // NOTE: reads out of bounds if it is an ambient light
+    // This used to avoid overwriting the lookat mtx, but that data no longer even makes it this far.
+    if (LIKELY(index == G_MV_LIGHT)) {
+        const int lightidx = offset / 24;
+        memcpy((rsp.current_lights - 2) + lightidx, data, sizeof(Light_t));
+    } else { // G_MV_VIEWPORT
+        gfx_calc_and_set_viewport((const Vp_t *) data);
+    }
+
+// Original GBI (me no care)
+#else
     switch (index) {
         case G_MV_VIEWPORT:
             gfx_calc_and_set_viewport((const Vp_t *) data);
@@ -963,24 +976,14 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
             //rsp.lights_changed = 1;
             break;
 #endif
-#ifdef F3DEX_GBI_2
-        case G_MV_LIGHT: {
-            int lightidx = offset / 24 - 2;
-            if (lightidx >= 0 && lightidx <= MAX_LIGHTS) { // skip lookat
-                // NOTE: reads out of bounds if it is an ambient light
-                memcpy(rsp.current_lights + lightidx, data, sizeof(Light_t));
-            }
-            break;
-        }
-#else
         case G_MV_L0:
         case G_MV_L1:
         case G_MV_L2:
             // NOTE: reads out of bounds if it is an ambient light
             memcpy(rsp.current_lights + (index - G_MV_L0) / 2, data, sizeof(Light_t));
             break;
-#endif
     }
+#endif
 }
 
 static void gfx_sp_moveword(uint8_t index, uint16_t offset, uint32_t data) {
