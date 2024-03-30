@@ -56,8 +56,9 @@
 #define MAT_STACK_SIZE 11
 
 #define ASSUME(cond) if (!(cond)) __builtin_unreachable()
-#define LIKELY(cond)       __builtin_expect(!!(cond), 1)
-#define UNLIKELY(cond)     __builtin_expect(!!(cond), 0)
+#define LIKELY(cond)              __builtin_expect(!!(cond), 1)
+#define UNLIKELY(cond)            __builtin_expect(!!(cond), 0)
+#define EXPECT(val, expected)     __builtin_expect(val, expected)
 
 #ifdef TARGET_N3DS
 #define UCLAMP8(v) ((uint8_t) __usat(v, 8))
@@ -836,7 +837,10 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
             union RGBA32 color;
-            switch (shader_state.combiner->shader_input_mapping[0][sh_input]) {
+
+            // Most to least likely: SHADE, ENV, PRI, DEF
+            const uint8_t mapping_0 = shader_state.combiner->shader_input_mapping[0][sh_input];
+            switch (EXPECT(mapping_0, CC_SHADE)) {
                 case CC_PRIM:
                     color = rdp.prim_color;
                     break;
@@ -853,13 +857,15 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                     break;
             }
 
+            // Most to least likely: SHADE, ENV, PRI, DEF
             if (use_alpha) {
-                switch (shader_state.combiner->shader_input_mapping[1][sh_input]) {
+                const uint8_t mapping_1 = shader_state.combiner->shader_input_mapping[1][sh_input];
+                switch (EXPECT(mapping_1, CC_SHADE)) {
                     case CC_PRIM:
                         color.rgba.a = rdp.prim_color.rgba.a;
                         break;
                     case CC_SHADE:
-                        if (use_fog)
+                        if (LIKELY(use_fog)) // Most alpha tris in my benchmark use fog
                             color.rgba.a = 255;
                         break;
                     case CC_ENV:
