@@ -820,10 +820,9 @@ static void renderTwoColorTris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_
     bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
     bool hasAlpha = curShader->cc_features.opt_alpha;
 
-
     const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
 
-    // Removed a hack from before vert shaders. This new implementation
+    // Removed a hack from before vertex shaders. This new implementation
     // probably isn't completely kosher, but it works.
     // The endianness used to be reversed, but I think that this was actually an error.
     // If I set G to 0 here, it gives magenta, as expected. If endianness were reversed,
@@ -832,7 +831,7 @@ static void renderTwoColorTris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_
     if (!hasAlpha)
         env_color.rgba.a = 255;
 
-    update_shader(true);
+    update_shader(true); // WYATT_TODO should this be reversed after this function?
     C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
 
     if (hasTex)
