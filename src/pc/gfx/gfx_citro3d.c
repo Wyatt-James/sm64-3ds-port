@@ -814,12 +814,11 @@ static u32 vec4ToU32Color(float r, float g, float b, float a)
     return (a2 << 24) | (b2 << 16) | (g2 << 8) | r2;
 }
 
-static void renderTwoColorTris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
+static void adjust_state_for_two_color_tris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
     struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
-    bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
-    bool hasAlpha = curShader->cc_features.opt_alpha;
-
+    const bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
+    const bool hasAlpha = curShader->cc_features.opt_alpha;
     const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
 
     // Removed a hack from before vertex shaders. This new implementation
@@ -833,17 +832,11 @@ static void renderTwoColorTris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_
 
     update_shader(true); // WYATT_TODO should this be reversed after this function?
     C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
+}
 
-    if (hasTex)
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_tex_scale,
-            sTexturePoolScaleS[sCurTex], -sTexturePoolScaleT[sCurTex], 1, 1);
-    
-    memcpy(current_buffer->ptr + current_buffer->offset * current_buffer->stride,
-        buf_vbo,
-        buf_vbo_num_tris * 3 * current_buffer->stride * sizeof(float));
-
-    C3D_DrawArrays(GPU_TRIANGLES, current_buffer->offset, buf_vbo_num_tris * 3);
-    current_buffer->offset += buf_vbo_num_tris * 3;
+static void adjust_state_for_one_color_tris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
+{
+    // Nothing needs to be in here at the moment.
 }
 
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
@@ -854,13 +847,15 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size
         return;
     }
 
-    if (sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
-    {
-        renderTwoColorTris(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
-        return;
-    }
+    struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
+    const bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
 
-    if (sShaderProgramPool[sCurShader].cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1])
+    if (sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
+        adjust_state_for_two_color_tris(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+    else
+        adjust_state_for_one_color_tris(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+
+    if (hasTex)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_tex_scale,
             sTexturePoolScaleS[sCurTex], -sTexturePoolScaleT[sCurTex], 1, 1);
 
