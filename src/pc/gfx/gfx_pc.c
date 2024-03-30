@@ -270,8 +270,8 @@ static void gfx_set_iod(unsigned int iod)
 static void gfx_flush(void) {
     profiler_3ds_log_time(0);
 
-    // Over 50% savings, and probably necessary anyway
-    if (LIKELY(buf_vbo_len > 0)) {
+    // Over 50% of calls are pointless
+    if (UNLIKELY(buf_vbo_num_verts > 0)) {
         gfx_rapi->draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;

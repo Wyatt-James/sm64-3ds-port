@@ -569,6 +569,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
 
     // Create the VBO (vertex buffer object)
     cb->ptr = linearAlloc(256 * 1024); // sizeof(float) * 10000 vertexes * 10 floats per vertex?
+    cb->offset = 0;
     // Configure buffers
     BufInfo_Init(&cb->buf_info);
     BufInfo_Add(&cb->buf_info, cb->ptr, cb->stride * sizeof(float), attr, attr_mask);
@@ -804,7 +805,7 @@ static void gfx_citro3d_set_use_alpha(bool use_alpha)
     applyBlend();
 }
 
-static void adjust_state_for_two_color_tris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
+static void adjust_state_for_two_color_tris(float buf_vbo[])
 {
     struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
     const bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
@@ -824,37 +825,26 @@ static void adjust_state_for_two_color_tris(float buf_vbo[], UNUSED size_t buf_v
     C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
 }
 
-static void adjust_state_for_one_color_tris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
+static void adjust_state_for_one_color_tris()
 {
     // Nothing needs to be in here at the moment.
 }
 
-static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
+static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 {
-    if (current_buffer->offset * current_buffer->stride > 256 * 1024 / 4)
-    {
-        printf("vertex buffer full!\n");
-        return;
-    }
-
     struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
     const bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
 
     if (sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
-        adjust_state_for_two_color_tris(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+        adjust_state_for_two_color_tris(buf_vbo);
     else
-        adjust_state_for_one_color_tris(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+        adjust_state_for_one_color_tris();
 
     if (hasTex)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_tex_scale,
             sTexturePoolScaleS[sCurTex], -sTexturePoolScaleT[sCurTex], 1, 1);
 
-    memcpy(current_buffer->ptr + current_buffer->offset * current_buffer->stride,
-        buf_vbo,
-        buf_vbo_num_tris * 3 * current_buffer->stride * sizeof(float));
-
     C3D_DrawArrays(GPU_TRIANGLES, current_buffer->offset, buf_vbo_num_tris * 3);
-    current_buffer->offset += buf_vbo_num_tris * 3;
 }
 
 void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
@@ -868,23 +858,34 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
+    if (current_buffer->offset * current_buffer->stride > 256 * 1024 / 4)
+    {
+        printf("vertex buffer full!\n");
+        return;
+    }
+
+    // WYATT_TODO actually prevent buffer overruns.
+
+    const float* buf_vbo_head = current_buffer->ptr + current_buffer->offset * current_buffer->stride;
+    memcpy(buf_vbo_head, buf_vbo, buf_vbo_len * sizeof(float));
+
     if (gGfx3DEnabled)
     {
         // left screen
-        original_offset = current_buffer->offset;
         stereoTilt(&projection, -iodZ, -iodW);
         gfx_citro3d_frame_draw_on(gTarget);
-        gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+        gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
-        current_buffer->offset = original_offset;
         stereoTilt(&projection, iodZ, iodW);
         gfx_citro3d_frame_draw_on(gTargetRight);
-        gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
-        return;
+        gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
+    } else {
+        gfx_citro3d_frame_draw_on(gTarget);
+        gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     }
-    gfx_citro3d_frame_draw_on(gTarget);
-    gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+
+    current_buffer->offset += buf_vbo_num_tris * 3;
 }
 
 static void gfx_citro3d_init(void)
