@@ -268,11 +268,16 @@ static void gfx_set_iod(unsigned int iod)
 #endif
 
 static void gfx_flush(void) {
+    profiler_3ds_log_time(0);
+
+    // Over 50% savings, and probably necessary anyway
     if (LIKELY(buf_vbo_len > 0)) {
         gfx_rapi->draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;
     }
+
+    profiler_3ds_log_time(12); // gfx_flush
 }
 
 static struct ShaderProgram *gfx_lookup_or_create_shader_program(uint32_t shader_id) {
@@ -1268,9 +1273,9 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     float lrxf = lrx;
     float lryf = lry;
 
-    ulxf = ulxf / (4.0f * HALF_SCREEN_WIDTH) - 1.0f;
+    ulxf =   ulxf / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f;
     ulyf = -(ulyf / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f;
-    lrxf = lrxf / (4.0f * HALF_SCREEN_WIDTH) - 1.0f;
+    lrxf =   lrxf / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f;
     lryf = -(lryf / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f;
 
     // ulxf = gfx_adjust_x_for_aspect_ratio(ulxf);
