@@ -804,16 +804,6 @@ static void gfx_citro3d_set_use_alpha(bool use_alpha)
     applyBlend();
 }
 
-static u32 vec4ToU32Color(float r, float g, float b, float a)
-{
-    u8 r2 = MAX(0, MIN(255, r * 255));
-    u8 g2 = MAX(0, MIN(255, g * 255));
-    u8 b2 = MAX(0, MIN(255, b * 255));
-    u8 a2 = MAX(0, MIN(255, a * 255));
-    
-    return (a2 << 24) | (b2 << 16) | (g2 << 8) | r2;
-}
-
 static void adjust_state_for_two_color_tris(float buf_vbo[], UNUSED size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
     struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
