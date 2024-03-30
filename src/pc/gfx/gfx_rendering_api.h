@@ -35,6 +35,15 @@ struct GfxRenderingAPI {
     void (*set_fog_color)(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
     void (*set_2d)(int mode_2d);
     void (*set_iod)(float z, float w);
+    // void (*upload_texture_rgba16)(const uint8_t *data, int width, int height);
+    // void (*upload_texture_rgba32)(const uint8_t *data, int width, int height);
+    // void (*upload_texture_ia4)   (const uint8_t *data, int width, int height);
+    // void (*upload_texture_ia8)   (const uint8_t *data, int width, int height);
+    // void (*upload_texture_ia16)  (const uint8_t *data, int width, int height);
+    // void (*upload_texture_i4)    (const uint8_t *data, int width, int height);
+    // void (*upload_texture_i8)    (const uint8_t *data, int width, int height);
+    // void (*upload_texture_ci4)   (const uint8_t *data, const uint8_t* palette, int width, int height);
+    // void (*upload_texture_ci8)   (const uint8_t *data, const uint8_t* palette, int width, int height);
 #endif
 };
 
