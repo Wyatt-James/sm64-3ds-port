@@ -52,8 +52,14 @@
 #define MAX_BUFFERED_VERTS MAX_BUFFERED_TRIS * 3
 #define MAX_LIGHTS 2
 #define MAX_VERTICES 64
-#define DELIBERATELY_INVALID_CC_ID ~0
 #define MAT_STACK_SIZE 11
+
+#define MATRIX_SET_NORMAL 0
+#define MATRIX_SET_IDENTITY 1
+#define MATRIX_SET_SCALED_NDC 2
+#define NDC_SCALE (INT16_MAX / 4) // Scaling factor for s16 NDC coordinates. See gfx_dimensions.h for more info.
+
+#define DELIBERATELY_INVALID_CC_ID ~0
 
 #define ASSUME(cond) if (!(cond)) __builtin_unreachable()
 #define LIKELY(cond)              __builtin_expect(!!(cond), 1)
@@ -85,17 +91,28 @@ float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
                             {0.0f, 0.0f, 1.0f, 0.0f},
                             {0.0f, 0.0f, 0.0f, 1.0f}};
 
+float MTX_NDC_DOWNSCALE[4][4] = {{1.0f / NDC_SCALE, 0.0f,             0.0f, 0.0f},
+                                 {0.0f,             1.0f / NDC_SCALE, 0.0f, 0.0f},
+                                 {0.0f,             0.0f,             1.0f, 0.0f},
+                                 {0.0f,             0.0f,             0.0f, 1.0f}};
+
 struct XYWidthHeight {
     uint16_t x, y, width, height;
 };
 
-// Total size: 24 bytes
+union int16x2 {
+    struct {
+        int16_t upper;
+        int16_t lower;
+    } as_s16;
+    uint32_t as_u32;
+};
+
+// Total size: 20 bytes
 struct LoadedVertex {
-    float x, y, z;       // 12 bytes
-    // float w;          // 4 bytes
-    float u, v;          // 8 bytes
-    union RGBA32 color;  // 4 bytes
-    // uint8_t clip_rej; // 1 byte
+    union int16x2 xy, zw; // 8 bytes (w is unused)
+    float u, v;           // 8 bytes
+    union RGBA32 color;   // 4 bytes
 };
 
 struct TextureHashmapNode {
@@ -536,14 +553,14 @@ static void gfx_transposed_matrix_mul(float res[3], const float a[3], const floa
     res[2] = a[0] * b[2][0] + a[1] * b[2][1] + a[2] * b[2][2];
 }
 
-static void calculate_normal_dir(const Light_t *light, float coeffs[3]) {
+static void calculate_normal_dir(const Light_t *light, float output[3]) {
     float light_dir[3] = {
         light->dir[0] / 127.0f,
         light->dir[1] / 127.0f,
         light->dir[2] / 127.0f
     };
-    gfx_transposed_matrix_mul(coeffs, light_dir, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-    gfx_normalize_vector(coeffs);
+    gfx_transposed_matrix_mul(output, light_dir, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+    gfx_normalize_vector(output);
 }
 
 // lookat_x = {1, 0, 0};
@@ -654,9 +671,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         const Vtx_t *v = &vertices[vert].v;
         struct LoadedVertex *d = &rsp.loaded_vertices[dest];
         
-        d->x = v->ob[0];
-        d->y = v->ob[1];
-        d->z = v->ob[2];
+        d->xy.as_u32 = *((uint32_t*) (&v->ob[0])); // X and Y stored together
+        d->zw.as_s16.upper = v->ob[2];             // Z. W is ignored, no need to write.
         d->color.u32 = *((uint32_t*) v->cn);
     }
     profiler_3ds_log_time(5); // Vertex Copy
@@ -815,9 +831,8 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 
     for (uint32_t vtx = 0; vtx < numTris * 3; vtx++) {
 
-        buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->x;
-        buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->y;
-        buf_vbo.as_float[buf_vbo_len++] = v_arr[vtx]->z;
+        buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->xy.as_u32;
+        buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->zw.as_u32;
 
         if (use_texture) {
             float u = (v_arr[vtx]->u - rdp.texture_tile.uls8);
@@ -1267,50 +1282,34 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     if (cycle_type == G_CYC_COPY)
         set_other_mode_h((rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT);
 
-    // Temporarily set an identity MTX because rects are drawn with screen-space coords.
     gfx_flush();
-    gfx_citro3d_temporarily_use_identity_matrix(true);
+    gfx_citro3d_select_matrix_set(MATRIX_SET_SCALED_NDC);
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
 
-    // U10.2 coordinates
-    float ulxf = ulx;
-    float ulyf = uly;
-    float lrxf = lrx;
-    float lryf = lry;
-
-    ulxf =   ulxf / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f;
-    ulyf = -(ulyf / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f;
-    lrxf =   lrxf / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f;
-    lryf = -(lryf / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f;
-
-    // ulxf = gfx_adjust_x_for_aspect_ratio(ulxf);
-    // lrxf = gfx_adjust_x_for_aspect_ratio(lrxf);
+    // We need to scale our NDCs up here to keep precision with s16s, then back down
+    // in the shader with one of the matrices.
+    int16_t ulx16 = (  ulx / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f) * NDC_SCALE;
+    int16_t uly16 = (-(uly / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f) * NDC_SCALE;
+    int16_t lrx16 = (  lrx / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f) * NDC_SCALE;
+    int16_t lry16 = (-(lry / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f) * NDC_SCALE;
 
     static struct LoadedVertex* const ul = &rsp.rect_vertices[0];
     static struct LoadedVertex* const ll = &rsp.rect_vertices[1];
     static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
     static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
 
-    ul->x = ulxf;
-    ul->y = ulyf;
-    // ul->z = -1.0f;
-    // ul->w = 1.0f;
+    ul->xy.as_s16.upper = ulx16;
+    ul->xy.as_s16.lower = uly16;
 
-    ll->x = ulxf;
-    ll->y = lryf;
-    // ll->z = -1.0f;
-    // ll->w = 1.0f;
+    ll->xy.as_s16.upper = ulx16;
+    ll->xy.as_s16.lower = lry16;
 
-    lr->x = lrxf;
-    lr->y = lryf;
-    // lr->z = -1.0f;
-    // lr->w = 1.0f;
+    lr->xy.as_s16.upper = lrx16;
+    lr->xy.as_s16.lower = lry16;
 
-    ur->x = lrxf;
-    ur->y = ulyf;
-    // ur->z = -1.0f;
-    // ur->w = 1.0f;
+    ur->xy.as_s16.upper = lrx16;
+    ur->xy.as_s16.lower = uly16;
 
     // The coordinates for texture rectangle shall bypass the viewport setting
     struct XYWidthHeight default_viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
@@ -1334,9 +1333,9 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     gfx_sp_tri_batched(rect_triangles, 2);
 
-    // Restore our prior MTX
+    // Restore normal MTX set.
     gfx_flush();
-    gfx_citro3d_temporarily_use_identity_matrix(false);
+    gfx_citro3d_select_matrix_set(MATRIX_SET_NORMAL);
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
 
@@ -1783,11 +1782,11 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
 
     shader_state_init(&shader_state);
 
-    // Screen-space rect Z will always be -1.0f
-    rsp.rect_vertices[0].z =
-    rsp.rect_vertices[1].z =
-    rsp.rect_vertices[2].z =
-    rsp.rect_vertices[3].z = -1.0f;
+    // Screen-space rect Z will always be -1.
+    rsp.rect_vertices[0].zw.as_s16.upper =
+    rsp.rect_vertices[1].zw.as_s16.upper =
+    rsp.rect_vertices[2].zw.as_s16.upper =
+    rsp.rect_vertices[3].zw.as_s16.upper = -1;
 
     // Initialize the matstack to identity
     for (int i = 0; i < MAT_STACK_SIZE; i++)
@@ -1828,6 +1827,17 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     for (size_t i = 0; i < sizeof(precomp_shaders) / sizeof(uint32_t); i++) {
         gfx_lookup_or_create_shader_program(precomp_shaders[i]);
     }
+
+    // Initialize constant matrices and set normal MTX mode
+    gfx_citro3d_select_matrix_set(MATRIX_SET_IDENTITY);
+    gfx_citro3d_set_model_view_matrix(MTX_IDENTITY);
+    gfx_citro3d_set_game_projection_matrix(MTX_IDENTITY);
+    
+    gfx_citro3d_select_matrix_set(MATRIX_SET_SCALED_NDC);
+    gfx_citro3d_set_model_view_matrix(MTX_NDC_DOWNSCALE);
+    gfx_citro3d_set_game_projection_matrix(MTX_IDENTITY);
+
+    gfx_citro3d_select_matrix_set(MATRIX_SET_NORMAL);
 }
 
 struct GfxRenderingAPI *gfx_get_current_rendering_api(void) {

@@ -1113,7 +1113,7 @@
  * Vertex (set up for use with colors)
  */
 typedef struct {
-#ifndef GBI_FLOATS
+#if !defined(GBI_FLOATS) || defined(TARGET_N3DS)
 	short		ob[3];	/* x, y, z */
 #else
 	float		ob[3];	/* x, y, z */
@@ -1127,7 +1127,7 @@ typedef struct {
  * Vertex (set up for use with normals)
  */
 typedef struct {
-#ifndef GBI_FLOATS
+#if !defined(GBI_FLOATS) || defined(TARGET_N3DS)
 	short		ob[3];	/* x, y, z */
 #else
 	float		ob[3];	/* x, y, z */

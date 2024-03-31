@@ -25,16 +25,15 @@
 #define ARR_INDEX_2D(x_, y_, w_) (y_ * w_ + x_)
 #define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
 
-#define STRIDE_POSITION 3
+// RGBA packed into a U32
+#define STRIDE_RGBA     1
+#define STRIDE_RGB      1
+
+#define STRIDE_POSITION 2
 #define STRIDE_TEXTURE  2
-#define STRIDE_RGBA     4
-#define STRIDE_RGB      3
 #define STRIDE_FOG      STRIDE_RGBA
 
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
-
-
-static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
@@ -107,9 +106,25 @@ static int scissor_x, scissor_y;
 static int scissor_width, scissor_height;
 static bool scissor;
 
-static C3D_Mtx modelView, gameProjection, projection;
-static C3D_Mtx *currentModelView      = &modelView,
-               *currentGameProjection = &gameProjection;
+// Constant matrices, set during initialization.
+static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
+
+// A pair of SM64 matrices, converted to 3DS format.
+static struct GameMtxSet {
+    C3D_Mtx modelView;
+    C3D_Mtx gameProjection;
+};
+
+// Selectable groups of game matrix sets
+static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
+
+// The current matrices.
+// Projection is the 3DS-specific P-matrix.
+// Model_view is the N64 modelview M-matrix.
+// Game_projection is the N64 P-matrix.
+static C3D_Mtx  projection,
+               *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].modelView,
+               *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].gameProjection;
 
 static int original_offset;
 static int s2DMode;
@@ -539,7 +554,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     // Position is always present
     {
         AttrInfo_Init(&cb->attr_info);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 3); // XYZ (W is implicitly 1.0f)
+        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_SHORT, 4); // XYZW (W is set to 1.0f in the shader)
         cb->stride += STRIDE_POSITION;
     }
     if (has_texture)
@@ -903,8 +918,15 @@ static void gfx_citro3d_init(void)
 
     Mtx_Identity(&IDENTITY_MTX);
     
+    // Add W to Z coordinate
     Mtx_Identity(&DEPTH_ADD_W_MTX);
     DEPTH_ADD_W_MTX.r[2].w = 1.0f;
+
+    // Default all mat sets to identity
+    for (int i = 0; i < NUM_MATRIX_SETS; i++) {
+        memcpy(&game_matrix_sets[i].gameProjection, &IDENTITY_MTX, sizeof(C3D_Mtx));
+        memcpy(&game_matrix_sets[i].modelView,      &IDENTITY_MTX, sizeof(C3D_Mtx));
+    }
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -961,28 +983,28 @@ void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
 {
-    gfx_citro3d_convert_mtx(mtx, &modelView);
+    gfx_citro3d_convert_mtx(mtx, model_view);
 }
 
 void gfx_citro3d_set_game_projection_matrix(float mtx[4][4])
 {
-    gfx_citro3d_convert_mtx(mtx, &gameProjection);
+    gfx_citro3d_convert_mtx(mtx, game_projection);
 }
 
 void gfx_citro3d_apply_model_view_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, currentModelView);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, model_view);
 }
 
 void gfx_citro3d_apply_game_projection_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, currentGameProjection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, game_projection);
 }
 
-void gfx_citro3d_temporarily_use_identity_matrix(bool use_identity)
+void gfx_citro3d_select_matrix_set(uint32_t matrix_set_id)
 {
-    currentModelView      = use_identity ? &IDENTITY_MTX : &modelView;
-    currentGameProjection = use_identity ? &IDENTITY_MTX : &gameProjection;
+    model_view      = &game_matrix_sets[matrix_set_id].modelView;
+    game_projection = &game_matrix_sets[matrix_set_id].gameProjection;
 }
 
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
