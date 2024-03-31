@@ -29,6 +29,20 @@
 #define profiler_3ds_log_time(id) do {} while (0)
 #endif
 
+/*
+ *   Flush Totals
+ *   Measured 1 frame after BoB benchmark
+ *   
+ *   Grand Total:   393
+ *   Total Success: 177
+ *   Total Fail:    216
+ * 
+ *   ID:         0  1   2    3  4  5   6  7  8  9  10  11  12  13  14  15  16
+ *   Success: { 73, 0,  7,  54, 0, 0, 26, 0, 0, 0,  0, 12,  0,  1,  4,  0,  0}
+ *   Fail:    { 46, 0, 20,  85, 0, 0, 28, 2, 0, 0, 12,  0,  6,  1, 10,  5,  1}
+ *   Subotal: {119, 0, 27, 139, 0, 0, 54, 2, 0, 0, 12, 12,  6,  2, 14,  5,  1}
+ */
+
 // If enabled, shader swaps will be counter and printed each frame.
 #define ENABLE_SHADER_SWAP_COUNTER 0
 #define ENABLE_OTHER_MODE_SWAP_COUNTER 0
@@ -363,7 +377,6 @@ static struct ColorCombiner *gfx_lookup_or_create_color_combiner(uint32_t cc_id)
             return &color_combiner_pool[i];
         }
     }
-    gfx_flush();
     struct ColorCombiner *comb = &color_combiner_pool[color_combiner_pool_size++];
     gfx_generate_cc(comb, cc_id);
     return comb;
@@ -598,7 +611,7 @@ static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const floa
 }
 
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
-    gfx_flush();
+    gfx_flush(); // 0: 73, 46
 
 #ifndef GBI_FLOATS
     const float matrix[4][4];
@@ -643,7 +656,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
 static void gfx_sp_pop_matrix(uint32_t count) {
-    gfx_flush();
+    gfx_flush(); // 1: 0, 0
 
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
@@ -787,7 +800,7 @@ static void gfx_sp_tri_update_state()
         // Multiple CCs can share the same GPU shader program
         if (LIKELY(gpu_shader_program != rendering_state.shader_program)) {
             profiler_3ds_log_time(10); // gfx_sp_tri_update_state
-            gfx_flush();
+            gfx_flush(); // 2: 7, 20
             profiler_3ds_log_time(0);
             gfx_rapi->unload_shader(rendering_state.shader_program);
             gfx_rapi->load_shader(gpu_shader_program);
@@ -801,7 +814,7 @@ static void gfx_sp_tri_update_state()
         if (shader_state.used_textures[i]) {
             if (rdp.textures_changed[i]) {
                 profiler_3ds_log_time(10); // gfx_sp_tri_update_state
-                gfx_flush();
+                gfx_flush(); // 3: 54, 85
                 profiler_3ds_log_time(0);
                 import_texture(i);
                 rdp.textures_changed[i] = false;
@@ -809,7 +822,7 @@ static void gfx_sp_tri_update_state()
             bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
                 profiler_3ds_log_time(10); // gfx_sp_tri_update_state
-                gfx_flush();
+                gfx_flush(); // 4: 0, 0
                 profiler_3ds_log_time(0);
                 gfx_rapi->set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 rendering_state.textures[i]->linear_filter = linear_filter;
@@ -899,7 +912,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     
         if (UNLIKELY(++buf_vbo_num_verts == MAX_BUFFERED_VERTS)) {
             profiler_3ds_log_time(11); // gfx_tri_create_vbo
-            gfx_flush();
+            gfx_flush(); // 5: 0, 0
             profiler_3ds_log_time(0);
         }
     }
@@ -943,7 +956,7 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     // 75% savings with good numbers
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
     if (culling_mode != rendering_state.culling_mode) {
-        gfx_flush();
+        gfx_flush(); // 6: 26, 28
         gfx_citro3d_set_backface_culling_mode(culling_mode);
         rendering_state.culling_mode = culling_mode;
     }
@@ -951,7 +964,7 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     // Nearly 100% savings with good numbers
     const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (depth_test != rendering_state.depth_test) {
-        gfx_flush();
+        gfx_flush(); // 7: 0, 2
         gfx_rapi->set_depth_test(depth_test);
         rendering_state.depth_test = depth_test;
     }
@@ -975,7 +988,7 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
     rdp.viewport.height = height;
     
     if (memcmp(&rdp.viewport, &rendering_state.viewport, sizeof(rdp.viewport)) != 0) {
-        gfx_flush();
+        gfx_flush(); // 8: 0, 0
         gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
         rendering_state.viewport = rdp.viewport;
     }
@@ -1056,7 +1069,7 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     rdp.scissor.height = height;
 
     if (memcmp(&rdp.scissor, &rendering_state.scissor, sizeof(rdp.scissor)) != 0) {
-        gfx_flush();
+        gfx_flush(); // 9: 0, 0
         gfx_rapi->set_scissor(rdp.scissor.x, rdp.scissor.y, rdp.scissor.width, rdp.scissor.height);
         rendering_state.scissor = rdp.scissor;
     }
@@ -1282,7 +1295,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     if (cycle_type == G_CYC_COPY)
         set_other_mode_h((rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT);
 
-    gfx_flush();
+    gfx_flush(); // 10: 0, 12
     gfx_citro3d_select_matrix_set(MATRIX_SET_SCALED_NDC);
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
@@ -1319,7 +1332,6 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     rdp.viewport = default_viewport;
     rsp.geometry_mode = 0;
 
-    // gfx_flush(); // We already flushed above for the mview mtx
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
@@ -1334,7 +1346,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_sp_tri_batched(rect_triangles, 2);
 
     // Restore normal MTX set.
-    gfx_flush();
+    gfx_flush(); // 11: 12, 0
     gfx_citro3d_select_matrix_set(MATRIX_SET_NORMAL);
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
@@ -1342,7 +1354,6 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
 
-    // gfx_flush(); // We already flushed above for the mview mtx
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     rendering_state.viewport = rdp.viewport;
 
@@ -1457,14 +1468,14 @@ static void set_other_mode_l(uint32_t other_mode_l)
         
         const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
         if (z_upd != rendering_state.depth_mask) {
-            gfx_flush();
+            gfx_flush(); // 12: 0, 6
             gfx_rapi->set_depth_mask(z_upd);
             rendering_state.depth_mask = z_upd;
         }
 
         const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
         if (zmode_decal != rendering_state.decal_mode) {
-            gfx_flush();
+            gfx_flush(); // 13: 1, 1
             gfx_rapi->set_zmode_decal(zmode_decal);
             rendering_state.decal_mode = zmode_decal;
         }
@@ -1477,7 +1488,7 @@ static void set_other_mode_l(uint32_t other_mode_l)
         calculate_cc_id();
         
         if (shader_state.use_alpha != rendering_state.alpha_blend) {
-            gfx_flush();
+            gfx_flush(); // 14: 4, 10
             gfx_rapi->set_use_alpha(shader_state.use_alpha);
             rendering_state.alpha_blend = shader_state.use_alpha;
         }
@@ -1741,7 +1752,7 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_set_2d(cmd->words.w1);
                 break;
             case G_SPECIAL_2:
-                gfx_flush();
+                gfx_flush(); // 15: 5, 0
                 break;
 
             case G_SPECIAL_4:
@@ -1873,7 +1884,7 @@ void gfx_run(Gfx *commands) {
 
     gfx_run_dl(commands);
 
-    gfx_flush();
+    gfx_flush(); // 16: 0, 1
     gfx_rapi->end_frame();
     gfx_wapi->swap_buffers_begin();
 
