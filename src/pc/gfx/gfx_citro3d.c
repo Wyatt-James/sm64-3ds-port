@@ -44,6 +44,8 @@ static float* sVboBuffer;
 extern const u8 shader_shbin[];
 extern const u32 shader_shbin_size;
 
+struct UniformLocations uniform_locations;
+
 struct ShaderProgram {
     uint32_t shader_id;
     uint8_t program_id;
@@ -52,10 +54,7 @@ struct ShaderProgram {
     bool swap_input;
     C3D_TexEnv texenv0;
     C3D_TexEnv texenv1;
-    int  uLoc_projection,
-         uLoc_modelView,
-         uLoc_gameProjection,
-         uLoc_tex_scale;
+    struct UniformLocations uniform_locations;
 };
 
 struct video_buffer {
@@ -67,8 +66,6 @@ struct video_buffer {
     C3D_AttrInfo attr_info;
     C3D_BufInfo buf_info;
 };
-
-static int uLoc_tex_scale;
 
 static struct video_buffer *current_buffer;
 static struct video_buffer video_buffers[16];
@@ -210,7 +207,7 @@ void stereoTilt(C3D_Mtx* mtx, float z, float w)
         case 0 : // 3D
             break;
         case 1 : // pure 2D
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, mtx);
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, mtx);
             return;
         case 2 : // goddard hand and press start text
             z = (z < 0) ? -32.0f : 32.0f;
@@ -226,7 +223,7 @@ void stereoTilt(C3D_Mtx* mtx, float z, float w)
 
     mtx->r[1].z = (z == 0) ? 0 : gSliderLevel / z; // view frustum separation? (+ = deep)
     mtx->r[1].w = (w == 0) ? 0 : gSliderLevel / w; // camera-to-viewport separation? (+ = pop)
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, mtx);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, mtx);
 }
 
 static void gfx_citro3d_set_2d(int mode_2d)
@@ -431,10 +428,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     C3D_BindProgram(&current_buffer->shader_program);
 
     // Update uniforms
-    uLoc_projection =     new_prg->uLoc_projection;
-    uLoc_modelView =      new_prg->uLoc_modelView;
-    uLoc_gameProjection = new_prg->uLoc_gameProjection;
-    uLoc_tex_scale =      new_prg->uLoc_tex_scale;
+    memcpy(&uniform_locations, &new_prg->uniform_locations, sizeof(struct UniformLocations));
 
     // Update buffer info
     C3D_SetBufInfo(&current_buffer->buf_info);
@@ -442,7 +436,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 
     gfx_citro3d_vertex_array_set_attribs(new_prg);
 
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
     gfx_citro3d_apply_model_view_matrix();
 
     update_shader(false);
@@ -599,12 +593,12 @@ static void get_uniform_locations(struct ShaderProgram *prg)
 {
     shaderProgram_s shader_program = video_buffers[prg->buffer_id].shader_program;
 
-    prg->uLoc_projection =     shaderInstanceGetUniformLocation(shader_program.vertexShader, "projection");
-    prg->uLoc_modelView =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "modelView");
-    prg->uLoc_gameProjection = shaderInstanceGetUniformLocation(shader_program.vertexShader, "gameProjection");
+    prg->uniform_locations.projection_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "projection_mtx");
+    prg->uniform_locations.model_view_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "model_view_mtx");
+    prg->uniform_locations.game_projection_mtx = shaderInstanceGetUniformLocation(shader_program.vertexShader, "game_projection_mtx");
     
     if (prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1])
-        prg->uLoc_tex_scale = shaderInstanceGetUniformLocation(shader_program.vertexShader, "tex_scale");
+        prg->uniform_locations.tex_scale = shaderInstanceGetUniformLocation(shader_program.vertexShader, "tex_scale");
 }
 
 static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t shader_id)
@@ -871,7 +865,7 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
         adjust_state_for_one_color_tris();
 
     if (hasTex)
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_tex_scale,
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale,
             sTexturePoolScaleS[sCurTex], -sTexturePoolScaleT[sCurTex], 1, 1);
 
     C3D_DrawArrays(GPU_TRIANGLES, current_buffer->offset, buf_vbo_num_tris * 3);
@@ -896,7 +890,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
 
     // WYATT_TODO actually prevent buffer overruns.
 
-    const float* buf_vbo_head = current_buffer->ptr + current_buffer->offset * current_buffer->stride;
+    float* const buf_vbo_head = current_buffer->ptr + current_buffer->offset * current_buffer->stride;
     memcpy(buf_vbo_head, buf_vbo, buf_vbo_len * sizeof(float));
 
     if (gGfx3DEnabled)
@@ -983,9 +977,9 @@ static void gfx_citro3d_start_frame(void)
     // z = (z + w) * -0.5
     Mtx_Multiply(&projection, &projection, &DEPTH_ADD_W_MTX);
 
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection,     &projection);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView,      &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
 }
 
 void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
@@ -1008,12 +1002,12 @@ void gfx_citro3d_set_game_projection_matrix(float mtx[4][4])
 
 void gfx_citro3d_apply_model_view_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, model_view);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, model_view);
 }
 
 void gfx_citro3d_apply_game_projection_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, game_projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, game_projection);
 }
 
 void gfx_citro3d_select_matrix_set(uint32_t matrix_set_id)
@@ -1045,9 +1039,9 @@ static void gfx_citro3d_on_resize(void)
 
 static void gfx_citro3d_end_frame(void)
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection,     &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView,      &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_gameProjection, &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
     C3D_CullFace(GPU_CULL_NONE);
 
     // TOOD: draw the minimap here

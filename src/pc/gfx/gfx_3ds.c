@@ -47,8 +47,6 @@ C3D_RenderTarget *gTargetBottom;
 
 bool gBottomScreenNeedsRender;
 
-int uLoc_projection, uLoc_modelView, uLoc_gameProjection;
-
 float gSliderLevel;
 
 Gfx3DSMode gGfx3DSMode;

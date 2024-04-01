@@ -6,7 +6,7 @@
 
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
-static C3D_Mtx modelView, projection;
+static C3D_Mtx model_view_mtx, projection_mtx;
 static int buffer_offset;
 
 static C3D_Tex mode_400_tex, mode_800_tex;
@@ -19,13 +19,13 @@ static int touch_y;
 
 static void gfx_3ds_menu_draw_button(float *vbo_buffer, int x, int y, C3D_Tex texture, bool thin)
 {
-    Mtx_Identity(&modelView);
-    Mtx_Translate(&modelView, x, 240 - y, 0.0f, false);
+    Mtx_Identity(&model_view_mtx);
+    Mtx_Translate(&model_view_mtx, x, 240 - y, 0.0f, false);
 
-    Mtx_OrthoTilt(&projection, 0.0, 320.0, 0.0, 240.0, 0.0, 1.0, true);
+    Mtx_OrthoTilt(&projection_mtx, 0.0, 320.0, 0.0, 240.0, 0.0, 1.0, true);
 
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, &model_view_mtx);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_mtx);
 
     const vertex *vertex_list = thin ? vertex_list_button_thin : vertex_list_button;
 

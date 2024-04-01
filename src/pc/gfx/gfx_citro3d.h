@@ -12,6 +12,15 @@ enum ViewportId3DS {
     VIEW_BOTTOM_SCREEN = 1
 };
 
+struct UniformLocations {
+    int projection_mtx,
+        model_view_mtx,
+        game_projection_mtx,
+        tex_scale;
+};
+
+extern struct UniformLocations uniform_locations;
+
 extern struct GfxRenderingAPI gfx_citro3d_api;
 
 // WYATT_TODO figure out how to get these functions into the GfxRenderingAPI. I'm done for tonight.
