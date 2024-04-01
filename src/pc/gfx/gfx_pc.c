@@ -63,7 +63,7 @@
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
 
 #define MAX_BUFFERED_TRIS 256
-#define MAX_BUFFERED_VERTS MAX_BUFFERED_TRIS * 3
+#define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
 #define MAX_LIGHTS 2
 #define MAX_VERTICES 64
 #define MAT_STACK_SIZE 11
@@ -247,8 +247,8 @@ static union VBOBuffer {
     uint8_t as_u8[MAX_BUFFERED_VERTS * 26 * 4];
 } buf_vbo;
 // static ; 
-static size_t buf_vbo_len;
-static size_t buf_vbo_num_verts;
+static size_t buf_vbo_len = 0;
+static size_t buf_vbo_num_verts = 0;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
 static struct GfxRenderingAPI *gfx_rapi;
@@ -862,11 +862,21 @@ static void gfx_sp_tri_update_state()
 static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 {
     profiler_3ds_log_time(0);
+
+    // WYATT_TODO fix this for very large batches. Fine for vanilla.
+    const uint32_t numVerts = numTris * 3;
+    if (buf_vbo_num_verts + numVerts >= MAX_BUFFERED_VERTS) {
+        profiler_3ds_log_time(11); // gfx_tri_create_vbo
+        gfx_flush(); // 5: 0, 0
+        profiler_3ds_log_time(0);
+    }
+    buf_vbo_num_verts += numVerts;
+
     const bool use_fog     = shader_state.use_fog;
     const bool use_alpha   = shader_state.use_alpha;
     const bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
 
-    for (uint32_t vtx = 0; vtx < numTris * 3; vtx++) {
+    for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
 
         buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->xy.as_u32;
         buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->zw.as_u32;
@@ -935,12 +945,6 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
             }
 
             buf_vbo.as_u32[buf_vbo_len++] = color.u32;
-        }
-    
-        if (UNLIKELY(++buf_vbo_num_verts == MAX_BUFFERED_VERTS)) {
-            profiler_3ds_log_time(11); // gfx_tri_create_vbo
-            gfx_flush(); // 5: 0, 0
-            profiler_3ds_log_time(0);
         }
     }
     
