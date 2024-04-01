@@ -52,6 +52,10 @@ struct ShaderProgram {
     bool swap_input;
     C3D_TexEnv texenv0;
     C3D_TexEnv texenv1;
+    int  uLoc_projection,
+         uLoc_modelView,
+         uLoc_gameProjection,
+         uLoc_tex_scale;
 };
 
 struct video_buffer {
@@ -427,12 +431,10 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     C3D_BindProgram(&current_buffer->shader_program);
 
     // Update uniforms
-    uLoc_projection =     shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "projection");
-    uLoc_modelView =      shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "modelView");
-    uLoc_gameProjection = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "gameProjection");
-    
-    if (new_prg->cc_features.used_textures[0] || new_prg->cc_features.used_textures[1])
-        uLoc_tex_scale = shaderInstanceGetUniformLocation((&current_buffer->shader_program)->vertexShader, "tex_scale");
+    uLoc_projection =     new_prg->uLoc_projection;
+    uLoc_modelView =      new_prg->uLoc_modelView;
+    uLoc_gameProjection = new_prg->uLoc_gameProjection;
+    uLoc_tex_scale =      new_prg->uLoc_tex_scale;
 
     // Update buffer info
     C3D_SetBufInfo(&current_buffer->buf_info);
@@ -592,6 +594,19 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     return id;
 }
 
+// Finds and saves the uniform locations of the given shader. Must already be initialized.
+static void get_uniform_locations(struct ShaderProgram *prg)
+{
+    shaderProgram_s shader_program = video_buffers[prg->buffer_id].shader_program;
+
+    prg->uLoc_projection =     shaderInstanceGetUniformLocation(shader_program.vertexShader, "projection");
+    prg->uLoc_modelView =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "modelView");
+    prg->uLoc_gameProjection = shaderInstanceGetUniformLocation(shader_program.vertexShader, "gameProjection");
+    
+    if (prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1])
+        prg->uLoc_tex_scale = shaderInstanceGetUniformLocation(shader_program.vertexShader, "tex_scale");
+}
+
 static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t shader_id)
 {
     int id = sShaderProgramPoolSize;
@@ -609,9 +624,9 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
                                           prg->cc_features.num_inputs > 1);
 
     update_tex_env(prg, false);
-
+    get_uniform_locations(prg);
+    
     gfx_citro3d_load_shader(prg);
-
     return prg;
 }
 
