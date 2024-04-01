@@ -17,30 +17,6 @@ static C3D_Tex menu_cleft_tex, menu_cright_tex, menu_cdown_tex, menu_cup_tex;
 static int touch_x;
 static int touch_y;
 
-// Unused. We clear the screen elsewhere with a proper clear function.
-/*static void gfx_3ds_menu_draw_background(float *vbo_buffer)
-{
-    Mtx_Identity(&modelView);
-    Mtx_OrthoTilt(&projection, 0.0, 320.0, 0.0, 240.0, 0.0, 1.0, true);
-
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-
-    memcpy(vbo_buffer + buffer_offset * VERTEX_SHADER_SIZE,
-           vertex_list_color,
-           sizeof(vertex_list_color));
-
-    C3D_TexEnv* env = C3D_GetTexEnv(0);
-    C3D_TexEnvInit(env);
-    C3D_TexEnvColor(env, 0xFF070707);
-    C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, 0, 0);
-    C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);
-
-    C3D_DrawArrays(GPU_TRIANGLES, buffer_offset, 6); // 2 triangles
-
-    buffer_offset += 6;
-}*/
-
 static void gfx_3ds_menu_draw_button(float *vbo_buffer, int x, int y, C3D_Tex texture, bool thin)
 {
     Mtx_Identity(&modelView);
