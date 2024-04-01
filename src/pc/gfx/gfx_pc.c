@@ -610,7 +610,7 @@ static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const floa
     memcpy(res, tmp, sizeof(tmp));
 }
 
-float *last_mv_mtx_addr = NULL, *last_p_mtx_addr = NULL;
+const float *last_mv_mtx_addr = NULL, *last_p_mtx_addr = NULL;
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
 #ifndef GBI_FLOATS
@@ -1125,12 +1125,16 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         rdp.texture_to_load.tile_number = tmem / 256;
 }
 
-static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
-    if (tile == G_TX_RENDERTILE) {
+static void set_tile_size_internal(uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
         rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) * 8);
         rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) * 8);
         rdp.texture_tile.uls8 = (float) (uls * 8);
         rdp.texture_tile.ult8 = (float) (ult * 8);
+}
+
+static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
+    if (tile == G_TX_RENDERTILE) {
+        set_tile_size_internal(uls, ult, lrs, lrt);
         rdp.textures_changed[0] = true;
         rdp.textures_changed[1] = true;
     }
@@ -1200,11 +1204,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     SUPPORT_CHECK(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
     
-    rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) * 8);
-    rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) * 8);
-    rdp.texture_tile.uls8 = (float) (uls * 8);
-    rdp.texture_tile.ult8 = (float) (ult * 8);
-
+    set_tile_size_internal(uls, ult, lrs, lrt);
     rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
 }
 

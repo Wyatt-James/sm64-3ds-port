@@ -857,7 +857,7 @@ static void adjust_state_for_one_color_tris()
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 {
     struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
-    const bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
+    const bool hasTex = curShader->cc_features.used_textures[0] || curShader->cc_features.used_textures[1];
 
     if (sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
         adjust_state_for_two_color_tris(buf_vbo);
