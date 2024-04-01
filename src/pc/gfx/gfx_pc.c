@@ -644,6 +644,8 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
             gfx_matrix_mul_safe(rsp.P_matrix, matrix, rsp.P_matrix);
             
         if (flush_needed) {
+            gfx_flush(); // 0: 73, 46 for both mtx types
+
             last_p_mtx_addr = matrix;
             gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
             gfx_citro3d_apply_game_projection_matrix();
@@ -666,15 +668,14 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
             gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
 
         if (flush_needed) {
+            gfx_flush(); // 0: 73, 46 for both mtx types
+            
             last_mv_mtx_addr = matrix;
             gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
             gfx_citro3d_apply_model_view_matrix();
             rsp.lights_changed = true;
         }
     }
-    if (flush_needed)
-        gfx_flush(); // 0: 73, 46 for both mtx types
-    
 }
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
