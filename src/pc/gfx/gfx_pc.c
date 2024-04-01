@@ -610,8 +610,8 @@ static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const floa
     memcpy(res, tmp, sizeof(tmp));
 }
 
+float *last_mv_mtx_addr = NULL, *last_p_mtx_addr = NULL;
 static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
-    gfx_flush(); // 0: 73, 46
 
 #ifndef GBI_FLOATS
     const float matrix[4][4];
@@ -628,30 +628,53 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     const float* matrix = (float*) addr; // SHUT UP, COMPILER! UB but it works.
 #endif
 
+    bool flush_needed = true;
+    const bool is_load = parameters & G_MTX_LOAD;
+
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
-        if (parameters & G_MTX_LOAD)
-            memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
+
+        if (last_p_mtx_addr == matrix && is_load)
+            flush_needed = false;
+
+        if (is_load) {
+            if (flush_needed)
+                memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
+        }
         else
             gfx_matrix_mul_safe(rsp.P_matrix, matrix, rsp.P_matrix);
-        
-        gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
-        gfx_citro3d_apply_game_projection_matrix();
+            
+        if (flush_needed) {
+            last_p_mtx_addr = matrix;
+            gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
+            gfx_citro3d_apply_game_projection_matrix();
+        }
 
     } else { // G_MTX_MODELVIEW
-        const float* src = &rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
+        const float* src = rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
+        
+        if (last_mv_mtx_addr == matrix && is_load)
+            flush_needed = false;
         
         if ((parameters & G_MTX_PUSH) && rsp.modelview_matrix_stack_size < 11)
             ++rsp.modelview_matrix_stack_size;
 
-        if (parameters & G_MTX_LOAD)
-            memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
+        if (is_load) {
+            if (flush_needed)
+                memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
+        }
         else
             gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
 
-        gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-        gfx_citro3d_apply_model_view_matrix();
-        rsp.lights_changed = true;
+        if (flush_needed) {
+            last_mv_mtx_addr = matrix;
+            gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+            gfx_citro3d_apply_model_view_matrix();
+            rsp.lights_changed = true;
+        }
     }
+    if (flush_needed)
+        gfx_flush(); // 0: 73, 46 for both mtx types
+    
 }
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
@@ -1881,6 +1904,7 @@ void gfx_run(Gfx *commands) {
     gfx_rapi->start_frame();
     profiler_3ds_log_time(4); // GFX RAPI Start Frame
     gfx_citro3d_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
+    last_mv_mtx_addr = last_p_mtx_addr = NULL;
 
     gfx_run_dl(commands);
 
