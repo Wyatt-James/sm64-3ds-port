@@ -871,8 +871,9 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->xy.as_u32;
         buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->zw.as_u32;
 
+        // The inner logic here takes ~600us in the BoB benchmark
         if (use_texture) {
-            float u = (v_arr[vtx]->u - rdp.texture_tile.uls8);
+            float u = (v_arr[vtx]->u - rdp.texture_tile.uls8); // These two lines are 100us
             float v = (v_arr[vtx]->v - rdp.texture_tile.ult8);
             if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
                 u += 16.0f; // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
@@ -887,6 +888,8 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         ASSUME(shader_state.num_inputs >= 0 && shader_state.num_inputs <= 2);
 #endif
 
+        // These switch statements take ~400us, excluding vtxcol read and final write,
+        // and the BoB benchmark is 100% CC_SHADE
         for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
             union RGBA32 color;
 
