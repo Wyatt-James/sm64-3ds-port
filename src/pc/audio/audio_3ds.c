@@ -3,6 +3,7 @@
 // Must be on top to ensure that 3DS types do not redefine other types.
 // Includes 3ds.h and 3ds_types.h.
 #include "audio_3ds_threading.h"
+#include "src/pc/n3ds/n3ds_system_info.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -54,17 +55,14 @@ union NdspMix {
     } mix;
 };
 
-// Instructions for Thread5
-bool s_thread5_wait_for_audio_to_finish = true;
-bool s_thread5_does_audio = false;
-enum N3dsCpu s_audio_cpu = OLD_CORE_0;
+struct N3dsThreadInfo n3ds_audio_thread_info;
+enum N3dsCpu n3ds_desired_audio_cpu = OLD_CORE_0;
 
+bool s_thread5_wait_for_audio_to_finish = true;
+
+// Synchronization Variables
 volatile __3ds_s32 s_audio_frames_to_tick = 0;
 volatile __3ds_s32 s_audio_frames_to_process = 0;
-volatile bool s_audio_thread_processing = false;
-
-// Synchronization variables
-static volatile bool running = true;
 
 // Statically allocate to improve performance
 static s16 audio_buffer [2 * SAMPLES_HIGH * N3DS_DSP_N_CHANNELS];
@@ -73,12 +71,6 @@ static s16 audio_buffer [2 * SAMPLES_HIGH * N3DS_DSP_N_CHANNELS];
 size_t samples_to_copy;
 int16_t* copy_buf;
 int16_t* direct_buf;
-
-static bool is_new_n3ds()
-{
-    bool is_new_n3ds = false;
-    return R_SUCCEEDED(APT_CheckNew3DS(&is_new_n3ds)) ? is_new_n3ds : false;
-}
 
 extern void create_next_audio_buffer(s16 *samples, u32 num_samples);
 
@@ -174,82 +166,56 @@ inline void audio_3ds_run_one_frame() {
     audio_3ds_play_internal((u8 *)audio_buffer, N3DS_DSP_N_CHANNELS * num_audio_samples * 4, N3DS_DSP_N_CHANNELS * samples_to_copy * 4);
 }
 
-Thread threadId = NULL;
-
-static void audio_3ds_loop()
+// In an ideal world, we would just continually run audio synthesis.
+// This would give an N64-like behavior, with no audio choppiness on slowdown.
+// However, due to race conditions, that is currently non-viable.
+// If the audio thread's DMA were ripped out, it would likely work.
+static bool audio_3ds_thread_should_sleep()
 {
-    
-    while (running)
-    {
-        s_audio_thread_processing = s_audio_frames_to_process > 0;
+    return !(s_audio_frames_to_process > 0);
+}
 
-        // In an ideal world, we would just continually run audio synthesis.
-        // This would give an N64-like behavior, with no audio choppiness on slowdown.
-        // However, due to race conditions, that is currently non-viable.
-        // If the audio thread's DMA were ripped out, it would likely work.
-        if (s_audio_thread_processing)
-            audio_3ds_run_one_frame();
-        else
-            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
-    }
-
+static void audio_3ds_thread_teardown()
+{
     // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_to_process = -9999;
     s_audio_frames_to_tick = -9999;
-    threadId = NULL;
 }
 
+static void initialize_thread_info()
+{
+    n3ds_thread_info_init(&n3ds_audio_thread_info);
+
+    n3ds_audio_thread_info.is_disabled                 = false;
+    n3ds_audio_thread_info.friendly_id                 = N3DS_AUDIO_THREAD_FRIENDLY_ID;
+    n3ds_audio_thread_info.enable_sleep_while_spinning = N3DS_AUDIO_ENABLE_SLEEP_FUNC;
+    n3ds_audio_thread_info.assigned_cpu                = n3ds_desired_audio_cpu;
+
+    // Fill the name with terminators and then copy the default.
+    memcpy(n3ds_audio_thread_info.friendly_name, N3DS_AUDIO_THREAD_NAME, sizeof(N3DS_AUDIO_THREAD_NAME));
+    
+    n3ds_audio_thread_info.desired_priority = N3DS_DESIRED_PRIORITY_AUDIO_THREAD;
+    n3ds_audio_thread_info.should_sleep     = audio_3ds_thread_should_sleep;
+    n3ds_audio_thread_info.task             = audio_3ds_run_one_frame;
+    n3ds_audio_thread_info.teardown         = audio_3ds_thread_teardown;
+}
 
 // Fully initializes the audio thread
 static void audio_3ds_initialize_thread()
 {
     // Start audio thread in a consistent state
     s_audio_frames_to_tick = s_audio_frames_to_process = 0;
-    s_audio_thread_processing = true;
-
-    // Set main thread priority to desired value
-    if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, N3DS_DESIRED_PRIORITY_MAIN_THREAD)))
-        printf("Set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
-    else
-        fprintf(stderr, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
-
-    // Select core to use
-    if (is_new_n3ds()) {
-        s_audio_cpu = NEW_CORE_2; // n3ds 3rd core
-    } else if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_AUDIO_CORE_1_LIMIT))) {
-        s_audio_cpu = OLD_CORE_1; // o3ds 2nd core (system)
-        printf("AppCpuTimeLimit is %d.\nAppCpuIdleLimit is %d.\n", N3DS_AUDIO_CORE_1_LIMIT, N3DS_AUDIO_CORE_1_LIMIT_IDLE);
-    } else {
-        s_audio_cpu = OLD_CORE_0; // Run in Thread5
-        fprintf(stderr, "Failed to set AppCpuTimeLimit to %d.\n", N3DS_AUDIO_CORE_1_LIMIT);
-    }
+    initialize_thread_info();
 
     // Create a thread if applicable
-    if (s_audio_cpu != OLD_CORE_0) {
-
-        printf("Audio thread priority: 0x%x\n", N3DS_DESIRED_PRIORITY_AUDIO_THREAD);
-
-        threadId = threadCreate(audio_3ds_loop, NULL, 64 * 1024, N3DS_DESIRED_PRIORITY_AUDIO_THREAD, s_audio_cpu, true);
-
-        if (threadId != NULL) {
-            printf("Created audio thread on core %i.\n", s_audio_cpu);
-
-            while (s_audio_thread_processing) {
-                printf("Waiting for audio thread to settle...\n");
-                N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
-            }
-            printf("Audio thread finished settling.\n");
-        } else
-            printf("Failed to create audio thread.\n");
-    }
+    if (n3ds_audio_thread_info.assigned_cpu != OLD_CORE_0)
+        n3ds_thread_start(&n3ds_audio_thread_info);
     
-    // If thread creation failed, or was never attempted...
-    if (threadId == NULL) {
-        s_thread5_does_audio = true;
-        s_audio_thread_processing = false;
-        printf("Using Thread5 for audio.\n");
-    } else {
-        s_thread5_does_audio = false;
+    // If thread creation failed, or was never attempted, use thread5.
+    if (n3ds_audio_thread_info.thread == NULL) {
+        n3ds_audio_thread_info.is_disabled = true;
+        n3ds_audio_thread_info.assigned_cpu = OLD_CORE_0;
+        printf("Using synchronous audio.\n");
     }
 }
 
@@ -293,10 +259,11 @@ static bool audio_3ds_init()
 // Stops the audio thread and waits for it to exit.
 static void audio_3ds_stop(void)
 {
-    running = false;
-
-    if (threadId)
-        threadJoin(threadId, U64_MAX);
+    if (n3ds_audio_thread_info.thread) {
+        n3ds_audio_thread_info.running = false;
+        threadJoin(n3ds_audio_thread_info.thread, U64_MAX);
+        n3ds_audio_thread_info.thread = NULL;
+    }
 
     ndspExit();
 }

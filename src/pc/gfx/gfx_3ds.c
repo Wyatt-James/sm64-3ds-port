@@ -8,7 +8,8 @@
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
 
-#include "src/pc/audio/audio_3ds_threading.h"
+#include "src/pc/n3ds/n3ds_system_info.h"
+#include "src/pc/n3ds/n3ds_threading_common.h"
 #include "src/pc/audio/audio_3ds.h"
 #include "src/pc/profiler_3ds.h"
 
@@ -58,7 +59,6 @@ bool gUpdateSliderFlag = false;
 
 static u8 debounce = 0;
 static s32 appSuspendCounter = 0; // > 0 when the 3DS lid is closed or home button is pressed
-static u8 n3dsModel = 0;
 static aptHookCookie apt_hook_cookie;
 
 static bool checkN3DS()
@@ -94,8 +94,8 @@ static void initialise_screens()
 {
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
 
-    bool useAA = gfx_config.useAA && n3dsModel != 3; // old 2DS does not support 800px
-    bool useWide = gfx_config.useWide && n3dsModel != 3; // old 2DS does not support 800px
+    bool useAA   = gfx_config.useAA   && n3ds_supports_800px_mode; // old 2DS does not support 800px
+    bool useWide = gfx_config.useWide && n3ds_supports_800px_mode; // old 2DS does not support 800px
 
     u32 transferFlags = DISPLAY_TRANSFER_FLAGS;
 
@@ -260,15 +260,16 @@ static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
     audio_3ds_set_dsp_volume(vol, vol);
 
     // Lower CPU priority only if applicable
-    if (s_audio_cpu == OLD_CORE_1) {
-        const u8 limit = appSuspendCounter > 0 ? N3DS_AUDIO_CORE_1_LIMIT_IDLE : N3DS_AUDIO_CORE_1_LIMIT;
+    if (n3ds_old_core_1_is_available) {
+        const u8 limit = appSuspendCounter > 0 ? N3DS_CORE_1_LIMIT_IDLE : N3DS_CORE_1_LIMIT;
 
+        // WYATT_TODO move me
         if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
             printf("AppCpuTimeLimit set to %hhd.\n", limit);
         else
             fprintf(stderr, "Error: AppCpuTimeLimit failed to set to %hhd.\n", limit);
     } else {
-        printf("Not setting AppCpuTimeLimit because audio is running on CPU %d.\n", s_audio_cpu);
+        printf("Not altering speed of disabled OLD_CORE_1.\n");
     }
 }
 
@@ -278,16 +279,6 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
         osSetSpeedupEnable(true);
 
     gfxInitDefault();
-
-    Result rc = cfguInit();
-    if (R_SUCCEEDED(rc))
-    {
-        u8 model;
-        rc = CFGU_GetSystemModel(&model);
-        if (R_SUCCEEDED(rc))
-            n3dsModel = model;
-        cfguExit();
-    }
 
     gfx_3ds_menu_init();
 
@@ -328,7 +319,7 @@ static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
             run_one_game_iter();
             profiler_3ds_snoop(0);
         } else
-            N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_MILLIS_TO_NANOS(33));
+            N3DS_SLEEP_FUNC(N3DS_MILLIS_TO_NANOS(33));
     }
 
     aptSetSleepAllowed(false);

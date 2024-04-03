@@ -238,7 +238,7 @@ ASM_DIRS := lib
 ifeq ($(TARGET_N64),1)
   ASM_DIRS := asm $(ASM_DIRS)
 else
-  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/audio src/pc/controller
+  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/audio src/pc/controller src/pc/n3ds
   # If this is enabled, you can do ASM debugging on these files.
   # SRC_DIRS := $(SRC_DIRS) src/pc/mixer_implementations
   ASM_DIRS :=
@@ -505,7 +505,7 @@ ifeq ($(TARGET_N3DS),1)
   LIBDIRS  := $(CTRULIB)
   export LIBPATHS  :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
   PLATFORM_CFLAGS  := -mtp=soft -DTARGET_N3DS -DARM11 -DosGetTime=n64_osGetTime -D_3DS -D__3DS__ -march=armv6k -mtune=mpcore -mfloat-abi=hard -mword-relocations -fomit-frame-pointer -ffast-math $(foreach dir,$(LIBDIRS),-I$(dir)/include)
-  PLATFORM_LDFLAGS := $(LIBPATHS) -lcitro3d -lctru -lm -specs=3dsx.specs -g -marm -mthumb-interwork -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
+  PLATFORM_LDFLAGS := $(LIBPATHS) -z noexecstack -lcitro3d -lctru -lm -specs=3dsx.specs -g -marm -mthumb-interwork -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
   ifeq ($(DISABLE_AUDIO),1)
     PLATFORM_CFLAGS += -DDISABLE_AUDIO
   endif

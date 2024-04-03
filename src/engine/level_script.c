@@ -876,7 +876,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     AtomicIncrement(&s_audio_frames_to_process);
 
     profiler_3ds_log_time(0);
-    if (s_thread5_does_audio)
+    if (n3ds_audio_thread_info.is_disabled)
         audio_3ds_run_one_frame();
     profiler_3ds_log_time(2); // Synchronous Audio Synthesis
 

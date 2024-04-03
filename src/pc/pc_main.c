@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifdef TARGET_WEB
 #include <emscripten.h>
@@ -27,6 +28,12 @@
 #include "audio/audio_sdl.h"
 #include "audio/audio_null.h"
 #include "audio/audio_3ds.h"
+
+#ifdef TARGET_N3DS
+#include "src/pc/n3ds/n3ds_threading_common.h"
+#include "src/pc/n3ds/n3ds_system_info.h"
+#include "src/pc/audio/audio_3ds_threading.h"
+#endif
 
 #include "controller/controller_keyboard.h"
 
@@ -138,6 +145,32 @@ static void on_fullscreen_changed(bool is_now_fullscreen) {
     configFullscreen = is_now_fullscreen;
 }
 
+#ifdef TARGET_N3DS
+void n3ds_set_up_threading() {
+
+    // Set main thread priority to desired value.
+    if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, N3DS_DESIRED_PRIORITY_MAIN_THREAD)))
+        printf("Set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+    else
+        fprintf(stderr, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+
+    // We only really need the one extra core.
+    if (!n3ds_is_new_3ds && n3ds_enable_multi_threading)
+        n3ds_enable_old_core_1();
+
+    // Set desired thread constants
+    if (n3ds_enable_multi_threading) {
+        if (n3ds_is_new_3ds)
+            n3ds_desired_audio_cpu = NEW_CORE_2; // n3ds 3rd core
+        else if (n3ds_old_core_1_is_available)
+            n3ds_desired_audio_cpu = OLD_CORE_1; // o3ds 2nd core
+        else
+            n3ds_desired_audio_cpu = OLD_CORE_0; // Run in Thread5
+    } else
+        n3ds_desired_audio_cpu = OLD_CORE_0; // Run in Thread5
+}
+#endif
+
 void main_func(void) {
     static u8 pool[DOUBLE_SIZE_ON_64_BIT(0x165000)] __attribute__ ((aligned(16)));
     main_pool_init(pool, pool + sizeof(pool));
@@ -145,6 +178,11 @@ void main_func(void) {
 
     configfile_load(CONFIG_FILE);
     atexit(save_config);
+
+#ifdef TARGET_N3DS
+    n3ds_init_system_info();
+    n3ds_set_up_threading();
+#endif
 
 #ifdef TARGET_WEB
     emscripten_set_main_loop(em_main_loop, 0, 0);

@@ -111,7 +111,7 @@ static bool scissor;
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
 // A pair of SM64 matrices, converted to 3DS format.
-static struct GameMtxSet {
+struct GameMtxSet {
     C3D_Mtx modelView;
     C3D_Mtx gameProjection;
 };
