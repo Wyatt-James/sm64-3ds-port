@@ -26,6 +26,7 @@ setup:
     mov r0, inpos
 model_view:
     ; r1 = model_view_mtx * inpos
+    ; Needs to be DPHI because 1.0 is appended to src1 (left input arg).
     dphi r1.x, r0, model_view_mtx[0]
     dphi r1.y, r0, model_view_mtx[1]
     dphi r1.z, r0, model_view_mtx[2]
