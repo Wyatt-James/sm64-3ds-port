@@ -438,6 +438,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
     gfx_citro3d_apply_model_view_matrix();
+    gfx_citro3d_apply_game_projection_matrix();
 
     update_shader(false);
 }
