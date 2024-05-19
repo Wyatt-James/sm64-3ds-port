@@ -629,7 +629,8 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 #endif
 
     bool flush_needed = true;
-    const bool is_load = parameters & G_MTX_LOAD;
+    const bool is_load = parameters & G_MTX_LOAD,
+               is_push = parameters & G_MTX_PUSH; // NOPUSH means multiplication dst and src overlap
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
 
@@ -657,15 +658,18 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         if (last_mv_mtx_addr == matrix && is_load)
             flush_needed = false;
         
-        if ((parameters & G_MTX_PUSH) && rsp.modelview_matrix_stack_size < 11)
+        if (is_push && rsp.modelview_matrix_stack_size < 11)
             ++rsp.modelview_matrix_stack_size;
 
         if (is_load) {
             if (flush_needed)
                 memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
+        } else {
+            if (is_push)
+                gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
+            else
+                gfx_matrix_mul_safe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
         }
-        else
-            gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
 
         if (flush_needed) {
             gfx_flush(); // 0: 73, 46 for both mtx types
