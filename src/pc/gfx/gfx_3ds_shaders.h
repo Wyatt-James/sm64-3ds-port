@@ -40,7 +40,7 @@ struct n3ds_shader_vbo_info {
    bool has_position,
         has_texture,
         has_fog,
-        has_color,
+        has_color1,
         has_color2;
    uint8_t stride;
 };
