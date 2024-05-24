@@ -1,5 +1,3 @@
-#ifdef TARGET_N3DS
-
 #ifndef GFX_3DS_SHADER_BINARIES_H
 #define GFX_3DS_SHADER_BINARIES_H
 
@@ -34,5 +32,4 @@ extern const uint32_t shader_20_shbin_size;
 extern const uint8_t shader_41_shbin[];
 extern const uint32_t shader_41_shbin_size;
 
-#endif
 #endif
