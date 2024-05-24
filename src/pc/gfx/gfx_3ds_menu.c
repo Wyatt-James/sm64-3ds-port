@@ -164,6 +164,8 @@ void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButto
 
     C3D_FrameDrawOn(gTargetBottom);
 
+    // WYATT_TODO Load shader 5 and set up identity MTX
+
     buffer_offset = vertex_offset;
 
     // WYATT_TODO this should proooobably be re-enabled once the bottom screen is reworked.
