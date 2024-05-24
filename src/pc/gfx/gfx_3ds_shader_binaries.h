@@ -1,7 +1,7 @@
 #ifdef TARGET_N3DS
 
-#ifndef GFX_3DS_SHADERS_H
-#define GFX_3DS_SHADERS_H
+#ifndef GFX_3DS_SHADER_BINARIES_H
+#define GFX_3DS_SHADER_BINARIES_H
 
 #include <stdint.h>
 
