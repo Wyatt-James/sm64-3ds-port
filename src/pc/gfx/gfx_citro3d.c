@@ -710,7 +710,7 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
     C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
 }
 
-void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
+void gfx_citro3d_select_render_target(C3D_RenderTarget* target)
 {
     target->used = true;
     C3D_SetFrameBuf(&target->frameBuf);
@@ -736,15 +736,15 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     {
         // left screen
         stereoTilt(&projection, -iodZ, -iodW);
-        gfx_citro3d_frame_draw_on(gTarget);
+        gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
         stereoTilt(&projection, iodZ, iodW);
-        gfx_citro3d_frame_draw_on(gTargetRight);
+        gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     } else {
-        gfx_citro3d_frame_draw_on(gTarget);
+        gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     }
 
