@@ -29,7 +29,7 @@ extern struct GfxRenderingAPI gfx_citro3d_api;
 void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
 // Sets the clear color for a Viewport.
-void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color);
+void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, uint32_t color);
 
 // Sets a buffer to be cleared for the given viewport on the next frame.
 // All flags provided will be cleared on gfx_citro3d_start_frame().

@@ -26,6 +26,7 @@
 #define U32_AS_FLOAT(v_) (*(float*) &v_)
 
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
+#define BSWAP32(v_) (__builtin_bswap32(v_))
 
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
@@ -69,6 +70,23 @@ struct ViewportConfig {
     int x, y, width, height;
 };
 
+struct IodConfig {
+    float z, w;
+};
+
+struct ScreenClearConfig {
+    enum ViewportClearBuffer bufs;
+    union RGBA32 color;
+};
+
+union ScreenClearConfigsN3ds {
+    struct {
+        struct ScreenClearConfig top;
+        struct ScreenClearConfig bottom;
+    };
+    struct ScreenClearConfig array[2];
+};
+
 struct GameMtxSet {
     C3D_Mtx model_view, game_projection;
 };
@@ -106,6 +124,10 @@ struct ViewportConfig viewport_config;
 // calling SetViewport resets scissor
 struct ScissorConfig scissor_config = { .enable = false };
 
+static struct IodConfig iod_config = { .z = 8.0f, .w = 16.0f };
+
+static int s2DMode = 0;
+
 // Constant matrices, set during initialization.
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
@@ -120,55 +142,33 @@ static C3D_Mtx  projection,
                *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].model_view,
                *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
 
-static int s2DMode = 0;
-float iodZ = 8.0f;
-float iodW = 16.0f;
-
-// Data storage type for the screen clear buf configs
-union ScreenClearBufConfig3ds {
-    struct {
-        enum ViewportClearBuffer top;
-        enum ViewportClearBuffer bottom;
-    };
-    enum ViewportClearBuffer array[2];
+// Determines the clear config for each viewport.
+static union ScreenClearConfigsN3ds screen_clear_configs = {
+    .top    = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}},
+    .bottom = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}},
 };
-
-// Determines the clear mode for the viewports.
-static union ScreenClearBufConfig3ds screen_clear_bufs = {{
-    VIEW_CLEAR_BUFFER_NONE,      // top
-    VIEW_CLEAR_BUFFER_NONE       // bottom
-}};
-
-// Determines the clear colors for the viewports
-static union {
-    struct {
-        u32 top;
-        u32 bottom;
-    };
-    u32 array[2];
-} screen_clear_colors = {{
-    COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // top: 0x000000FF
-    COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // bottom: 0x000000FF
-}};
 
 // Handles 3DS screen clearing
 static void clear_buffers()
 {
-    enum ViewportClearBuffer clear_top = screen_clear_bufs.top;
-    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.bottom;
+    C3D_ClearBits clear_top    = (C3D_ClearBits) screen_clear_configs.top.bufs,
+                  clear_bottom = (C3D_ClearBits) screen_clear_configs.bottom.bufs;
+
+    uint32_t color_top    = BSWAP32(screen_clear_configs.top.color.u32),
+             color_bottom = BSWAP32(screen_clear_configs.bottom.color.u32);
 
     // Clear top screen
     if (clear_top)
-        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTarget, clear_top, color_top, 0xFFFFFFFF);
         
     // Clear right-eye view
     // We check gGfx3DSMode because clearing in 800px modes causes a crash.
     if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetRight, clear_top, color_top, 0xFFFFFFFF);
 
     // Clear bottom screen only if it needs re-rendering.
     if (clear_bottom)
-        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.bottom, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetBottom, clear_bottom, color_bottom, 0xFFFFFFFF);
 }
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
@@ -225,8 +225,8 @@ static void gfx_citro3d_set_2d_mode(int mode_2d)
 
 void gfx_citro3d_set_iod(float z, float w)
 {
-    iodZ = z;
-    iodW = w;
+    iod_config.z = z;
+    iod_config.w = w;
 }
 
 static bool gfx_citro3d_z_is_from_0_to_1(void)
@@ -735,12 +735,12 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     if (gGfx3DEnabled)
     {
         // left screen
-        stereoTilt(&projection, -iodZ, -iodW);
+        stereoTilt(&projection, -iod_config.z, -iod_config.w);
         gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
-        stereoTilt(&projection, iodZ, iodW);
+        stereoTilt(&projection, iod_config.z, iod_config.w);
         gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     } else {
@@ -801,8 +801,8 @@ static void gfx_citro3d_start_frame(void)
     clear_buffers();
 
     // Reset screen clear buffer flags
-    screen_clear_bufs.top = 
-    screen_clear_bufs.bottom = VIEW_CLEAR_BUFFER_NONE;
+    screen_clear_configs.top.bufs = 
+    screen_clear_configs.bottom.bufs = VIEW_CLEAR_BUFFER_NONE;
 
     Mtx_Identity(&projection);
 
@@ -918,17 +918,20 @@ static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a
 
 void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    screen_clear_colors.array[viewport] = COLOR_RGBA_PARAMS_TO_RGBA32(r, g, b, a);
+    screen_clear_configs.array[viewport].color.r = r;
+    screen_clear_configs.array[viewport].color.g = g;
+    screen_clear_configs.array[viewport].color.b = b;
+    screen_clear_configs.array[viewport].color.a = a;
 }
 
-void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, u32 color)
+void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, uint32_t color)
 {
-    screen_clear_colors.array[viewport] = color;
+    screen_clear_configs.array[viewport].color.u32 = color;
 }
 
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
 {
-    screen_clear_bufs.array[viewport] |= mode;
+    screen_clear_configs.array[viewport].bufs |= mode;
 }
 
 struct GfxRenderingAPI gfx_citro3d_api = {
