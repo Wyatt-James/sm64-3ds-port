@@ -443,7 +443,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     update_shader(false);
 }
 
-static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool has_alpha,
+static uint8_t calculate_shader_code(bool has_texture, UNUSED bool has_fog, bool has_alpha,
                                     bool has_color, bool has_color2)
 {
     // 1 => texture
@@ -463,6 +463,14 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
         shader_code += has_alpha ? 4 : 8;
     if (has_color2)
         shader_code += has_alpha ? 16 : 32;
+
+    return shader_code;
+}
+
+static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool has_alpha,
+                                    bool has_color, bool has_color2)
+{
+    uint8_t shader_code = calculate_shader_code(has_texture, has_fog, has_alpha, has_color, has_color2);
 
     for (int i = 0; i < video_buffers_size; i++)
     {
