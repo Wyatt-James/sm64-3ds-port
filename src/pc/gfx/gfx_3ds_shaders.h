@@ -23,18 +23,18 @@ const struct n3ds_shader
     shader_20   = { shader_20_shbin, &shader_20_shbin_size,  9 },
     shader_41   = { shader_41_shbin, &shader_41_shbin_size, 10 };
 
-const struct n3ds_shader shaders[] = {
-    shader_def,
-    shader_1,
- // shader_3,
-    shader_4,
-    shader_5,
- // shader_6,
- // shader_7,
-    shader_8,
-    shader_9,
-    shader_20,
-    shader_41
+const struct n3ds_shader* const shaders[] = {
+    &shader_def,
+    &shader_1,
+//  &shader_3,
+    &shader_4,
+    &shader_5,
+//  &shader_6,
+//  &shader_7,
+    &shader_8,
+    &shader_9,
+    &shader_20,
+    &shader_41
 };
 
 #endif
