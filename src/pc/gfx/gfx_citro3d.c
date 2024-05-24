@@ -484,7 +484,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
 
     cb->shader_code = shader_code;
 
-    u8 *current_shader_shbin = NULL;
+    const u8 *current_shader_shbin = NULL;
     u32 current_shader_shbin_size = 0;
 
     /* 
