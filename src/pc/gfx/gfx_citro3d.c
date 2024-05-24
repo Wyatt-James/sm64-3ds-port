@@ -77,6 +77,7 @@ struct IodConfig {
 struct ScreenClearConfig {
     enum ViewportClearBuffer bufs;
     union RGBA32 color;
+    uint32_t depth;
 };
 
 union ScreenClearConfigsN3ds {
@@ -144,8 +145,8 @@ static C3D_Mtx  projection,
 
 // Determines the clear config for each viewport.
 static union ScreenClearConfigsN3ds screen_clear_configs = {
-    .top    = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}},
-    .bottom = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}},
+    .top    = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}, .depth = 0xFFFFFFFF},
+    .bottom = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}, .depth = 0xFFFFFFFF},
 };
 
 // Handles 3DS screen clearing
@@ -155,20 +156,22 @@ static void clear_buffers()
                   clear_bottom = (C3D_ClearBits) screen_clear_configs.bottom.bufs;
 
     uint32_t color_top    = BSWAP32(screen_clear_configs.top.color.u32),
-             color_bottom = BSWAP32(screen_clear_configs.bottom.color.u32);
+             color_bottom = BSWAP32(screen_clear_configs.bottom.color.u32),
+             depth_top    = screen_clear_configs.top.depth,
+             depth_bottom = screen_clear_configs.bottom.depth;
 
     // Clear top screen
     if (clear_top)
-        C3D_RenderTargetClear(gTarget, clear_top, color_top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTarget, clear_top, color_top, depth_top);
         
     // Clear right-eye view
     // We check gGfx3DSMode because clearing in 800px modes causes a crash.
     if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, clear_top, color_top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetRight, clear_top, color_top, depth_top);
 
     // Clear bottom screen only if it needs re-rendering.
     if (clear_bottom)
-        C3D_RenderTargetClear(gTargetBottom, clear_bottom, color_bottom, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetBottom, clear_bottom, color_bottom, depth_bottom);
 }
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
@@ -924,9 +927,19 @@ void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t
     screen_clear_configs.array[viewport].color.a = a;
 }
 
-void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, uint32_t color)
+void gfx_citro3d_set_clear_color_u32(enum ViewportId3DS viewport, uint32_t color)
 {
     screen_clear_configs.array[viewport].color.u32 = color;
+}
+
+void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, union RGBA32 color)
+{
+    screen_clear_configs.array[viewport].color.u32 = color.u32;
+}
+
+void gfx_citro3d_set_viewport_clear_depth(enum ViewportId3DS viewport, uint32_t depth)
+{
+    screen_clear_configs.array[viewport].depth = depth;
 }
 
 void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
