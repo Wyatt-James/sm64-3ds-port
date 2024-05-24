@@ -18,7 +18,9 @@
 #include "color_conversion.h"
 
 #define TEXTURE_POOL_SIZE 4096
-#define FOG_LUT_SIZE 32
+#define MAX_VIDEO_BUFFERS 16
+#define MAX_FOG_LUTS 32
+#define MAX_SHADER_PROGRAMS 32
 
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v_) (*(float*) &v_)
@@ -44,7 +46,7 @@ struct ShaderProgram {
     struct UniformLocations uniform_locations;
 };
 
-struct video_buffer {
+struct VideoBuffer {
     const struct n3ds_shader_info* shader_info;
     float *ptr;
     uint32_t offset;
@@ -53,21 +55,21 @@ struct video_buffer {
     C3D_BufInfo buf_info;
 };
 
-static struct video_buffer *current_buffer;
-static struct video_buffer video_buffers[16];
-static uint8_t video_buffers_size;
-
-static struct ShaderProgram sShaderProgramPool[32];
-static uint8_t sShaderProgramPoolSize;
-
-struct FogLut {
+struct FogLutHandle {
     uint32_t id;
     C3D_FogLut lut;
 };
 
-static struct FogLut fog_lut[FOG_LUT_SIZE];
-static uint8_t fog_lut_size;
-static uint8_t current_fog_idx;
+static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
+static struct VideoBuffer *current_video_buffer = NULL;
+static uint8_t num_video_buffers = 0;
+
+static struct ShaderProgram sShaderProgramPool[MAX_SHADER_PROGRAMS];
+static uint8_t sShaderProgramPoolSize;
+
+static struct FogLutHandle fog_lut[MAX_FOG_LUTS];
+static struct FogLutHandle* current_fog_lut = NULL;
+static uint8_t num_fog_luts = 0;
 static uint32_t fog_color;
 
 static u32 sTexBuf[16 * 1024] __attribute__((aligned(32)));
@@ -88,7 +90,8 @@ static bool sUseBlend = false;
 // calling FrameDrawOn resets viewport
 static int viewport_x, viewport_y;
 static int viewport_width, viewport_height;
-// calling SetViewport resets scissor!
+
+// calling SetViewport resets scissor
 static int scissor_x, scissor_y;
 static int scissor_width, scissor_height;
 static bool scissor;
@@ -107,14 +110,13 @@ static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
 
 // The current matrices.
 // Projection is the 3DS-specific P-matrix.
-// Model_view is the N64 modelview M-matrix.
+// Model_view is the N64 MV-matrix.
 // Game_projection is the N64 P-matrix.
 static C3D_Mtx  projection,
                *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].modelView,
                *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].gameProjection;
 
-static int original_offset;
-static int s2DMode;
+static int s2DMode = 0;
 float iodZ = 8.0f;
 float iodW = 16.0f;
 
@@ -212,7 +214,7 @@ void stereoTilt(C3D_Mtx* mtx, float z, float w)
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, mtx);
 }
 
-static void gfx_citro3d_set_2d(int mode_2d)
+static void gfx_citro3d_set_2d_mode(int mode_2d)
 {
     s2DMode = mode_2d;
 }
@@ -368,7 +370,7 @@ static void update_shader(bool swap_input)
     {
         C3D_FogGasMode(GPU_FOG, GPU_PLAIN_DENSITY, true);
         C3D_FogColor(fog_color);
-        C3D_FogLutBind(&fog_lut[current_fog_idx].lut);
+        C3D_FogLutBind(&current_fog_lut->lut);
     } else {
         C3D_FogGasMode(GPU_NO_FOG, GPU_PLAIN_DENSITY, false);
     }
@@ -382,16 +384,16 @@ static void update_shader(bool swap_input)
 static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 {
     sCurShader = new_prg->program_id;
-    current_buffer = &video_buffers[new_prg->buffer_id];
+    current_video_buffer = &video_buffers[new_prg->buffer_id];
 
-    C3D_BindProgram(&current_buffer->shader_program);
+    C3D_BindProgram(&current_video_buffer->shader_program);
 
     // Update uniforms
     memcpy(&uniform_locations, &new_prg->uniform_locations, sizeof(struct UniformLocations));
 
     // Update buffer info
-    C3D_SetBufInfo(&current_buffer->buf_info);
-    C3D_SetAttrInfo(&current_buffer->attr_info);
+    C3D_SetBufInfo(&current_video_buffer->buf_info);
+    C3D_SetAttrInfo(&current_video_buffer->attr_info);
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
     gfx_citro3d_apply_model_view_matrix();
@@ -403,15 +405,15 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
 {
     // Search for the existing shader to avoid loading it twice
-    for (int i = 0; i < video_buffers_size; i++)
+    for (int i = 0; i < num_video_buffers; i++)
     {
         if (shader_info->identifier == video_buffers[i].shader_info->identifier)
             return i;
     }
 
     // not found, create new
-    int id = video_buffers_size++;
-    struct video_buffer *cb = &video_buffers[id];
+    int id = num_video_buffers++;
+    struct VideoBuffer *cb = &video_buffers[id];
     cb->shader_info = shader_info;
 
     DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader_info->shader_binary, *shader_info->shader_size); 
@@ -701,7 +703,7 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale,
             sTexturePoolScaleS[sCurTex], -sTexturePoolScaleT[sCurTex], 1, 1);
 
-    C3D_DrawArrays(GPU_TRIANGLES, current_buffer->offset, buf_vbo_num_tris * 3);
+    C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
 }
 
 void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
@@ -715,7 +717,7 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if (current_buffer->offset * current_buffer->shader_info->vbo_info.stride > 256 * 1024 / 4)
+    if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > 256 * 1024 / 4)
     {
         printf("vertex buffer full!\n");
         return;
@@ -723,7 +725,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
 
     // WYATT_TODO actually prevent buffer overruns.
 
-    float* const buf_vbo_head = current_buffer->ptr + current_buffer->offset * current_buffer->shader_info->vbo_info.stride;
+    float* const buf_vbo_head = current_video_buffer->ptr + current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride;
     memcpy(buf_vbo_head, buf_vbo, buf_vbo_len * sizeof(float));
 
     if (gGfx3DEnabled)
@@ -742,7 +744,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     }
 
-    current_buffer->offset += buf_vbo_num_tris * 3;
+    current_video_buffer->offset += buf_vbo_num_tris * 3;
 }
 
 static void gfx_citro3d_init(void)
@@ -773,7 +775,7 @@ static void gfx_citro3d_init(void)
 
 static void gfx_citro3d_start_frame(void)
 {
-    for (int i = 0; i < video_buffers_size; i++)
+    for (int i = 0; i < num_video_buffers; i++)
     {
         video_buffers[i].offset = 0;
     }
@@ -858,7 +860,7 @@ static void gfx_citro3d_end_frame(void)
     C3D_CullFace(GPU_CULL_NONE);
 
     // TOOD: draw the minimap here
-    gfx_3ds_menu_draw(current_buffer->ptr, current_buffer->offset, gShowConfigMenu);
+    gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
 
     // set the texenv back
     update_shader(false);
@@ -874,32 +876,35 @@ static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
 {
     // dumb enough
     uint32_t id = (from << 16) | to;
+
     // current already loaded
-    if (fog_lut[current_fog_idx].id == id)
+    if (current_fog_lut != NULL && current_fog_lut->id == id)
         return;
+
     // lut already calculated
-    for (int i = 0; i < fog_lut_size; i++)
+    for (int i = 0; i < num_fog_luts; i++)
     {
         if (fog_lut[i].id == id)
         {
-            current_fog_idx = i;
+            current_fog_lut = &fog_lut[i];
             return;
         }
     }
+
     // new lut required
-    if (fog_lut_size == FOG_LUT_SIZE)
+    if (num_fog_luts == MAX_FOG_LUTS)
     {
         printf("Fog exhausted!\n");
         return;
     }
 
-    current_fog_idx = fog_lut_size++;
-    (&fog_lut[current_fog_idx])->id = id;
+    current_fog_lut = &fog_lut[num_fog_luts++];
+    current_fog_lut->id = id;
 
     // FIXME: The near/far factors are personal preference
     // BOB:  6400, 59392 => 0.16, 116
     // JRB:  1280, 64512 => 0.80, 126
-    FogLut_Exp(&fog_lut[current_fog_idx].lut, 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
+    FogLut_Exp(&current_fog_lut->lut, 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
 }
 
 static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
@@ -947,7 +952,7 @@ struct GfxRenderingAPI gfx_citro3d_api = {
     gfx_citro3d_finish_render,
     gfx_citro3d_set_fog,
     gfx_citro3d_set_fog_color,
-    gfx_citro3d_set_2d,
+    gfx_citro3d_set_2d_mode,
     gfx_citro3d_set_iod
 };
 
