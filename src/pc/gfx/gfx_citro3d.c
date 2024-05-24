@@ -11,7 +11,7 @@
 
 #include "gfx_cc.h"
 #include "gfx_rendering_api.h"
-#include "gfx_3ds_shader_binaries.h"
+#include "gfx_3ds_shaders.h"
 
 #include "gfx_citro3d.h"
 #include "color_conversion.h"
@@ -481,8 +481,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
 
     cb->shader_code = shader_code;
 
-    const uint8_t *current_shader_shbin = NULL;
-    uint32_t current_shader_shbin_size = 0;
+    const struct n3ds_shader* current_shader = NULL;
 
     /* 
      * Used shaders
@@ -497,53 +496,42 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     switch(shader_code)
     {
         case 1:
-            current_shader_shbin = shader_1_shbin;
-            current_shader_shbin_size = shader_1_shbin_size;
+            current_shader = &shader_1;
             break;
         // case 3:
-        //     current_shader_shbin = shader_3_shbin;
-        //     current_shader_shbin_size = shader_3_shbin_size;
+        //     current_shader = &shader_3;
         //     break;
         case 4:
-            current_shader_shbin = shader_4_shbin;
-            current_shader_shbin_size = shader_4_shbin_size;
+            current_shader = &shader_4;
             break;
         case 5:
-            current_shader_shbin = shader_5_shbin;
-            current_shader_shbin_size = shader_5_shbin_size;
+            current_shader = &shader_5;
             break;
         // case 6:
-        //     current_shader_shbin = shader_6_shbin;
-        //     current_shader_shbin_size = shader_6_shbin_size;
+        //     current_shader = &shader_6;
         //     break;
         // case 7:
-        //     current_shader_shbin = shader_7_shbin;
-        //     current_shader_shbin_size = shader_7_shbin_size;
+        //     current_shader = &shader_7;
         //     break;
         case 8:
-            current_shader_shbin = shader_8_shbin;
-            current_shader_shbin_size = shader_8_shbin_size;
+            current_shader = &shader_8;
             break;
         case 9:
-            current_shader_shbin = shader_9_shbin;
-            current_shader_shbin_size = shader_9_shbin_size;
+            current_shader = &shader_9;
             break;
         case 20:
-            current_shader_shbin = shader_20_shbin;
-            current_shader_shbin_size = shader_20_shbin_size;
+            current_shader = &shader_20;
             break;
         case 41:
-            current_shader_shbin = shader_41_shbin;
-            current_shader_shbin_size = shader_41_shbin_size;
+            current_shader = &shader_41;
             break;
         default:
-            current_shader_shbin = shader_shbin;
-            current_shader_shbin_size = shader_shbin_size;
-            fprintf(stderr, "Warning! Using default for %u\n", shader_code);
+            current_shader = &shader_def;
+            fprintf(stderr, "Warning! Using default shader for %u\n", shader_code);
             break;
     }
 
-    DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)current_shader_shbin, current_shader_shbin_size);
+    DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)current_shader->shader_binary, *current_shader->shader_size); 
 
     shaderProgramInit(&cb->shader_program);
     shaderProgramSetVsh(&cb->shader_program, &sVShaderDvlb->DVLE[0]);
