@@ -570,13 +570,13 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     {
         attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
-        cb->stride += 1; // 4 bytes are packed into one u32
+        cb->stride += STRIDE_RGBA; // 4 bytes are packed into one u32
     }
     if (has_color2)
     {
         attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
-        cb->stride += 1; // 4 bytes are packed into one u32
+        cb->stride += STRIDE_RGBA; // 4 bytes are packed into one u32
     }
 
     // Create the VBO (vertex buffer object)
