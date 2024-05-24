@@ -11,7 +11,7 @@
 
 #include "gfx_cc.h"
 #include "gfx_rendering_api.h"
-#include "gfx_3ds_shaders.h"
+#include "gfx_3ds_shader_binaries.h"
 
 #include "gfx_citro3d.h"
 #include "color_conversion.h"
