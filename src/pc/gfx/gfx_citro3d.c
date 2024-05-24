@@ -712,17 +712,20 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
     C3D_TexFlush(&sTexturePool[sCurTex]);
 }
 
-static uint32_t gfx_cm_to_opengl(uint32_t val)
+static GPU_TEXTURE_WRAP_PARAM clamp_mode_n64_to_n3ds(uint32_t val)
 {
     if (val & G_TX_CLAMP)
         return GPU_CLAMP_TO_EDGE;
-    return (val & G_TX_MIRROR) ? GPU_MIRRORED_REPEAT : GPU_REPEAT;
+    else if (val & G_TX_MIRROR)
+        return GPU_MIRRORED_REPEAT;
+    else
+        return GPU_REPEAT;
 }
 
 static void gfx_citro3d_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt)
 {
     C3D_TexSetFilter(&sTexturePool[sTexUnits[tile]], linear_filter ? GPU_LINEAR : GPU_NEAREST, linear_filter ? GPU_LINEAR : GPU_NEAREST);
-    C3D_TexSetWrap(&sTexturePool[sTexUnits[tile]], gfx_cm_to_opengl(cms), gfx_cm_to_opengl(cmt));
+    C3D_TexSetWrap(&sTexturePool[sTexUnits[tile]], clamp_mode_n64_to_n3ds(cms), clamp_mode_n64_to_n3ds(cmt));
 }
 
 static void update_depth()
