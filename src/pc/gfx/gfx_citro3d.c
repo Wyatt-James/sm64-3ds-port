@@ -468,8 +468,8 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     }
 
     // not found, create new
-    int id = video_buffers_size;
-    struct video_buffer *cb = &video_buffers[video_buffers_size++];
+    int id = video_buffers_size++;
+    struct video_buffer *cb = &video_buffers[id];
 
     cb->shader_code = shader_code;
 
