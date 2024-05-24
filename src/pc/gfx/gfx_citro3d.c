@@ -123,8 +123,8 @@ union ScreenClearBufConfig3ds {
     struct {
         enum ViewportClearBuffer top;
         enum ViewportClearBuffer bottom;
-    } struc;
-    enum ViewportClearBuffer array[3];
+    };
+    enum ViewportClearBuffer array[2];
 };
 
 // Determines the clear mode for the viewports.
@@ -138,8 +138,8 @@ static union {
     struct {
         u32 top;
         u32 bottom;
-    } struc;
-    u32 array[3];
+    };
+    u32 array[2];
 } screen_clear_colors = {{
     COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // top: 0x000000FF
     COLOR_RGBA_PARAMS_TO_RGBA32(0, 0, 0, 255),    // bottom: 0x000000FF
@@ -148,21 +148,21 @@ static union {
 // Handles 3DS screen clearing
 static void clear_buffers()
 {
-    enum ViewportClearBuffer clear_top = screen_clear_bufs.struc.top;
-    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.struc.bottom;
+    enum ViewportClearBuffer clear_top = screen_clear_bufs.top;
+    enum ViewportClearBuffer clear_bottom = screen_clear_bufs.bottom;
 
     // Clear top screen
     if (clear_top)
-        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.top, 0xFFFFFFFF);
         
     // Clear right-eye view
     // We check gGfx3DSMode because clearing in 800px modes causes a crash.
     if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.top, 0xFFFFFFFF);
 
     // Clear bottom screen only if it needs re-rendering.
     if (clear_bottom)
-        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.bottom, 0xFFFFFFFF);
 }
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
@@ -795,8 +795,8 @@ static void gfx_citro3d_start_frame(void)
     clear_buffers();
 
     // Reset screen clear buffer flags
-    screen_clear_bufs.struc.top = 
-    screen_clear_bufs.struc.bottom = VIEW_CLEAR_BUFFER_NONE;
+    screen_clear_bufs.top = 
+    screen_clear_bufs.bottom = VIEW_CLEAR_BUFFER_NONE;
 
     Mtx_Identity(&projection);
 
