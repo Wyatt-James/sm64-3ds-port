@@ -24,6 +24,8 @@
 #define s8 __3ds_s8
 #include <3ds/types.h>
 #include <3ds.h>
+#include <citro3d.h>
+#include <tex3ds.h> 
 #undef u64
 #undef s64
 #undef u32
@@ -37,8 +39,6 @@
 
 #include <PR/gbi.h>
 
-#include <citro3d.h>
-#include <tex3ds.h>
 
 #define VERTEX_SHADER_SIZE 10
 
