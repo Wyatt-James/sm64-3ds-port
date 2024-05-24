@@ -20,6 +20,7 @@
 #include "gfx_rendering_api.h"
 #include "gfx_screen_config.h"
 #include "gfx_citro3d.h"
+#include "color_formats.h"
 #include "texture_conversion.h"
 
 #ifdef TARGET_N3DS
@@ -766,9 +767,9 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             }
 
             // Why is UCLAMP8 slower here? It should be faster, but it's like 150us slower.
-            d->color.rgba.r = r > 255 ? 255 : r;
-            d->color.rgba.g = g > 255 ? 255 : g;
-            d->color.rgba.b = b > 255 ? 255 : b;
+            d->color.r = r > 255 ? 255 : r;
+            d->color.g = g > 255 ? 255 : g;
+            d->color.b = b > 255 ? 255 : b;
         }
         
         profiler_3ds_log_time(7); // Vertex Light Calculation
@@ -931,19 +932,19 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                 const uint8_t mapping_1 = shader_state.combiner->shader_input_mapping[1][sh_input];
                 switch (EXPECT(mapping_1, CC_SHADE)) {
                     case CC_PRIM:
-                        color.rgba.a = rdp.prim_color.rgba.a;
+                        color.a = rdp.prim_color.a;
                         break;
                     case CC_SHADE:
                         if (LIKELY(use_fog)) // Most alpha tris in my benchmark use fog
-                            color.rgba.a = 255;
+                            color.a = 255;
                         break;
                     case CC_ENV:
-                        color.rgba.a = rdp.env_color.rgba.a;
+                        color.a = rdp.env_color.a;
                         break;
                     // case CC_LOD:
                         // WYATT_TODO LoD does not work in world-space
                     default:
-                        color.rgba.a = 0;
+                        color.a = 0;
                         break;
                 }
             }
@@ -1287,17 +1288,17 @@ static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    rdp.env_color.rgba.r = r;
-    rdp.env_color.rgba.g = g;
-    rdp.env_color.rgba.b = b;
-    rdp.env_color.rgba.a = a;
+    rdp.env_color.r = r;
+    rdp.env_color.g = g;
+    rdp.env_color.b = b;
+    rdp.env_color.a = a;
 }
 
 static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    rdp.prim_color.rgba.r = r;
-    rdp.prim_color.rgba.g = g;
-    rdp.prim_color.rgba.b = b;
-    rdp.prim_color.rgba.a = a;
+    rdp.prim_color.r = r;
+    rdp.prim_color.g = g;
+    rdp.prim_color.b = b;
+    rdp.prim_color.a = a;
 }
 
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -1317,10 +1318,10 @@ static void gfx_dp_set_fill_color(uint32_t packed_color) {
     uint32_t g = (col16 >> 6) & 0x1f;
     uint32_t b = (col16 >> 1) & 0x1f;
     uint32_t a = col16 & 1;
-    rdp.fill_color.rgba.r = SCALE_5_8(r);
-    rdp.fill_color.rgba.g = SCALE_5_8(g);
-    rdp.fill_color.rgba.b = SCALE_5_8(b);
-    rdp.fill_color.rgba.a = a * 255;
+    rdp.fill_color.r = SCALE_5_8(r);
+    rdp.fill_color.g = SCALE_5_8(g);
+    rdp.fill_color.b = SCALE_5_8(b);
+    rdp.fill_color.a = a * 255;
 }
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {

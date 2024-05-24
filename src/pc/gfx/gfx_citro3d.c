@@ -15,7 +15,6 @@
 
 #include "gfx_citro3d.h"
 #include "color_conversion.h"
-#include "texture_conversion.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
@@ -671,10 +670,10 @@ static void performTexSwizzle(union RGBA32* src, union RGBA32* dest, u32 src_w, 
                 union RGBA32 color = src[ARR_INDEX_2D(src_x, src_y, src_w)];
                 u32 out_index = sTileOrder[x2 % 4 + y2 % 4 * 4] + 16 * (x2 / 4) + 32 * (y2 / 4);
 
-                dest[out_index].rgba.r = color.rgba.a;
-                dest[out_index].rgba.g = color.rgba.b;
-                dest[out_index].rgba.b = color.rgba.g;
-                dest[out_index].rgba.a = color.rgba.r;
+                dest[out_index].r = color.a;
+                dest[out_index].g = color.b;
+                dest[out_index].b = color.g;
+                dest[out_index].a = color.r;
             }
             dest += 64;
         }
@@ -831,7 +830,7 @@ static void adjust_state_for_two_color_tris(float buf_vbo[])
     // it would be yellow.
     union RGBA32 env_color = ((union RGBA32*) buf_vbo)[color_1_offset];
     if (!hasAlpha)
-        env_color.rgba.a = 255;
+        env_color.a = 255;
 
     update_shader(true); // WYATT_TODO should this be reversed after this function?
     C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
