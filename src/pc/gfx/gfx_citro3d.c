@@ -526,7 +526,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
             current_shader = &shader_41;
             break;
         default:
-            current_shader = &shader_def;
+            current_shader = &shader_default;
             fprintf(stderr, "Warning! Using default shader for %u\n", shader_code);
             break;
     }
