@@ -41,9 +41,6 @@ static DVLB_s* sVShaderDvlb;
 static shaderProgram_s sShaderProgram;
 static float* sVboBuffer;
 
-extern const u8 shader_shbin[];
-extern const u32 shader_shbin_size;
-
 struct UniformLocations uniform_locations;
 
 struct ShaderProgram {
@@ -484,8 +481,8 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
 
     cb->shader_code = shader_code;
 
-    const u8 *current_shader_shbin = NULL;
-    u32 current_shader_shbin_size = 0;
+    const uint8_t *current_shader_shbin = NULL;
+    uint32_t current_shader_shbin_size = 0;
 
     /* 
      * Used shaders
