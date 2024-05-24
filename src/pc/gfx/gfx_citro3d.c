@@ -14,15 +14,14 @@
 #include "gfx_3ds_shaders.h"
 
 #include "gfx_citro3d.h"
+#include "gfx_citro3d_helpers.h"
 #include "color_conversion.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
 
-#define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
-#define U32_AS_FLOAT(v) (*(float*) &v)
-#define ARR_INDEX_2D(x_, y_, w_) (y_ * w_ + x_)
-#define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
+#define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
+#define U32_AS_FLOAT(v_) (*(float*) &v_)
 
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 
@@ -229,35 +228,8 @@ static bool gfx_citro3d_z_is_from_0_to_1(void)
     return true;
 }
 
-static void gfx_citro3d_vertex_array_set_attribs(UNUSED struct ShaderProgram *prg)
-{
-}
-
 static void gfx_citro3d_unload_shader(UNUSED struct ShaderProgram *old_prg)
 {
-}
-
-static GPU_TEVSRC getTevSrc(int input, bool swap_input)
-{
-    switch (input)
-    {
-        case SHADER_0:
-            return GPU_CONSTANT;
-        case SHADER_INPUT_1:
-            return swap_input ? GPU_PREVIOUS : GPU_PRIMARY_COLOR;
-        case SHADER_INPUT_2:
-            return swap_input ? GPU_PRIMARY_COLOR : GPU_PREVIOUS;
-        case SHADER_INPUT_3:
-            return GPU_CONSTANT;
-        case SHADER_INPUT_4:
-            return GPU_CONSTANT;
-        case SHADER_TEXEL0:
-        case SHADER_TEXEL0A:
-            return GPU_TEXTURE0;
-        case SHADER_TEXEL1:
-            return GPU_TEXTURE1;
-    }
-    return GPU_CONSTANT;
 }
 
 static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
@@ -280,7 +252,7 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         if (prg->cc_features.do_single[0])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_RGB, GPU_REPLACE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_RGB, getTevSrc(prg->cc_features.c[0][3], swap_input), 0, 0);
+            C3D_TexEnvSrc(&prg->texenv0, C3D_RGB, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][3], swap_input), 0, 0);
             if (prg->cc_features.c[0][3] == SHADER_TEXEL0A)
                 C3D_TexEnvOpRgb(&prg->texenv0, GPU_TEVOP_RGB_SRC_ALPHA, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
             else
@@ -289,8 +261,8 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         else if (prg->cc_features.do_multiply[0])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_RGB, GPU_MODULATE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_RGB, getTevSrc(prg->cc_features.c[0][0], swap_input),
-                                        getTevSrc(prg->cc_features.c[0][2], swap_input), 0);
+            C3D_TexEnvSrc(&prg->texenv0, C3D_RGB, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][0], swap_input),
+                                        gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][2], swap_input), 0);
             C3D_TexEnvOpRgb(&prg->texenv0,
                 prg->cc_features.c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 prg->cc_features.c[0][2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -299,9 +271,9 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         else if (prg->cc_features.do_mix[0])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_RGB, GPU_INTERPOLATE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_RGB, getTevSrc(prg->cc_features.c[0][0], swap_input),
-                                        getTevSrc(prg->cc_features.c[0][1], swap_input),
-                                        getTevSrc(prg->cc_features.c[0][2], swap_input));
+            C3D_TexEnvSrc(&prg->texenv0, C3D_RGB, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][0], swap_input),
+                                        gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][1], swap_input),
+                                        gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][2], swap_input));
             C3D_TexEnvOpRgb(&prg->texenv0,
                 prg->cc_features.c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 prg->cc_features.c[0][1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -312,20 +284,20 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         if (prg->cc_features.do_single[1])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_Alpha, GPU_REPLACE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, getTevSrc(prg->cc_features.c[1][3], swap_input), 0, 0);
+            C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[1][3], swap_input), 0, 0);
         }
         else if (prg->cc_features.do_multiply[1])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_Alpha, GPU_MODULATE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, getTevSrc(prg->cc_features.c[1][0], swap_input),
-                                          getTevSrc(prg->cc_features.c[1][2], swap_input), 0);
+            C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[1][0], swap_input),
+                                          gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[1][2], swap_input), 0);
         }
         else if (prg->cc_features.do_mix[1])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_Alpha, GPU_INTERPOLATE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, getTevSrc(prg->cc_features.c[1][0], swap_input),
-                                          getTevSrc(prg->cc_features.c[1][1], swap_input),
-                                          getTevSrc(prg->cc_features.c[1][2], swap_input));
+            C3D_TexEnvSrc(&prg->texenv0, C3D_Alpha, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[1][0], swap_input),
+                                          gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[1][1], swap_input),
+                                          gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[1][2], swap_input));
         }
     }
     else
@@ -335,7 +307,7 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         if (prg->cc_features.do_single[0])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_Both, GPU_REPLACE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_Both, getTevSrc(prg->cc_features.c[0][3], swap_input), 0, 0);
+            C3D_TexEnvSrc(&prg->texenv0, C3D_Both, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][3], swap_input), 0, 0);
             if (prg->cc_features.c[0][3] == SHADER_TEXEL0A)
                 C3D_TexEnvOpRgb(&prg->texenv0, GPU_TEVOP_RGB_SRC_ALPHA, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
             else
@@ -344,8 +316,8 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         else if (prg->cc_features.do_multiply[0])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_Both, GPU_MODULATE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_Both, getTevSrc(prg->cc_features.c[0][0], swap_input),
-                                         getTevSrc(prg->cc_features.c[0][2], swap_input), 0);
+            C3D_TexEnvSrc(&prg->texenv0, C3D_Both, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][0], swap_input),
+                                         gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][2], swap_input), 0);
             C3D_TexEnvOpRgb(&prg->texenv0,
                 prg->cc_features.c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 prg->cc_features.c[0][2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -354,9 +326,9 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
         else if (prg->cc_features.do_mix[0])
         {
             C3D_TexEnvFunc(&prg->texenv0, C3D_Both, GPU_INTERPOLATE);
-            C3D_TexEnvSrc(&prg->texenv0, C3D_Both, getTevSrc(prg->cc_features.c[0][0], swap_input),
-                                         getTevSrc(prg->cc_features.c[0][1], swap_input),
-                                         getTevSrc(prg->cc_features.c[0][2], swap_input));
+            C3D_TexEnvSrc(&prg->texenv0, C3D_Both, gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][0], swap_input),
+                                         gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][1], swap_input),
+                                         gfx_citro3d_cc_input_to_tev_src(prg->cc_features.c[0][2], swap_input));
             C3D_TexEnvOpRgb(&prg->texenv0,
                 prg->cc_features.c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 prg->cc_features.c[0][1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -421,8 +393,6 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     C3D_SetBufInfo(&current_buffer->buf_info);
     C3D_SetAttrInfo(&current_buffer->attr_info);
 
-    gfx_citro3d_vertex_array_set_attribs(new_prg);
-
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
@@ -430,101 +400,21 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     update_shader(false);
 }
 
-static uint8_t calculate_shader_code(bool has_texture, UNUSED bool has_fog, bool has_alpha,
-                                    bool has_color, bool has_color2)
-{
-    // 1 => texture
-    // 2 => fog (disabled)
-    // 4 => 1 color RGBA
-    // 8 => 1 color RGB
-    // 16 => 2 colors RGBA
-    // 32 => 2 colors RGB
-
-    u8 shader_code = 0;
-
-    if (has_texture)
-        shader_code += 1;
-    // if (has_fog)
-    //     shader_code += 2;
-    if (has_color)
-        shader_code += has_alpha ? 4 : 8;
-    if (has_color2)
-        shader_code += has_alpha ? 16 : 32;
-
-    return shader_code;
-}
-
-static const struct n3ds_shader_info* get_shader_info_from_shader_code (uint8_t shader_code)
-{
-    const struct n3ds_shader_info* shader = NULL;
-
-    /* 
-     * Used shaders
-     * 1:  0 inputs
-     * 4:  1 input
-     * 5:  1 input
-     * 8:  1 input
-     * 9:  1 input
-     * 20: 2 inputs
-     * 41: 2 inputs
-     */
-    switch(shader_code)
-    {
-        case 1:
-            shader = &shader_1;
-            break;
-        // case 3:
-        //     shader = &shader_3;
-        //     break;
-        case 4:
-            shader = &shader_4;
-            break;
-        case 5:
-            shader = &shader_5;
-            break;
-        // case 6:
-        //     shader = &shader_6;
-        //     break;
-        // case 7:
-        //     shader = &shader_7;
-        //     break;
-        case 8:
-            shader = &shader_8;
-            break;
-        case 9:
-            shader = &shader_9;
-            break;
-        case 20:
-            shader = &shader_20;
-            break;
-        case 41:
-            shader = &shader_41;
-            break;
-        default:
-            shader = &shader_default;
-            fprintf(stderr, "Warning! Using default shader for %u\n", shader_code);
-            break;
-    }
-
-    return shader;
-}
-
-
-static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader)
+static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
 {
     // Search for the existing shader to avoid loading it twice
     for (int i = 0; i < video_buffers_size; i++)
     {
-        if (shader->identifier == video_buffers[i].shader_info->identifier)
+        if (shader_info->identifier == video_buffers[i].shader_info->identifier)
             return i;
     }
 
     // not found, create new
     int id = video_buffers_size++;
     struct video_buffer *cb = &video_buffers[id];
-    cb->shader_info = shader;
+    cb->shader_info = shader_info;
 
-    DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader->shader_binary, *shader->shader_size); 
+    DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader_info->shader_binary, *shader_info->shader_size); 
 
     shaderProgramInit(&cb->shader_program);
     shaderProgramSetVsh(&cb->shader_program, &sVShaderDvlb->DVLE[0]);
@@ -533,28 +423,29 @@ static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader)
     int attr = 0;
     uint32_t attr_mask = 0;
 
-    // Position is always present
-    if (shader->vbo_info.has_position)
+    AttrInfo_Init(&cb->attr_info);
+
+    if (shader_info->vbo_info.has_position)
     {
-        AttrInfo_Init(&cb->attr_info);
+        attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_SHORT, 4); // XYZW (W is set to 1.0f in the shader)
     }
-    if (shader->vbo_info.has_texture)
+    if (shader_info->vbo_info.has_texture)
     {
         attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 2);
     }
-    // if (shader->vbo_info.has_fog)
+    // if (shader_info->vbo_info.has_fog)
     // {
     //     attr_mask += attr * (1 << 4 * attr);
     //     AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 4);
     // }
-    if (shader->vbo_info.has_color1)
+    if (shader_info->vbo_info.has_color1)
     {
         attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
     }
-    if (shader->vbo_info.has_color2)
+    if (shader_info->vbo_info.has_color2)
     {
         attr_mask += attr * (1 << 4 * attr);
         AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
@@ -563,9 +454,10 @@ static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader)
     // Create the VBO (vertex buffer object)
     cb->ptr = linearAlloc(256 * 1024); // sizeof(float) * 10000 vertexes * 10 floats per vertex?
     cb->offset = 0;
+
     // Configure buffers
     BufInfo_Init(&cb->buf_info);
-    BufInfo_Add(&cb->buf_info, cb->ptr, cb->shader_info->vbo_info.stride * sizeof(float), attr, attr_mask);
+    BufInfo_Add(&cb->buf_info, cb->ptr, shader_info->vbo_info.stride * sizeof(float), attr, attr_mask);
 
     return id;
 }
@@ -593,7 +485,7 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
     prg->shader_id = shader_id;
     gfx_cc_get_features(shader_id, &prg->cc_features);
 
-    uint8_t shader_code = calculate_shader_code(prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1],
+    uint8_t shader_code = gfx_citro3d_calculate_shader_code(prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1],
                                                 prg->cc_features.opt_fog,
                                                 prg->cc_features.opt_alpha,
                                                 prg->cc_features.num_inputs > 0,
@@ -644,42 +536,6 @@ static void gfx_citro3d_select_texture(int tile, uint32_t texture_id)
     sTexUnits[tile] = texture_id;
 }
 
-static int sTileOrder[] =
-{
-    0,  1,   4,  5,
-    2,  3,   6,  7,
-
-    8,  9,  12, 13,
-    10, 11, 14, 15
-};
-
-// Performs a texture swizzle from RGBA32 to RGBA32.
-// Pads the texture from w * h to new_w * new_h by simply repeating data.
-static void performTexSwizzle(union RGBA32* src, union RGBA32* dest, u32 src_w, u32 src_h, u32 new_w, u32 new_h)
-{
-    for (u32 y = 0; y < new_h; y += 8) {
-        for (u32 x = 0; x < new_w; x += 8) {
-            for (u32 i = 0; i < 64; i++)
-            {
-                int x2 = i % 8; // Tiling nonsense
-                int y2 = i / 8;
-
-                u32 src_x = FAST_SINGLE_MOD(x + x2, src_w);
-                u32 src_y = FAST_SINGLE_MOD(y + y2, src_h);
-
-                union RGBA32 color = src[ARR_INDEX_2D(src_x, src_y, src_w)];
-                u32 out_index = sTileOrder[x2 % 4 + y2 % 4 * 4] + 16 * (x2 / 4) + 32 * (y2 / 4);
-
-                dest[out_index].r = color.a;
-                dest[out_index].g = color.b;
-                dest[out_index].b = color.g;
-                dest[out_index].a = color.r;
-            }
-            dest += 64;
-        }
-    }
-}
-
 static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int height)
 {
     union RGBA32* src_as_rgba32 = (union RGBA32*) rgba32_buf;
@@ -705,26 +561,16 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
 
     sTexturePoolScaleS[sCurTex] = width / (float)output_width;
     sTexturePoolScaleT[sCurTex] = height / (float)output_height;
-    performTexSwizzle(src_as_rgba32, dest_as_rgba32, width, height, output_width, output_height);
+    gfx_citro3d_pad_texture_rgba32(src_as_rgba32, dest_as_rgba32, width, height, output_width, output_height);
     C3D_TexInit(&sTexturePool[sCurTex], output_width, output_height, GPU_RGBA8);
     C3D_TexUpload(&sTexturePool[sCurTex], sTexBuf);
     C3D_TexFlush(&sTexturePool[sCurTex]);
 }
 
-static GPU_TEXTURE_WRAP_PARAM clamp_mode_n64_to_n3ds(uint32_t val)
-{
-    if (val & G_TX_CLAMP)
-        return GPU_CLAMP_TO_EDGE;
-    else if (val & G_TX_MIRROR)
-        return GPU_MIRRORED_REPEAT;
-    else
-        return GPU_REPEAT;
-}
-
 static void gfx_citro3d_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt)
 {
     C3D_TexSetFilter(&sTexturePool[sTexUnits[tile]], linear_filter ? GPU_LINEAR : GPU_NEAREST, linear_filter ? GPU_LINEAR : GPU_NEAREST);
-    C3D_TexSetWrap(&sTexturePool[sTexUnits[tile]], clamp_mode_n64_to_n3ds(cms), clamp_mode_n64_to_n3ds(cmt));
+    C3D_TexSetWrap(&sTexturePool[sTexUnits[tile]], gfx_citro3d_convert_texture_clamp_mode(cms), gfx_citro3d_convert_texture_clamp_mode(cmt));
 }
 
 static void update_depth()
@@ -969,14 +815,6 @@ static void gfx_citro3d_start_frame(void)
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
 }
 
-void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
-{ 
-    c3d_mtx->r[0].x = sm64_mtx[0][0]; c3d_mtx->r[0].y = sm64_mtx[1][0]; c3d_mtx->r[0].z = sm64_mtx[2][0]; c3d_mtx->r[0].w = sm64_mtx[3][0];
-    c3d_mtx->r[1].x = sm64_mtx[0][1]; c3d_mtx->r[1].y = sm64_mtx[1][1]; c3d_mtx->r[1].z = sm64_mtx[2][1]; c3d_mtx->r[1].w = sm64_mtx[3][1];
-    c3d_mtx->r[2].x = sm64_mtx[0][2]; c3d_mtx->r[2].y = sm64_mtx[1][2]; c3d_mtx->r[2].z = sm64_mtx[2][2]; c3d_mtx->r[2].w = sm64_mtx[3][2];
-    c3d_mtx->r[3].x = sm64_mtx[0][3]; c3d_mtx->r[3].y = sm64_mtx[1][3]; c3d_mtx->r[3].z = sm64_mtx[2][3]; c3d_mtx->r[3].w = sm64_mtx[3][3];
-}
-
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
 {
     gfx_citro3d_convert_mtx(mtx, model_view);
@@ -1005,19 +843,7 @@ void gfx_citro3d_select_matrix_set(uint32_t matrix_set_id)
 
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
 {
-    GPU_CULLMODE mode;
-    switch (culling_mode & G_CULL_BOTH) {
-        case 0:
-            mode = GPU_CULL_NONE;
-            break;
-        case G_CULL_FRONT:
-            mode = GPU_CULL_FRONT_CCW;
-            break;
-        default:
-            mode = GPU_CULL_BACK_CCW;
-            break;
-    }
-    C3D_CullFace(mode);
+    C3D_CullFace(gfx_citro3d_convert_cull_mode(culling_mode));
 }
 
 static void gfx_citro3d_on_resize(void)
