@@ -60,6 +60,19 @@ struct FogLutHandle {
     C3D_FogLut lut;
 };
 
+struct ScissorConfig {
+    int x1, y1, x2, y2;
+    bool enable;
+};
+
+struct ViewportConfig {
+    int x, y, width, height;
+};
+
+struct GameMtxSet {
+    C3D_Mtx model_view, game_projection;
+};
+
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
 static struct VideoBuffer *current_video_buffer = NULL;
 static uint8_t num_video_buffers = 0;
@@ -88,22 +101,13 @@ static bool sDepthDecal = false;
 static bool sUseBlend = false;
 
 // calling FrameDrawOn resets viewport
-static int viewport_x, viewport_y;
-static int viewport_width, viewport_height;
+struct ViewportConfig viewport_config;
 
 // calling SetViewport resets scissor
-static int scissor_x, scissor_y;
-static int scissor_width, scissor_height;
-static bool scissor;
+struct ScissorConfig scissor_config = { .enable = false };
 
 // Constant matrices, set during initialization.
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
-
-// A pair of SM64 matrices, converted to 3DS format.
-struct GameMtxSet {
-    C3D_Mtx modelView;
-    C3D_Mtx gameProjection;
-};
 
 // Selectable groups of game matrix sets
 static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
@@ -113,8 +117,8 @@ static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
 // Model_view is the N64 MV-matrix.
 // Game_projection is the N64 P-matrix.
 static C3D_Mtx  projection,
-               *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].modelView,
-               *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].gameProjection;
+               *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].model_view,
+               *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
 
 static int s2DMode = 0;
 float iodZ = 8.0f;
@@ -603,50 +607,50 @@ static void gfx_citro3d_set_viewport(int x, int y, int width, int height)
 {
     if (gGfx3DSMode == GFX_3DS_MODE_AA_22 || gGfx3DSMode == GFX_3DS_MODE_WIDE_AA_12)
     {
-        viewport_x = x * 2;
-        viewport_y = y * 2;
-        viewport_width = width * 2;
-        viewport_height = height * 2;
+        viewport_config.x = x * 2;
+        viewport_config.y = y * 2;
+        viewport_config.width = width * 2;
+        viewport_config.height = height * 2;
     }
     else if (gGfx3DSMode == GFX_3DS_MODE_WIDE)
     {
-        viewport_x = x * 2;
-        viewport_y = y;
-        viewport_width = width * 2;
-        viewport_height = height;
+        viewport_config.x = x * 2;
+        viewport_config.y = y;
+        viewport_config.width = width * 2;
+        viewport_config.height = height;
     }
     else // gGfx3DSMode == GFX_3DS_MODE_NORMAL
     {
-        viewport_x = x;
-        viewport_y = y;
-        viewport_width = width;
-        viewport_height = height;
+        viewport_config.x = x;
+        viewport_config.y = y;
+        viewport_config.width = width;
+        viewport_config.height = height;
     }
 }
 
 static void gfx_citro3d_set_scissor(int x, int y, int width, int height)
 {
-    scissor = true;
+    scissor_config.enable = true;
     if (gGfx3DSMode == GFX_3DS_MODE_AA_22 || gGfx3DSMode == GFX_3DS_MODE_WIDE_AA_12)
     {
-        scissor_x = x * 2;
-        scissor_y = y * 2;
-        scissor_width = (x + width) * 2;
-        scissor_height = (y + height) * 2;
+        scissor_config.x1 = x * 2;
+        scissor_config.y1 = y * 2;
+        scissor_config.x2 = (x + width) * 2;
+        scissor_config.y2 = (y + height) * 2;
     }
     else if (gGfx3DSMode == GFX_3DS_MODE_WIDE)
     {
-        scissor_x = x * 2;
-        scissor_y = y;
-        scissor_width = (x + width) * 2;
-        scissor_height = y + height;
+        scissor_config.x1 = x * 2;
+        scissor_config.y1 = y;
+        scissor_config.x2 = (x + width) * 2;
+        scissor_config.y2 = y + height;
     }
     else // gGfx3DSMode == GFX_3DS_MODE_NORMAL
     {
-        scissor_x = x;
-        scissor_y = y;
-        scissor_width = x + width;
-        scissor_height = y + height;
+        scissor_config.x1 = x;
+        scissor_config.y1 = y;
+        scissor_config.x2 = x + width;
+        scissor_config.y2 = y + height;
     }
 }
 
@@ -710,9 +714,9 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 {
     target->used = true;
     C3D_SetFrameBuf(&target->frameBuf);
-    C3D_SetViewport(viewport_y, viewport_x, viewport_height, viewport_width);
-    if (scissor)
-        C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_y, scissor_x, scissor_height, scissor_width);
+    C3D_SetViewport(viewport_config.y, viewport_config.x, viewport_config.height, viewport_config.width);
+    if (scissor_config.enable)
+        C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2);
 }
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
@@ -768,8 +772,8 @@ static void gfx_citro3d_init(void)
 
     // Default all mat sets to identity
     for (int i = 0; i < NUM_MATRIX_SETS; i++) {
-        memcpy(&game_matrix_sets[i].gameProjection, &IDENTITY_MTX, sizeof(C3D_Mtx));
-        memcpy(&game_matrix_sets[i].modelView,      &IDENTITY_MTX, sizeof(C3D_Mtx));
+        memcpy(&game_matrix_sets[i].game_projection, &IDENTITY_MTX, sizeof(C3D_Mtx));
+        memcpy(&game_matrix_sets[i].model_view,      &IDENTITY_MTX, sizeof(C3D_Mtx));
     }
 }
 
@@ -782,7 +786,7 @@ static void gfx_citro3d_start_frame(void)
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
-    scissor = false;
+    scissor_config.enable = false;
     // reset viewport if video mode changed
     if (gGfx3DSMode != sCurrentGfx3DSMode)
     {
@@ -839,8 +843,8 @@ void gfx_citro3d_apply_game_projection_matrix()
 
 void gfx_citro3d_select_matrix_set(uint32_t matrix_set_id)
 {
-    model_view      = &game_matrix_sets[matrix_set_id].modelView;
-    game_projection = &game_matrix_sets[matrix_set_id].gameProjection;
+    model_view      = &game_matrix_sets[matrix_set_id].model_view;
+    game_projection = &game_matrix_sets[matrix_set_id].game_projection;
 }
 
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
