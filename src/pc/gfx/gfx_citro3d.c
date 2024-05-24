@@ -25,14 +25,6 @@
 #define ARR_INDEX_2D(x_, y_, w_) (y_ * w_ + x_)
 #define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
 
-// RGBA packed into a U32
-#define STRIDE_RGBA     1
-#define STRIDE_RGB      1
-
-#define STRIDE_POSITION 2
-#define STRIDE_TEXTURE  2
-#define STRIDE_FOG      STRIDE_RGBA
-
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 
 static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;

@@ -4,6 +4,14 @@
 
 #include "gfx_3ds_shader_binaries.h"
 
+// RGBA packed into a U32
+#define STRIDE_RGBA     1
+#define STRIDE_RGB      1
+
+#define STRIDE_POSITION 2
+#define STRIDE_TEXTURE  2
+#define STRIDE_FOG      STRIDE_RGBA
+
 struct n3ds_shader {
     const uint8_t* shader_binary;
     const uint32_t* shader_size;
