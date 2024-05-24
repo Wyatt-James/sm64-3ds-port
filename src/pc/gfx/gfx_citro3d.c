@@ -22,6 +22,16 @@
 #define MAX_FOG_LUTS 32
 #define MAX_SHADER_PROGRAMS 32
 
+// A static definition of a C3D Identity Matrix
+#define STATIC_IDENTITY_MTX {\
+        .r = {\
+            {.x = 1},\
+            {.y = 1},\
+            {.z = 1},\
+            {.w = 1}\
+        }\
+    }
+
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 #define U32_AS_FLOAT(v_) (*(float*) &v_)
 
@@ -174,7 +184,9 @@ static void clear_buffers()
         C3D_RenderTargetClear(gTargetBottom, clear_bottom, color_bottom, depth_bottom);
 }
 
-void stereoTilt(C3D_Mtx* mtx, float z, float w)
+static void init_projection_mtx(C3D_Mtx* mtx);
+
+void stereoTilt(C3D_Mtx* mtx, float z, float w, float strength)
 {
     /** ********************** Default L/R stereo perspective function with x/y tilt removed **********************
 
@@ -196,29 +208,33 @@ void stereoTilt(C3D_Mtx* mtx, float z, float w)
     mtx->r[3].z = isLeftHanded ? 1.0f : -1.0f; // kills fog (viewplane data?)
     ************************************************************************************************************ */
 
-    Mtx_Identity(mtx);
-
     switch (s2DMode) {
-        case 0 : // 3D
+        case 0: // 3D
             break;
-        case 1 : // pure 2D
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, mtx);
-            return;
-        case 2 : // goddard hand and press start text
+        case 1: // pure 2D
+            strength = 0.0f;
+            break;
+        case 2: // goddard hand and press start text
             z = (z < 0) ? -32.0f : 32.0f;
             w = (w < 0) ? -32.0f : 32.0f;
             break;
-        case 3 : // credits
+        case 3: // credits
             z = (z < 0) ? -64.0f : 64.0f;
             w = (w < 0) ? -64.0f : 64.0f;
             break;
-        case 4 : // the goddamn score menu
+        case 4: // the goddamn score menu
             return;
     }
 
-    mtx->r[1].z = (z == 0) ? 0 : gSliderLevel / z; // view frustum separation? (+ = deep)
-    mtx->r[1].w = (w == 0) ? 0 : gSliderLevel / w; // camera-to-viewport separation? (+ = pop)
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, mtx);
+    Mtx_Identity(mtx);
+
+    static C3D_Mtx iod_mtx = STATIC_IDENTITY_MTX;
+
+    iod_mtx.r[0].z = (z == 0) ? 0 : -1 * strength / z; // view frustum separation? (+ = deep)
+    iod_mtx.r[0].w = (w == 0) ? 0 : -1 * strength / w; // camera-to-viewport separation? (+ = pop)
+    Mtx_Multiply(mtx, mtx, &iod_mtx);
+
+    init_projection_mtx(mtx);
 }
 
 static void gfx_citro3d_set_2d_mode(int mode_2d)
@@ -738,12 +754,14 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     if (gGfx3DEnabled)
     {
         // left screen
-        stereoTilt(&projection, -iod_config.z, -iod_config.w);
+        stereoTilt(&projection, -iod_config.z, -iod_config.w, gSliderLevel);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
         gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
-        stereoTilt(&projection, iod_config.z, iod_config.w);
+        stereoTilt(&projection, iod_config.z, iod_config.w, gSliderLevel);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
         gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     } else {
@@ -780,6 +798,19 @@ static void gfx_citro3d_init(void)
     }
 }
 
+static void init_projection_mtx(C3D_Mtx* mtx)
+{
+    // 3DS screen is rotated 90 degrees
+    Mtx_RotateZ(mtx, 0.75f*M_TAU, false);
+
+    // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
+    const uint32_t float_as_int = 0x3F4CCCCD;
+    Mtx_Scale(mtx, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
+
+    // z = (z + w) * -0.5
+    Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
+}
+
 static void gfx_citro3d_start_frame(void)
 {
     for (int i = 0; i < num_video_buffers; i++)
@@ -808,16 +839,7 @@ static void gfx_citro3d_start_frame(void)
     screen_clear_configs.bottom.bufs = VIEW_CLEAR_BUFFER_NONE;
 
     Mtx_Identity(&projection);
-
-    // 3DS screen is rotated 90 degrees
-    Mtx_RotateZ(&projection, 0.75f*M_TAU, false);
-
-    // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
-    const uint32_t float_as_int = 0x3F4CCCCD;
-    Mtx_Scale(&projection, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
-
-    // z = (z + w) * -0.5
-    Mtx_Multiply(&projection, &projection, &DEPTH_ADD_W_MTX);
+    init_projection_mtx(&projection);
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &projection);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
