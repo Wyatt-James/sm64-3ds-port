@@ -45,14 +45,14 @@ struct n3ds_shader_vbo_info {
    uint8_t stride;
 };
 
-struct n3ds_shader {
+struct n3ds_shader_info {
     const uint8_t* shader_binary;
     const uint32_t* shader_size;
     const uint32_t identifier;
     struct n3ds_shader_vbo_info vbo_info;
 };
 
-const struct n3ds_shader
+const struct n3ds_shader_info
     shader_default  = { shader_shbin,    &shader_shbin_size,     0, VBO_INFO(V_POS | V_TEX | V_COL1)          }, // position, texture, color rgba
     shader_1        = { shader_1_shbin,  &shader_1_shbin_size,   1, VBO_INFO(V_POS | V_TEX)                   }, // position, texture
  // shader_3        = { shader_3_shbin,  &shader_3_shbin_size,   2, VBO_INFO(V_POS | V_TEX | V_FOG)           }, // position, texture, fog
@@ -65,7 +65,7 @@ const struct n3ds_shader
     shader_20       = { shader_20_shbin, &shader_20_shbin_size,  9, VBO_INFO(V_POS | V_COL1 | V_COL2)         }, // position, 2 colors rgba
     shader_41       = { shader_41_shbin, &shader_41_shbin_size, 10, VBO_INFO(V_POS | V_TEX | V_COL1 | V_COL2) }; // position, texture, 2 colors rgb
 
-const struct n3ds_shader* const shaders[] = {
+const struct n3ds_shader_info* const shaders[] = {
     &shader_default,
     &shader_1,
 //  &shader_3,

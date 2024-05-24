@@ -47,7 +47,7 @@ struct ShaderProgram {
 };
 
 struct video_buffer {
-    const struct n3ds_shader* shader_binary;
+    const struct n3ds_shader_info* shader_info;
     float *ptr;
     uint32_t offset;
     shaderProgram_s shader_program; // pica vertex shader
@@ -455,9 +455,9 @@ static uint8_t calculate_shader_code(bool has_texture, UNUSED bool has_fog, bool
     return shader_code;
 }
 
-static const struct n3ds_shader* get_shader_from_shader_code (uint8_t shader_code)
+static const struct n3ds_shader_info* get_shader_info_from_shader_code (uint8_t shader_code)
 {
-    const struct n3ds_shader* shader = NULL;
+    const struct n3ds_shader_info* shader = NULL;
 
     /* 
      * Used shaders
@@ -511,19 +511,19 @@ static const struct n3ds_shader* get_shader_from_shader_code (uint8_t shader_cod
 }
 
 
-static uint8_t setup_new_buffer_etc(const struct n3ds_shader* shader)
+static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader)
 {
     // Search for the existing shader to avoid loading it twice
     for (int i = 0; i < video_buffers_size; i++)
     {
-        if (shader->identifier == video_buffers[i].shader_binary->identifier)
+        if (shader->identifier == video_buffers[i].shader_info->identifier)
             return i;
     }
 
     // not found, create new
     int id = video_buffers_size++;
     struct video_buffer *cb = &video_buffers[id];
-    cb->shader_binary = shader;
+    cb->shader_info = shader;
 
     DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader->shader_binary, *shader->shader_size); 
 
@@ -566,7 +566,7 @@ static uint8_t setup_new_buffer_etc(const struct n3ds_shader* shader)
     cb->offset = 0;
     // Configure buffers
     BufInfo_Init(&cb->buf_info);
-    BufInfo_Add(&cb->buf_info, cb->ptr, cb->shader_binary->vbo_info.stride * sizeof(float), attr, attr_mask);
+    BufInfo_Add(&cb->buf_info, cb->ptr, cb->shader_info->vbo_info.stride * sizeof(float), attr, attr_mask);
 
     return id;
 }
@@ -599,8 +599,8 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
                                                 prg->cc_features.opt_alpha,
                                                 prg->cc_features.num_inputs > 0,
                                                 prg->cc_features.num_inputs > 1);
-    const struct n3ds_shader* shader = get_shader_from_shader_code(shader_code);
-    prg->buffer_id = setup_new_buffer_etc(shader);
+    const struct n3ds_shader_info* shader = get_shader_info_from_shader_code(shader_code);
+    prg->buffer_id = setup_video_buffer(shader);
 
     update_tex_env(prg, false);
     get_uniform_locations(prg);
@@ -867,7 +867,7 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if (current_buffer->offset * current_buffer->shader_binary->vbo_info.stride > 256 * 1024 / 4)
+    if (current_buffer->offset * current_buffer->shader_info->vbo_info.stride > 256 * 1024 / 4)
     {
         printf("vertex buffer full!\n");
         return;
@@ -875,7 +875,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
 
     // WYATT_TODO actually prevent buffer overruns.
 
-    float* const buf_vbo_head = current_buffer->ptr + current_buffer->offset * current_buffer->shader_binary->vbo_info.stride;
+    float* const buf_vbo_head = current_buffer->ptr + current_buffer->offset * current_buffer->shader_info->vbo_info.stride;
     memcpy(buf_vbo_head, buf_vbo, buf_vbo_len * sizeof(float));
 
     if (gGfx3DEnabled)
