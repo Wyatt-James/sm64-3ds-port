@@ -58,7 +58,7 @@ struct ShaderProgram {
 };
 
 struct video_buffer {
-    uint8_t id;
+    uint8_t shader_code;
     float *ptr;
     uint8_t stride;
     uint32_t offset;
@@ -474,7 +474,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
 
     for (int i = 0; i < video_buffers_size; i++)
     {
-        if (shader_code == video_buffers[i].id)
+        if (shader_code == video_buffers[i].shader_code)
             return i;
     }
 
@@ -482,7 +482,7 @@ static uint8_t setup_new_buffer_etc(bool has_texture, UNUSED bool has_fog, bool 
     int id = video_buffers_size;
     struct video_buffer *cb = &video_buffers[video_buffers_size++];
 
-    cb->id = shader_code;
+    cb->shader_code = shader_code;
 
     u8 *current_shader_shbin = NULL;
     u32 current_shader_shbin_size = 0;
