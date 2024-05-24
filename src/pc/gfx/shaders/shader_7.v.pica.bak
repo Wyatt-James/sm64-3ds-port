@@ -1,4 +1,4 @@
-; texture, fog, 1 color rgba
+; position, texture, fog, color rgba
 ; disabled for fog. Uses shader_5 instead.
 
 ; Uniforms
