@@ -8,7 +8,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <3ds/gpu/enums.h>
+#include <3ds/gpu/enums.h> // Doesn't define or use any types, so can be outside of the guard.
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -40,6 +40,29 @@
 #include "gfx_3ds_shaders.h"
 #include "color_formats.h"
 
+// A static definition of a C3D Identity Matrix
+#define C3D_STATIC_IDENTITY_MTX {\
+        .r = {\
+            {.x = 1.0f},\
+            {.y = 1.0f},\
+            {.z = 1.0f},\
+            {.w = 1.0f}\
+        }\
+    }
+
+
+enum Stereoscopic3dMode {
+    STEREO_3D_NORMAL,       // 3D
+    STEREO_2D_NORMAL,       // Pure 2D
+    STEREO_3D_GODDARD_HAND, // Goddard hand and press start text
+    STEREO_3D_CREDITS,      // Credits
+    STEREO_3D_SCORE_MENU,   // The goddamned score menu
+    STEREO_3D_COUNT         // Number of modes
+};
+
+// Constant matrices, set during initialization.
+extern const C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
+
 // Calculates a GFX_Citro3D shader code based on the provided RSP flags
 uint8_t gfx_citro3d_calculate_shader_code(bool has_texture, UNUSED bool has_fog, bool has_alpha, bool has_color1, bool has_color2);
 
@@ -60,5 +83,11 @@ GPU_CULLMODE gfx_citro3d_convert_cull_mode(uint32_t culling_mode);
 
 // Converts an RSP matrix to a C3D matrix, which has the elements reversed within each row.
 void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx);
+
+// Applies a stereoscopic tilt to the given C3D_Mtx.
+void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength);
+
+// Initializes a projection matrix transform.
+void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx);
 
 #endif

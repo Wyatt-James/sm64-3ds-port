@@ -4,8 +4,47 @@
 #include "gfx_cc.h"
 #include "gfx_citro3d_helpers.h"
 
+// I hate this library
+// hack for redefinition of types in libctru
+// All 3DS includes must be done inside of an equivalent
+// #define/undef block to avoid type redefinition issues.
+#define u64 __3ds_u64
+#define s64 __3ds_s64
+#define u32 __3ds_u32
+#define vu32 __3ds_vu32
+#define vs32 __3ds_vs32
+#define s32 __3ds_s32
+#define u16 __3ds_u16
+#define s16 __3ds_s16
+#define u8 __3ds_u8
+#define s8 __3ds_s8
+#include <c3d/maths.h>
+#undef u64
+#undef s64
+#undef u32
+#undef vu32
+#undef vs32
+#undef s32
+#undef u16
+#undef s16
+#undef u8
+#undef s8
+
 #define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
 #define ARR_INDEX_2D(x_, y_, w_) (y_ * w_ + x_)
+#define U32_AS_FLOAT(v_) (*(float*) &v_)
+
+const C3D_Mtx IDENTITY_MTX = C3D_STATIC_IDENTITY_MTX;
+
+// Add W to Z coordinate
+const C3D_Mtx DEPTH_ADD_W_MTX = {
+                    .r = {
+                        {.x = 1.0f},
+                        {.y = 1.0f},
+                        {.z = 1.0f, .w = 1.0f},
+                        {.w = 1.0f}
+                    }
+               };
 
 uint8_t gfx_citro3d_calculate_shader_code(bool has_texture,
                                           UNUSED bool has_fog,
@@ -180,4 +219,68 @@ void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
     c3d_mtx->r[1].x = sm64_mtx[0][1]; c3d_mtx->r[1].y = sm64_mtx[1][1]; c3d_mtx->r[1].z = sm64_mtx[2][1]; c3d_mtx->r[1].w = sm64_mtx[3][1];
     c3d_mtx->r[2].x = sm64_mtx[0][2]; c3d_mtx->r[2].y = sm64_mtx[1][2]; c3d_mtx->r[2].z = sm64_mtx[2][2]; c3d_mtx->r[2].w = sm64_mtx[3][2];
     c3d_mtx->r[3].x = sm64_mtx[0][3]; c3d_mtx->r[3].y = sm64_mtx[1][3]; c3d_mtx->r[3].z = sm64_mtx[2][3]; c3d_mtx->r[3].w = sm64_mtx[3][3];
+}
+
+void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength)
+{
+    /** ********************** Default L/R stereo perspective function with x/y tilt removed **********************
+
+        Preserving this to show what the proper function *should* look like.
+        TODO: move to gfx_pc before RDP's mv*p happens, for proper and portable stereoscopic support
+
+    float fovy_tan = tanf(fovy * 0.5f * M_PI / 180.0f); // equals 1.0 when FOV is 90
+    float fovy_tan_aspect = fovy_tan * aspect; // equals 1.0 because we are being passed an existing mv*p matrix
+    float shift = iod / (2.0f*screen);
+
+    Mtx_Zeros(mtx); // most values revert to identity matrix anyway, including several that are necessary
+
+    mtx->r[0].x = 1.0f / fovy_tan_aspect; // equals 1.0
+    mtx->r[1].y = 1.0f / fovy_tan; // equals 1.0
+    mtx->r[1].z = -mtx->r[3].z * shift / fovx_tan_invaspect; // equivalent in value to r[1].w at focallen = 1.0
+    mtx->r[1].w = iod / 2.0f; // equivalent in value to r[1].z at focallen = 1.0
+    mtx->r[2].z = -mtx->r[3].z * near / (near - far); // kills zbuffer
+    mtx->r[2].w = near * far / (near - far); // kills clipping plane
+    mtx->r[3].z = isLeftHanded ? 1.0f : -1.0f; // kills fog (viewplane data?)
+    ************************************************************************************************************ */
+
+    switch (mode_2d) {
+        case STEREO_3D_NORMAL:
+            break;
+        case STEREO_3D_GODDARD_HAND: 
+            z = (z < 0) ? -32.0f : 32.0f;
+            w = (w < 0) ? -32.0f : 32.0f;
+            break;
+        case STEREO_3D_CREDITS:
+            z = (z < 0) ? -64.0f : 64.0f;
+            w = (w < 0) ? -64.0f : 64.0f;
+            break;
+        default:
+        case STEREO_3D_SCORE_MENU: // WYATT_TODO FIXME this is broken as hell
+        case STEREO_2D_NORMAL:
+            strength = 0.0f;
+            break;
+    }
+
+    if (strength != 0.0f) {
+        static C3D_Mtx iod_mtx = C3D_STATIC_IDENTITY_MTX;
+
+        iod_mtx.r[0].z = (z == 0) ? 0 : -1 * strength / z; // view frustum separation? (+ = deep)
+        iod_mtx.r[0].w = (w == 0) ? 0 : -1 * strength / w; // camera-to-viewport separation? (+ = pop)
+        Mtx_Multiply(dst, src, &iod_mtx);
+    }
+    else if (src != dst)
+        memcpy(dst, src, sizeof(C3D_Mtx));
+}
+
+void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx)
+{
+    // 3DS screen is rotated 90 degrees
+    Mtx_RotateZ(mtx, 0.75f*M_TAU, false);
+
+    // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
+    const uint32_t float_as_int = 0x3F4CCCCD;
+    Mtx_Scale(mtx, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
+
+    // z = (z + w) * -0.5
+    Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
 }

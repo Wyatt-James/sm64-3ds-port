@@ -22,18 +22,7 @@
 #define MAX_FOG_LUTS 32
 #define MAX_SHADER_PROGRAMS 32
 
-// A static definition of a C3D Identity Matrix
-#define STATIC_IDENTITY_MTX {\
-        .r = {\
-            {.x = 1},\
-            {.y = 1},\
-            {.z = 1},\
-            {.w = 1}\
-        }\
-    }
-
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
-#define U32_AS_FLOAT(v_) (*(float*) &v_)
 
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 #define BSWAP32(v_) (__builtin_bswap32(v_))
@@ -139,9 +128,6 @@ static struct IodConfig iod_config = { .z = 8.0f, .w = 16.0f };
 
 static enum Stereoscopic3dMode s2DMode = 0;
 
-// Constant matrices, set during initialization.
-static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
-
 // Selectable groups of game matrix sets
 static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
 
@@ -182,61 +168,6 @@ static void clear_buffers()
     // Clear bottom screen only if it needs re-rendering.
     if (clear_bottom)
         C3D_RenderTargetClear(gTargetBottom, clear_bottom, color_bottom, depth_bottom);
-}
-
-static void init_projection_mtx(C3D_Mtx* mtx);
-
-void stereoTilt(C3D_Mtx* mtx, float z, float w, float strength, enum Stereoscopic3dMode mode_2d)
-{
-    /** ********************** Default L/R stereo perspective function with x/y tilt removed **********************
-
-        Preserving this to show what the proper function *should* look like.
-        TODO: move to gfx_pc before RDP's mv*p happens, for proper and portable stereoscopic support
-
-    float fovy_tan = tanf(fovy * 0.5f * M_PI / 180.0f); // equals 1.0 when FOV is 90
-    float fovy_tan_aspect = fovy_tan * aspect; // equals 1.0 because we are being passed an existing mv*p matrix
-    float shift = iod / (2.0f*screen);
-
-    Mtx_Zeros(mtx); // most values revert to identity matrix anyway, including several that are necessary
-
-    mtx->r[0].x = 1.0f / fovy_tan_aspect; // equals 1.0
-    mtx->r[1].y = 1.0f / fovy_tan; // equals 1.0
-    mtx->r[1].z = -mtx->r[3].z * shift / fovx_tan_invaspect; // equivalent in value to r[1].w at focallen = 1.0
-    mtx->r[1].w = iod / 2.0f; // equivalent in value to r[1].z at focallen = 1.0
-    mtx->r[2].z = -mtx->r[3].z * near / (near - far); // kills zbuffer
-    mtx->r[2].w = near * far / (near - far); // kills clipping plane
-    mtx->r[3].z = isLeftHanded ? 1.0f : -1.0f; // kills fog (viewplane data?)
-    ************************************************************************************************************ */
-
-    switch (mode_2d) {
-        case STEREO_3D_NORMAL:
-            break;
-        case STEREO_3D_GODDARD_HAND: 
-            z = (z < 0) ? -32.0f : 32.0f;
-            w = (w < 0) ? -32.0f : 32.0f;
-            break;
-        case STEREO_3D_CREDITS:
-            z = (z < 0) ? -64.0f : 64.0f;
-            w = (w < 0) ? -64.0f : 64.0f;
-            break;
-        default:
-        case STEREO_3D_SCORE_MENU: // WYATT_TODO FIXME this is broken as hell
-        case STEREO_2D_NORMAL:
-            strength = 0.0f;
-            break;
-    }
-
-    Mtx_Identity(mtx);
-
-    if (strength != 0.0f) {
-        static C3D_Mtx iod_mtx = STATIC_IDENTITY_MTX;
-
-        iod_mtx.r[0].z = (z == 0) ? 0 : -1 * strength / z; // view frustum separation? (+ = deep)
-        iod_mtx.r[0].w = (w == 0) ? 0 : -1 * strength / w; // camera-to-viewport separation? (+ = pop)
-        Mtx_Multiply(mtx, mtx, &iod_mtx);
-    }
-
-    init_projection_mtx(mtx);
 }
 
 static void gfx_citro3d_set_2d_mode(int mode_2d)
@@ -759,13 +690,17 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     if (gGfx3DEnabled)
     {
         // left screen
-        stereoTilt(&projection, -iod_config.z, -iod_config.w, gSliderLevel, s2DMode);
+        Mtx_Identity(&projection);
+        gfx_citro3d_mtx_stereo_tilt(&projection, &projection, s2DMode, -iod_config.z, -iod_config.w, gSliderLevel);
+        gfx_citro3d_apply_projection_mtx_preset(&projection);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
         gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
-        stereoTilt(&projection, iod_config.z, iod_config.w, gSliderLevel, s2DMode);
+        Mtx_Identity(&projection);
+        gfx_citro3d_mtx_stereo_tilt(&projection, &projection, s2DMode, iod_config.z, iod_config.w, gSliderLevel);
+        gfx_citro3d_apply_projection_mtx_preset(&projection);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
         gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
@@ -790,30 +725,11 @@ static void gfx_citro3d_init(void)
     C3D_FrameRate(30);
 #endif
 
-    Mtx_Identity(&IDENTITY_MTX);
-    
-    // Add W to Z coordinate
-    Mtx_Identity(&DEPTH_ADD_W_MTX);
-    DEPTH_ADD_W_MTX.r[2].w = 1.0f;
-
     // Default all mat sets to identity
     for (int i = 0; i < NUM_MATRIX_SETS; i++) {
         memcpy(&game_matrix_sets[i].game_projection, &IDENTITY_MTX, sizeof(C3D_Mtx));
         memcpy(&game_matrix_sets[i].model_view,      &IDENTITY_MTX, sizeof(C3D_Mtx));
     }
-}
-
-static void init_projection_mtx(C3D_Mtx* mtx)
-{
-    // 3DS screen is rotated 90 degrees
-    Mtx_RotateZ(mtx, 0.75f*M_TAU, false);
-
-    // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
-    const uint32_t float_as_int = 0x3F4CCCCD;
-    Mtx_Scale(mtx, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
-
-    // z = (z + w) * -0.5
-    Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -844,7 +760,7 @@ static void gfx_citro3d_start_frame(void)
     screen_clear_configs.bottom.bufs = VIEW_CLEAR_BUFFER_NONE;
 
     Mtx_Identity(&projection);
-    init_projection_mtx(&projection);
+    gfx_citro3d_apply_projection_mtx_preset(&projection);
 
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &projection);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
