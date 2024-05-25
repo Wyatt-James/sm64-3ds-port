@@ -759,13 +759,13 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     if (gGfx3DEnabled)
     {
         // left screen
-        stereoTilt(&projection, -iod_config.z, -iod_config.w, gSliderLevel);
+        stereoTilt(&projection, -iod_config.z, -iod_config.w, gSliderLevel, s2DMode);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
         gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
-        stereoTilt(&projection, iod_config.z, iod_config.w, gSliderLevel);
+        stereoTilt(&projection, iod_config.z, iod_config.w, gSliderLevel, s2DMode);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
         gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
