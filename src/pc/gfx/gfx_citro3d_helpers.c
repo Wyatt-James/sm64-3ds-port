@@ -278,8 +278,8 @@ void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx)
     Mtx_RotateZ(mtx, 0.75f*M_TAU, false);
 
     // 3DS depth needs a -0.5x scale, and correct the aspect ratio too
-    const uint32_t float_as_int = 0x3F4CCCCD;
-    Mtx_Scale(mtx, U32_AS_FLOAT(float_as_int), 1.0, -0.5);
+    const uint32_t aspect_ratio_factor = 0x3F4CCCCD;
+    Mtx_Scale(mtx, U32_AS_FLOAT(aspect_ratio_factor), 1.0, -0.5);
 
     // z = (z + w) * -0.5
     Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
