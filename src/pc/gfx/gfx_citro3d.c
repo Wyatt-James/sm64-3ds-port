@@ -137,7 +137,7 @@ struct ScissorConfig scissor_config = { .enable = false };
 
 static struct IodConfig iod_config = { .z = 8.0f, .w = 16.0f };
 
-static int s2DMode = 0;
+static enum Stereoscopic3dMode s2DMode = 0;
 
 // Constant matrices, set during initialization.
 static C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
@@ -186,7 +186,7 @@ static void clear_buffers()
 
 static void init_projection_mtx(C3D_Mtx* mtx);
 
-void stereoTilt(C3D_Mtx* mtx, float z, float w, float strength)
+void stereoTilt(C3D_Mtx* mtx, float z, float w, float strength, enum Stereoscopic3dMode mode_2d)
 {
     /** ********************** Default L/R stereo perspective function with x/y tilt removed **********************
 
@@ -208,38 +208,43 @@ void stereoTilt(C3D_Mtx* mtx, float z, float w, float strength)
     mtx->r[3].z = isLeftHanded ? 1.0f : -1.0f; // kills fog (viewplane data?)
     ************************************************************************************************************ */
 
-    switch (s2DMode) {
-        case 0: // 3D
+    switch (mode_2d) {
+        case STEREO_3D_NORMAL:
             break;
-        case 1: // pure 2D
-            strength = 0.0f;
-            break;
-        case 2: // goddard hand and press start text
+        case STEREO_3D_GODDARD_HAND: 
             z = (z < 0) ? -32.0f : 32.0f;
             w = (w < 0) ? -32.0f : 32.0f;
             break;
-        case 3: // credits
+        case STEREO_3D_CREDITS:
             z = (z < 0) ? -64.0f : 64.0f;
             w = (w < 0) ? -64.0f : 64.0f;
             break;
-        case 4: // the goddamn score menu
-            return;
+        default:
+        case STEREO_3D_SCORE_MENU: // WYATT_TODO FIXME this is broken as hell
+        case STEREO_2D_NORMAL:
+            strength = 0.0f;
+            break;
     }
 
     Mtx_Identity(mtx);
 
-    static C3D_Mtx iod_mtx = STATIC_IDENTITY_MTX;
+    if (strength != 0.0f) {
+        static C3D_Mtx iod_mtx = STATIC_IDENTITY_MTX;
 
-    iod_mtx.r[0].z = (z == 0) ? 0 : -1 * strength / z; // view frustum separation? (+ = deep)
-    iod_mtx.r[0].w = (w == 0) ? 0 : -1 * strength / w; // camera-to-viewport separation? (+ = pop)
-    Mtx_Multiply(mtx, mtx, &iod_mtx);
+        iod_mtx.r[0].z = (z == 0) ? 0 : -1 * strength / z; // view frustum separation? (+ = deep)
+        iod_mtx.r[0].w = (w == 0) ? 0 : -1 * strength / w; // camera-to-viewport separation? (+ = pop)
+        Mtx_Multiply(mtx, mtx, &iod_mtx);
+    }
 
     init_projection_mtx(mtx);
 }
 
 static void gfx_citro3d_set_2d_mode(int mode_2d)
 {
-    s2DMode = mode_2d;
+    if (mode_2d < 0 || mode_2d > STEREO_3D_COUNT)
+        mode_2d = STEREO_3D_NORMAL;
+
+    s2DMode = (enum Stereoscopic3dMode) mode_2d;
 }
 
 void gfx_citro3d_set_iod(float z, float w)

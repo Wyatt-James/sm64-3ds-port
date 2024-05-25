@@ -13,6 +13,15 @@ enum ViewportId3DS {
     VIEW_BOTTOM_SCREEN = 1
 };
 
+enum Stereoscopic3dMode {
+    STEREO_3D_NORMAL,       // 3D
+    STEREO_2D_NORMAL,       // Pure 2D
+    STEREO_3D_GODDARD_HAND, // Goddard hand and press start text
+    STEREO_3D_CREDITS,      // Credits
+    STEREO_3D_SCORE_MENU,   // The goddamned score menu
+    STEREO_3D_COUNT         // Number of modes
+};
+
 struct UniformLocations {
     int projection_mtx,
         model_view_mtx,
