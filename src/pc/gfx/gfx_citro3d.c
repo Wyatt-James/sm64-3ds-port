@@ -27,8 +27,6 @@
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 #define BSWAP32(v_) (__builtin_bswap32(v_))
 
-static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
-
 static DVLB_s* sVShaderDvlb;
 static shaderProgram_s sShaderProgram;
 static float* sVboBuffer;
@@ -677,11 +675,14 @@ static void gfx_citro3d_start_frame(void)
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
     scissor_config.enable = false;
+    
+    static Gfx3DSMode current_gfx_mode = GFX_3DS_MODE_NORMAL;
+
     // reset viewport if video mode changed
-    if (gGfx3DSMode != sCurrentGfx3DSMode)
+    if (gGfx3DSMode != current_gfx_mode)
     {
         gfx_citro3d_set_viewport(0, 0, 400, 240);
-        sCurrentGfx3DSMode = gGfx3DSMode;
+        current_gfx_mode = gGfx3DSMode;
     }
 
     // Due to hardware differences, the PC port always clears the depth buffer,
