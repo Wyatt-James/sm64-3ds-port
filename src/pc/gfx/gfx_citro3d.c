@@ -606,7 +606,7 @@ void gfx_citro3d_select_render_target(C3D_RenderTarget* target)
     C3D_SetFrameBuf(&target->frameBuf);
     C3D_SetViewport(viewport_config.y, viewport_config.x, viewport_config.height, viewport_config.width);
     if (scissor_config.enable)
-        C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2);
+        C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2); // WYATT_TODO FIXME bug? should the last two params be reversed?
 }
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
