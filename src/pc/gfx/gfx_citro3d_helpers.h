@@ -115,4 +115,10 @@ void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, flo
 // Converts an RSP 2D mode to its GFX_Citro3D counterpart.
 enum Stereoscopic3dMode gfx_citro3d_convert_2d_mode(int mode_2d);
 
+// Does nothing!
+void stub_void(void);
+
+// Returns true!
+bool stub_return_true(void);
+
 #endif

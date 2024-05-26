@@ -349,3 +349,13 @@ enum Stereoscopic3dMode gfx_citro3d_convert_2d_mode(int mode_2d)
 
     return (enum Stereoscopic3dMode) mode_2d;
 }
+
+void stub_void(void)
+{
+    
+}
+
+bool stub_return_true(void)
+{
+    return true;
+}

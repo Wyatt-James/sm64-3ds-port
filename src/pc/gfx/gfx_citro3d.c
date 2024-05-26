@@ -164,11 +164,6 @@ void gfx_citro3d_set_iod(float z, float w)
     gfx_citro3d_convert_iod_settings(&iod_config, z, w);
 }
 
-static bool gfx_citro3d_z_is_from_0_to_1(void)
-{
-    return true;
-}
-
 static void gfx_citro3d_unload_shader(UNUSED struct ShaderProgram *old_prg)
 {
 }
@@ -734,10 +729,6 @@ void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
     C3D_CullFace(gfx_citro3d_convert_cull_mode(culling_mode));
 }
 
-static void gfx_citro3d_on_resize(void)
-{
-}
-
 static void gfx_citro3d_end_frame(void)
 {
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &IDENTITY_MTX);
@@ -752,10 +743,6 @@ static void gfx_citro3d_end_frame(void)
     update_shader(false);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
-}
-
-static void gfx_citro3d_finish_render(void)
-{
 }
 
 static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
@@ -827,7 +814,7 @@ void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum Vie
 }
 
 struct GfxRenderingAPI gfx_citro3d_api = {
-    gfx_citro3d_z_is_from_0_to_1,
+    stub_return_true, // z_is_from_0_to_1,
     gfx_citro3d_unload_shader,
     gfx_citro3d_load_shader,
     gfx_citro3d_create_and_load_new_shader,
@@ -845,10 +832,10 @@ struct GfxRenderingAPI gfx_citro3d_api = {
     gfx_citro3d_set_use_alpha,
     gfx_citro3d_draw_triangles_helper,
     gfx_citro3d_init,
-    gfx_citro3d_on_resize,
+    stub_void, // on_resize
     gfx_citro3d_start_frame,
     gfx_citro3d_end_frame,
-    gfx_citro3d_finish_render,
+    stub_void, // finish_render
     gfx_citro3d_set_fog,
     gfx_citro3d_set_fog_color,
     gfx_citro3d_set_2d_mode,
