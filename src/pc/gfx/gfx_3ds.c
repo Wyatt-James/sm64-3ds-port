@@ -146,7 +146,7 @@ static void initialise_screens()
         DISPLAY_TRANSFER_FLAGS | GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
 
     // Required for cake screen
-    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
+    gfx_citro3d_set_viewport_clear_buffer_mode(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 
     // consoleInit(GFX_BOTTOM, NULL);
 }
@@ -353,7 +353,7 @@ static void gfx_3ds_handle_events(void)
     }
 
     if (gBottomScreenNeedsRender)
-        gfx_citro3d_set_viewport_clear_buffer(VIEW_BOTTOM_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
+        gfx_citro3d_set_viewport_clear_buffer_mode(VIEW_BOTTOM_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 }
 
 float cpu_time, gpu_time;
