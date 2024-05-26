@@ -103,7 +103,6 @@ static int sCurShader = 0;
 static bool sDepthTestOn = false;
 static bool sDepthUpdateOn = false;
 static bool sDepthDecal = false;
-static bool sUseBlend = false;
 
 // calling FrameDrawOn resets viewport
 struct ViewportConfig viewport_config;
@@ -551,18 +550,12 @@ static void gfx_citro3d_set_scissor(int x, int y, int width, int height)
     gfx_citro3d_convert_scissor_settings(&scissor_config, gGfx3DSMode, x, y, width, height);
 }
 
-static void applyBlend()
+static void gfx_citro3d_set_use_alpha(bool use_alpha)
 {
-    if (sUseBlend)
+    if (use_alpha)
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
     else
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
-}
-
-static void gfx_citro3d_set_use_alpha(bool use_alpha)
-{
-    sUseBlend = use_alpha;
-    applyBlend();
 }
 
 static void adjust_state_for_two_color_tris(float buf_vbo[])
