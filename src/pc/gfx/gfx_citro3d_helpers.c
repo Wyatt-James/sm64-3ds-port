@@ -1,8 +1,8 @@
 #include <PR/gbi.h>
 #include <stdio.h>
 
-#include "gfx_cc.h"
 #include "gfx_citro3d_helpers.h"
+#include "gfx_cc.h"
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -283,4 +283,61 @@ void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx)
 
     // z = (z + w) * -0.5
     Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
+}
+
+void gfx_citro3d_convert_viewport_settings(struct ViewportConfig* viewport_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
+{
+    if (gfx_mode == GFX_3DS_MODE_AA_22 || gfx_mode == GFX_3DS_MODE_WIDE_AA_12)
+    {
+        viewport_config->x = x * 2;
+        viewport_config->y = y * 2;
+        viewport_config->width = width * 2;
+        viewport_config->height = height * 2;
+    }
+    else if (gfx_mode == GFX_3DS_MODE_WIDE)
+    {
+        viewport_config->x = x * 2;
+        viewport_config->y = y;
+        viewport_config->width = width * 2;
+        viewport_config->height = height;
+    }
+    else // gfx_mode == GFX_3DS_MODE_NORMAL
+    {
+        viewport_config->x = x;
+        viewport_config->y = y;
+        viewport_config->width = width;
+        viewport_config->height = height;
+    }
+}
+
+void gfx_citro3d_convert_scissor_settings(struct ScissorConfig* scissor_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
+{
+    scissor_config->enable = true;
+    if (gfx_mode == GFX_3DS_MODE_AA_22 || gfx_mode == GFX_3DS_MODE_WIDE_AA_12)
+    {
+        scissor_config->x1 = x * 2;
+        scissor_config->y1 = y * 2;
+        scissor_config->x2 = (x + width) * 2;
+        scissor_config->y2 = (y + height) * 2;
+    }
+    else if (gfx_mode == GFX_3DS_MODE_WIDE)
+    {
+        scissor_config->x1 = x * 2;
+        scissor_config->y1 = y;
+        scissor_config->x2 = (x + width) * 2;
+        scissor_config->y2 = y + height;
+    }
+    else // gfx_mode == GFX_3DS_MODE_NORMAL
+    {
+        scissor_config->x1 = x;
+        scissor_config->y1 = y;
+        scissor_config->x2 = x + width;
+        scissor_config->y2 = y + height;
+    }
+}
+
+void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, float w)
+{
+    iod_config->z = z;
+    iod_config->w = w;
 }

@@ -38,6 +38,7 @@
 
 #include "macros.h"
 #include "gfx_3ds_shaders.h"
+#include "gfx_3ds.h"
 #include "color_formats.h"
 
 // A static definition of a C3D Identity Matrix
@@ -58,6 +59,19 @@ enum Stereoscopic3dMode {
     STEREO_3D_CREDITS,      // Credits
     STEREO_3D_SCORE_MENU,   // The goddamned score menu
     STEREO_3D_COUNT         // Number of modes
+};
+
+struct ScissorConfig {
+    int x1, y1, x2, y2;
+    bool enable;
+};
+
+struct ViewportConfig {
+    int x, y, width, height;
+};
+
+struct IodConfig {
+    float z, w;
 };
 
 // Constant matrices, set during initialization.
@@ -89,5 +103,13 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
 
 // Initializes a projection matrix transform.
 void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx);
+
+// Converts an RSP viewport config to its GFX_Citro3D counterpart
+void gfx_citro3d_convert_viewport_settings(struct ViewportConfig* viewport_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height);
+
+// Converts an RSP viewport config to its GFX_Citro3D counterpart
+void gfx_citro3d_convert_scissor_settings(struct ScissorConfig* scissor_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height);
+
+void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, float w);
 
 #endif

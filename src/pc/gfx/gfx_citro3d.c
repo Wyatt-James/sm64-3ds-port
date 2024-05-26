@@ -60,19 +60,6 @@ struct FogLutHandle {
     C3D_FogLut lut;
 };
 
-struct ScissorConfig {
-    int x1, y1, x2, y2;
-    bool enable;
-};
-
-struct ViewportConfig {
-    int x, y, width, height;
-};
-
-struct IodConfig {
-    float z, w;
-};
-
 struct ScreenClearConfig {
     enum ViewportClearBuffer bufs;
     union RGBA32 color;
@@ -180,8 +167,7 @@ static void gfx_citro3d_set_2d_mode(int mode_2d)
 
 void gfx_citro3d_set_iod(float z, float w)
 {
-    iod_config.z = z;
-    iod_config.w = w;
+    gfx_citro3d_convert_iod_settings(&iod_config, z, w);
 }
 
 static bool gfx_citro3d_z_is_from_0_to_1(void)
@@ -560,53 +546,12 @@ static void gfx_citro3d_set_zmode_decal(bool zmode_decal)
 
 static void gfx_citro3d_set_viewport(int x, int y, int width, int height)
 {
-    if (gGfx3DSMode == GFX_3DS_MODE_AA_22 || gGfx3DSMode == GFX_3DS_MODE_WIDE_AA_12)
-    {
-        viewport_config.x = x * 2;
-        viewport_config.y = y * 2;
-        viewport_config.width = width * 2;
-        viewport_config.height = height * 2;
-    }
-    else if (gGfx3DSMode == GFX_3DS_MODE_WIDE)
-    {
-        viewport_config.x = x * 2;
-        viewport_config.y = y;
-        viewport_config.width = width * 2;
-        viewport_config.height = height;
-    }
-    else // gGfx3DSMode == GFX_3DS_MODE_NORMAL
-    {
-        viewport_config.x = x;
-        viewport_config.y = y;
-        viewport_config.width = width;
-        viewport_config.height = height;
-    }
+    gfx_citro3d_convert_viewport_settings(&viewport_config, gGfx3DSMode, x, y, width, height);
 }
 
 static void gfx_citro3d_set_scissor(int x, int y, int width, int height)
 {
-    scissor_config.enable = true;
-    if (gGfx3DSMode == GFX_3DS_MODE_AA_22 || gGfx3DSMode == GFX_3DS_MODE_WIDE_AA_12)
-    {
-        scissor_config.x1 = x * 2;
-        scissor_config.y1 = y * 2;
-        scissor_config.x2 = (x + width) * 2;
-        scissor_config.y2 = (y + height) * 2;
-    }
-    else if (gGfx3DSMode == GFX_3DS_MODE_WIDE)
-    {
-        scissor_config.x1 = x * 2;
-        scissor_config.y1 = y;
-        scissor_config.x2 = (x + width) * 2;
-        scissor_config.y2 = y + height;
-    }
-    else // gGfx3DSMode == GFX_3DS_MODE_NORMAL
-    {
-        scissor_config.x1 = x;
-        scissor_config.y1 = y;
-        scissor_config.x2 = x + width;
-        scissor_config.y2 = y + height;
-    }
+    gfx_citro3d_convert_scissor_settings(&scissor_config, gGfx3DSMode, x, y, width, height);
 }
 
 static void applyBlend()
