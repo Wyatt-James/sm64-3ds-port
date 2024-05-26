@@ -341,3 +341,11 @@ void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, flo
     iod_config->z = z;
     iod_config->w = w;
 }
+
+enum Stereoscopic3dMode gfx_citro3d_convert_2d_mode(int mode_2d)
+{
+    if (mode_2d < 0 || mode_2d > STEREO_3D_COUNT)
+        mode_2d = STEREO_3D_NORMAL;
+
+    return (enum Stereoscopic3dMode) mode_2d;
+}

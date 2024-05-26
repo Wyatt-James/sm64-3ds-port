@@ -159,10 +159,7 @@ static void clear_buffers()
 
 static void gfx_citro3d_set_2d_mode(int mode_2d)
 {
-    if (mode_2d < 0 || mode_2d > STEREO_3D_COUNT)
-        mode_2d = STEREO_3D_NORMAL;
-
-    s2DMode = (enum Stereoscopic3dMode) mode_2d;
+    s2DMode = gfx_citro3d_convert_2d_mode(mode_2d);
 }
 
 void gfx_citro3d_set_iod(float z, float w)

@@ -51,7 +51,6 @@
         }\
     }
 
-
 enum Stereoscopic3dMode {
     STEREO_3D_NORMAL,       // 3D
     STEREO_2D_NORMAL,       // Pure 2D
@@ -104,12 +103,16 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
 // Initializes a projection matrix transform.
 void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx);
 
-// Converts an RSP viewport config to its GFX_Citro3D counterpart
+// Converts an RSP viewport config to its GFX_Citro3D counterpart.
 void gfx_citro3d_convert_viewport_settings(struct ViewportConfig* viewport_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height);
 
-// Converts an RSP viewport config to its GFX_Citro3D counterpart
+// Converts an RSP viewport config to its GFX_Citro3D counterpart.
 void gfx_citro3d_convert_scissor_settings(struct ScissorConfig* scissor_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height);
 
+// Converts an RSP IOD config to its GFX_Citro3D counterpart.
 void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, float w);
+
+// Converts an RSP 2D mode to its GFX_Citro3D counterpart.
+enum Stereoscopic3dMode gfx_citro3d_convert_2d_mode(int mode_2d);
 
 #endif
