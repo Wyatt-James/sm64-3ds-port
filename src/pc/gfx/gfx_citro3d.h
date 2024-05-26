@@ -40,7 +40,8 @@ void gfx_citro3d_set_viewport_clear_depth(enum ViewportId3DS viewport, uint32_t 
 
 // Sets a buffer to be cleared for the given viewport on the next frame.
 // All flags provided will be cleared on gfx_citro3d_start_frame().
-void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode);
+// Flags are logically OR-ed together.
+void gfx_citro3d_set_viewport_clear_buffer_mode(enum ViewportId3DS viewport, enum ViewportClearBuffer mode);
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4]);
 void gfx_citro3d_set_game_projection_matrix(float mtx[4][4]);

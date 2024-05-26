@@ -682,7 +682,7 @@ static void gfx_citro3d_start_frame(void)
 
     // Due to hardware differences, the PC port always clears the depth buffer,
     // rather than just when the N64 would clear it.
-    gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
+    gfx_citro3d_set_viewport_clear_buffer_mode(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
 
     clear_buffers();
 
@@ -811,7 +811,7 @@ void gfx_citro3d_set_viewport_clear_depth(enum ViewportId3DS viewport, uint32_t 
     screen_clear_configs.array[viewport].depth = depth;
 }
 
-void gfx_citro3d_set_viewport_clear_buffer(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
+void gfx_citro3d_set_viewport_clear_buffer_mode(enum ViewportId3DS viewport, enum ViewportClearBuffer mode)
 {
     screen_clear_configs.array[viewport].bufs |= mode;
 }
