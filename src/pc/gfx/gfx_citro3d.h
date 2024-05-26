@@ -27,13 +27,13 @@ extern struct GfxRenderingAPI gfx_citro3d_api;
 // WYATT_TODO figure out how to get these functions into the GfxRenderingAPI. I'm done for tonight.
 
 // Sets the clear color for a Viewport.
-void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+void gfx_citro3d_set_viewport_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
 // Sets the clear color for a Viewport.
-void gfx_citro3d_set_clear_color_u32(enum ViewportId3DS viewport, uint32_t color);
+void gfx_citro3d_set_viewport_clear_color_u32(enum ViewportId3DS viewport, uint32_t color);
 
 // Sets the clear color for a Viewport.
-void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, union RGBA32 color);
+void gfx_citro3d_set_viewport_clear_color_RGBA32(enum ViewportId3DS viewport, union RGBA32 color);
 
 // Sets the clear depth for a Viewport.
 void gfx_citro3d_set_viewport_clear_depth(enum ViewportId3DS viewport, uint32_t depth);

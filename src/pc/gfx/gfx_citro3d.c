@@ -788,7 +788,7 @@ static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a
     fog_color.a = a;
 }
 
-void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+void gfx_citro3d_set_viewport_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
     screen_clear_configs.array[viewport].color.r = r;
     screen_clear_configs.array[viewport].color.g = g;
@@ -796,12 +796,12 @@ void gfx_citro3d_set_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t
     screen_clear_configs.array[viewport].color.a = a;
 }
 
-void gfx_citro3d_set_clear_color_u32(enum ViewportId3DS viewport, uint32_t color)
+void gfx_citro3d_set_viewport_clear_color_u32(enum ViewportId3DS viewport, uint32_t color)
 {
     screen_clear_configs.array[viewport].color.u32 = color;
 }
 
-void gfx_citro3d_set_clear_color_RGBA32(enum ViewportId3DS viewport, union RGBA32 color)
+void gfx_citro3d_set_viewport_clear_color_RGBA32(enum ViewportId3DS viewport, union RGBA32 color)
 {
     screen_clear_configs.array[viewport].color.u32 = color.u32;
 }
