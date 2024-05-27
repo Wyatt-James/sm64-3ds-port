@@ -15,11 +15,11 @@
 
 #include "gfx_citro3d.h"
 #include "gfx_citro3d_helpers.h"
+#include "gfx_citro3d_fog_cache.h"
 #include "color_conversion.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define MAX_VIDEO_BUFFERS 16
-#define MAX_FOG_LUTS 32
 #define MAX_SHADER_PROGRAMS 32
 
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
@@ -53,11 +53,6 @@ struct VideoBuffer {
     C3D_BufInfo buf_info;
 };
 
-struct FogLutHandle {
-    uint32_t id;
-    C3D_FogLut lut;
-};
-
 struct ScreenClearConfig {
     enum ViewportClearBuffer bufs;
     union RGBA32 color;
@@ -83,9 +78,7 @@ static uint8_t num_video_buffers = 0;
 static struct ShaderProgram sShaderProgramPool[MAX_SHADER_PROGRAMS];
 static uint8_t sShaderProgramPoolSize;
 
-static struct FogLutHandle fog_lut[MAX_FOG_LUTS];
-static struct FogLutHandle* current_fog_lut = NULL;
-static uint8_t num_fog_luts = 0;
+struct FogCache fog_cache;
 static union RGBA32 fog_color;
 
 static u32 sTexBuf[16 * 1024] __attribute__((aligned(32)));
@@ -304,7 +297,7 @@ static void update_shader(bool swap_input)
     {
         C3D_FogGasMode(GPU_FOG, GPU_PLAIN_DENSITY, true);
         C3D_FogColor(fog_color.u32);
-        C3D_FogLutBind(&current_fog_lut->lut);
+        C3D_FogLutBind(fog_cache_current(&fog_cache));
     } else {
         C3D_FogGasMode(GPU_NO_FOG, GPU_PLAIN_DENSITY, false);
     }
@@ -658,6 +651,8 @@ static void gfx_citro3d_init(void)
         memcpy(&game_matrix_sets[i].game_projection, &IDENTITY_MTX, sizeof(C3D_Mtx));
         memcpy(&game_matrix_sets[i].model_view,      &IDENTITY_MTX, sizeof(C3D_Mtx));
     }
+
+    fog_cache_init(&fog_cache);
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -747,37 +742,13 @@ static void gfx_citro3d_end_frame(void)
 
 static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
 {
-    // dumb enough
-    uint32_t id = (from << 16) | to;
-
-    // current already loaded
-    if (current_fog_lut != NULL && current_fog_lut->id == id)
-        return;
-
-    // lut already calculated
-    for (int i = 0; i < num_fog_luts; i++)
-    {
-        if (fog_lut[i].id == id)
-        {
-            current_fog_lut = &fog_lut[i];
-            return;
-        }
-    }
-
-    // new lut required
-    if (num_fog_luts == MAX_FOG_LUTS)
-    {
-        printf("Fog exhausted!\n");
-        return;
-    }
-
-    current_fog_lut = &fog_lut[num_fog_luts++];
-    current_fog_lut->id = id;
+    enum FogCacheResult r = fog_cache_load(&fog_cache, from, to);
 
     // FIXME: The near/far factors are personal preference
     // BOB:  6400, 59392 => 0.16, 116
     // JRB:  1280, 64512 => 0.80, 126
-    FogLut_Exp(&current_fog_lut->lut, 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
+    if (r == FOGCACHE_MISS)
+        FogLut_Exp(fog_cache_current(&fog_cache), 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
 }
 
 static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
