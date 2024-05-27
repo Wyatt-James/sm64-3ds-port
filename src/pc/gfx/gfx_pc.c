@@ -937,6 +937,8 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
                     case CC_SHADE:
                         if (LIKELY(use_fog)) // Most alpha tris in my benchmark use fog
                             color.a = 255;
+                        else
+                            color.a = v_arr[vtx]->color.a;
                         break;
                     case CC_ENV:
                         color.a = rdp.env_color.a;
