@@ -742,12 +742,10 @@ static void gfx_citro3d_end_frame(void)
 
 static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
 {
-    enum FogCacheResult r = fog_cache_load(&fog_cache, from, to);
-
     // FIXME: The near/far factors are personal preference
     // BOB:  6400, 59392 => 0.16, 116
     // JRB:  1280, 64512 => 0.80, 126
-    if (r == FOGCACHE_MISS)
+    if (fog_cache_load(&fog_cache, from, to) == FOGCACHE_MISS)
         FogLut_Exp(fog_cache_current(&fog_cache), 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
 }
 
