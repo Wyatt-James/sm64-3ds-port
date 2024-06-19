@@ -56,7 +56,7 @@ union NdspMix {
 };
 
 struct N3dsThreadInfo n3ds_audio_thread_info;
-enum N3dsCpu n3ds_desired_audio_cpu = OLD_CORE_0;
+enum N3dsCpu n3ds_desired_audio_cpu = OLD_CORE_0; // This will be overwritten externally
 
 bool s_thread5_wait_for_audio_to_finish = true;
 
