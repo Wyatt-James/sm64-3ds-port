@@ -486,7 +486,7 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
     sTexturePoolScaleT[sCurTex] = height / (float)output_height;
     gfx_citro3d_pad_texture_rgba32(src_as_rgba32, tex_staging_buffer, width, height, output_width, output_height);
     C3D_TexInit(&sTexturePool[sCurTex], output_width, output_height, GPU_RGBA8);
-    C3D_TexUpload(&sTexturePool[sCurTex], &tex_staging_buffer->u32);
+    C3D_TexUpload(&sTexturePool[sCurTex], tex_staging_buffer);
     C3D_TexFlush(&sTexturePool[sCurTex]);
 }
 
