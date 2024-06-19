@@ -694,17 +694,6 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     gfx_citro3d_apply_model_view_matrix();
 }
 
-static float gfx_adjust_x_for_aspect_ratio(float x) {
-
-// 3DS has a constant aspect ratio, so hardcoding is best.
-#ifdef TARGET_N3DS
-    const uint32_t float_as_int = 0x3F4CCCCD;
-    return x * U32_AS_FLOAT(float_as_int);
-#else
-    return x * gfx_current_dimensions.aspect_ratio_factor;
-#endif
-}
-
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
     profiler_3ds_log_time(0);
 
