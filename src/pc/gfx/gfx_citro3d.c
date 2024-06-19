@@ -27,12 +27,6 @@
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 #define BSWAP32(v_) (__builtin_bswap32(v_))
 
-static DVLB_s* sVShaderDvlb;
-static shaderProgram_s sShaderProgram;
-static float* sVboBuffer;
-
-struct UniformLocations uniform_locations;
-
 struct ShaderProgram {
     uint32_t shader_id;
     uint8_t program_id;
@@ -77,6 +71,7 @@ static uint8_t num_video_buffers = 0;
 
 static struct ShaderProgram sShaderProgramPool[MAX_SHADER_PROGRAMS];
 static uint8_t sShaderProgramPoolSize;
+struct UniformLocations uniform_locations; // Uniform locations for the current shader program
 
 struct FogCache fog_cache;
 static union RGBA32 fog_color;
@@ -343,10 +338,10 @@ static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
     struct VideoBuffer *cb = &video_buffers[id];
     cb->shader_info = shader_info;
 
-    DVLB_s* sVShaderDvlb = DVLB_ParseFile((__3ds_u32*)shader_info->shader_binary, *shader_info->shader_size); 
+    DVLB_s* vertex_shader_dvlb = DVLB_ParseFile((__3ds_u32*)shader_info->shader_binary, *shader_info->shader_size); 
 
     shaderProgramInit(&cb->shader_program);
-    shaderProgramSetVsh(&cb->shader_program, &sVShaderDvlb->DVLE[0]);
+    shaderProgramSetVsh(&cb->shader_program, &vertex_shader_dvlb->DVLE[0]);
 
     // Configure attributes for use with the vertex shader
     int attr = 0;
