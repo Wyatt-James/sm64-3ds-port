@@ -107,7 +107,7 @@ static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
 // Projection is the 3DS-specific P-matrix.
 // Model_view is the N64 MV-matrix.
 // Game_projection is the N64 P-matrix.
-static C3D_Mtx  projection,
+static C3D_Mtx  projection      = C3D_STATIC_IDENTITY_MTX,
                *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].model_view,
                *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
 
