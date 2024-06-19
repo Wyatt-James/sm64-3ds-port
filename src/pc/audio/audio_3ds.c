@@ -76,6 +76,7 @@ extern void create_next_audio_buffer(s16 *samples, u32 num_samples);
 
 static int sNextBuffer;
 static volatile ndspWaveBuf sDspBuffers[N3DS_DSP_DMA_BUFFER_COUNT];
+static u8* ndsp_buf_raw = NULL;
 static void* sDspVAddrs[N3DS_DSP_DMA_BUFFER_COUNT];
 
 static int audio_3ds_buffered(void)
@@ -237,11 +238,11 @@ static void audio_3ds_initialize_dsp()
     ndsp_mix.mix.main.volume_right = 1.0;
     ndspChnSetMix(0, ndsp_mix.raw);
 
-    u8* bufferData = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
+    ndsp_buf_raw = linearAlloc(N3DS_DSP_DMA_BUFFER_SIZE * N3DS_DSP_DMA_BUFFER_COUNT);
     for (int i = 0; i < N3DS_DSP_DMA_BUFFER_COUNT; i++)
     {
-        sDspVAddrs[i] = &bufferData[i * N3DS_DSP_DMA_BUFFER_SIZE];
-        sDspBuffers[i].data_vaddr = &bufferData[i * N3DS_DSP_DMA_BUFFER_SIZE];
+        sDspVAddrs[i] = &ndsp_buf_raw[i * N3DS_DSP_DMA_BUFFER_SIZE];
+        sDspBuffers[i].data_vaddr = &ndsp_buf_raw[i * N3DS_DSP_DMA_BUFFER_SIZE];
         sDspBuffers[i].nsamples = 0;
         sDspBuffers[i].status = NDSP_WBUF_FREE;
     }
@@ -266,6 +267,8 @@ static void audio_3ds_stop(void)
     }
 
     ndspExit();
+    linearFree(ndsp_buf_raw);
+    ndsp_buf_raw = NULL;
 }
 
 void audio_3ds_set_dsp_volume(float left, float right)
