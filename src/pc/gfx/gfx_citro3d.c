@@ -69,8 +69,8 @@ static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
 static struct VideoBuffer *current_video_buffer = NULL;
 static uint8_t num_video_buffers = 0;
 
-static struct ShaderProgram sShaderProgramPool[MAX_SHADER_PROGRAMS];
-static uint8_t sShaderProgramPoolSize;
+static struct ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
+static uint8_t num_shader_programs = 0;
 struct UniformLocations uniform_locations; // Uniform locations for the current shader program
 static int sCurShader = 0;
 
@@ -269,7 +269,7 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
 
 static void update_shader(bool swap_input)
 {
-    struct ShaderProgram *prg = &sShaderProgramPool[sCurShader];
+    struct ShaderProgram *prg = &shader_program_pool[sCurShader];
 
     // only Goddard
     if (prg->swap_input != swap_input)
@@ -399,8 +399,8 @@ static void get_uniform_locations(struct ShaderProgram *prg)
 
 static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t shader_id)
 {
-    int id = sShaderProgramPoolSize++;
-    struct ShaderProgram *prg = &sShaderProgramPool[id];
+    int id = num_shader_programs++;
+    struct ShaderProgram *prg = &shader_program_pool[id];
 
     prg->program_id = id;
 
@@ -424,12 +424,12 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
 
 static struct ShaderProgram *gfx_citro3d_lookup_shader(uint32_t shader_id)
 {
-    for (size_t i = 0; i < sShaderProgramPoolSize; i++)
+    for (size_t i = 0; i < num_shader_programs; i++)
     {
-        if (sShaderProgramPool[i].shader_id == shader_id)
-        {
-            return &sShaderProgramPool[i];
-        }
+        struct ShaderProgram* prog = &shader_program_pool[i];
+
+        if (prog->shader_id == shader_id)
+            return prog;
     }
     return NULL;
 }
@@ -540,8 +540,8 @@ static void gfx_citro3d_set_use_alpha(bool use_alpha)
 
 static void adjust_state_for_two_color_tris(float buf_vbo[])
 {
-    struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
-    const bool hasTex = curShader->cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
+    struct ShaderProgram* curShader = &shader_program_pool[sCurShader];
+    const bool hasTex = curShader->cc_features.used_textures[0] || curShader->cc_features.used_textures[1];
     const bool hasAlpha = curShader->cc_features.opt_alpha;
     const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
 
@@ -565,10 +565,10 @@ static void adjust_state_for_one_color_tris()
 
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 {
-    struct ShaderProgram* curShader = &sShaderProgramPool[sCurShader];
+    struct ShaderProgram* curShader = &shader_program_pool[sCurShader];
     const bool hasTex = curShader->cc_features.used_textures[0] || curShader->cc_features.used_textures[1];
 
-    if (sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
+    if (curShader->cc_features.num_inputs > 1)
         adjust_state_for_two_color_tris(buf_vbo);
     else
         adjust_state_for_one_color_tris();
