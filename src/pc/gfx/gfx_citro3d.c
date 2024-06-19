@@ -399,8 +399,8 @@ static void get_uniform_locations(struct ShaderProgram *prg)
 
 static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t shader_id)
 {
-    int id = sShaderProgramPoolSize;
-    struct ShaderProgram *prg = &sShaderProgramPool[sShaderProgramPoolSize++];
+    int id = sShaderProgramPoolSize++;
+    struct ShaderProgram *prg = &sShaderProgramPool[id];
 
     prg->program_id = id;
 
