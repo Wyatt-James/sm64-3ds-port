@@ -72,19 +72,17 @@ static uint8_t num_video_buffers = 0;
 static struct ShaderProgram sShaderProgramPool[MAX_SHADER_PROGRAMS];
 static uint8_t sShaderProgramPoolSize;
 struct UniformLocations uniform_locations; // Uniform locations for the current shader program
+static int sCurShader = 0;
 
 struct FogCache fog_cache;
 static union RGBA32 fog_color;
 
-static u32 sTexBuf[16 * 1024] __attribute__((aligned(32)));
 static C3D_Tex sTexturePool[TEXTURE_POOL_SIZE];
 static float sTexturePoolScaleS[TEXTURE_POOL_SIZE];
 static float sTexturePoolScaleT[TEXTURE_POOL_SIZE];
 static u32 sTextureIndex;
 static int sTexUnits[2];
-
 static int sCurTex = 0;
-static int sCurShader = 0;
 
 static bool sDepthTestOn = false;
 static bool sDepthUpdateOn = false;
@@ -462,8 +460,9 @@ static void gfx_citro3d_select_texture(int tile, uint32_t texture_id)
 
 static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int height)
 {
+    static union RGBA32 tex_staging_buffer[16 * 1024] __attribute__((aligned(32)));
+
     union RGBA32* src_as_rgba32 = (union RGBA32*) rgba32_buf;
-    union RGBA32* dest_as_rgba32 = (union RGBA32*) sTexBuf;
     u32 output_width = width, output_height = height;
 
     // Dimensions must each be a power-of-2 >= 8.
@@ -472,12 +471,12 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
         output_width  = width  < 8 ? 8 : (1 << (32 - NUM_LEADING_ZEROES(width  - 1)));
         output_height = height < 8 ? 8 : (1 << (32 - NUM_LEADING_ZEROES(height - 1)));
 
-        if (output_width * output_height > ARRAY_COUNT(sTexBuf)) {
+        if (output_width * output_height > ARRAY_COUNT(tex_staging_buffer)) {
             printf("Scaled texture too big: %d,%d\n", output_width, output_height);
             return;
         }
     } else {
-        if (width * height > ARRAY_COUNT(sTexBuf)) {
+        if (width * height > ARRAY_COUNT(tex_staging_buffer)) {
             printf("Unscaled texture too big: %d,%d\n", width, height);
             return;
         }
@@ -485,9 +484,9 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
 
     sTexturePoolScaleS[sCurTex] = width / (float)output_width;
     sTexturePoolScaleT[sCurTex] = height / (float)output_height;
-    gfx_citro3d_pad_texture_rgba32(src_as_rgba32, dest_as_rgba32, width, height, output_width, output_height);
+    gfx_citro3d_pad_texture_rgba32(src_as_rgba32, tex_staging_buffer, width, height, output_width, output_height);
     C3D_TexInit(&sTexturePool[sCurTex], output_width, output_height, GPU_RGBA8);
-    C3D_TexUpload(&sTexturePool[sCurTex], sTexBuf);
+    C3D_TexUpload(&sTexturePool[sCurTex], &tex_staging_buffer->u32);
     C3D_TexFlush(&sTexturePool[sCurTex]);
 }
 
