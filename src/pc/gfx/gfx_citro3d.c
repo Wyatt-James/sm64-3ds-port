@@ -65,6 +65,11 @@ struct GameMtxSet {
     C3D_Mtx model_view, game_projection;
 };
 
+struct TexHandle {
+    C3D_Tex c3d_tex;
+    float scale_s, scale_t;
+};
+
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
 static struct VideoBuffer *current_video_buffer = NULL;
 static uint8_t num_video_buffers = 0;
@@ -75,21 +80,19 @@ struct UniformLocations uniform_locations; // Uniform locations for the current 
 static int sCurShader = 0;
 
 struct FogCache fog_cache;
-static union RGBA32 fog_color;
+static union RGBA32 fog_color = { .u32 = 0 };
 
-static C3D_Tex sTexturePool[TEXTURE_POOL_SIZE];
-static float sTexturePoolScaleS[TEXTURE_POOL_SIZE];
-static float sTexturePoolScaleT[TEXTURE_POOL_SIZE];
-static u32 sTextureIndex;
-static int sTexUnits[2];
-static int sCurTex = 0;
+static struct TexHandle texture_pool[TEXTURE_POOL_SIZE];
+static struct TexHandle* current_texture;
+static struct TexHandle* gpu_textures[2]; // 
+static uint32_t api_texture_index = 0;
 
 static bool sDepthTestOn = false;
 static bool sDepthUpdateOn = false;
 static bool sDepthDecal = false;
 
 // calling FrameDrawOn resets viewport
-struct ViewportConfig viewport_config;
+struct ViewportConfig viewport_config = { 0, 0, 0, 0 };
 
 // calling SetViewport resets scissor
 struct ScissorConfig scissor_config = { .enable = false };
@@ -443,19 +446,19 @@ static void gfx_citro3d_shader_get_info(struct ShaderProgram *prg, uint8_t *num_
 
 static uint32_t gfx_citro3d_new_texture(void)
 {
-    if (sTextureIndex == TEXTURE_POOL_SIZE)
+    if (api_texture_index == TEXTURE_POOL_SIZE)
     {
         printf("Out of textures!\n");
         return 0;
     }
-    return sTextureIndex++;
+    return api_texture_index++;
 }
 
-static void gfx_citro3d_select_texture(int tile, uint32_t texture_id)
+static void gfx_citro3d_select_texture(int tex_slot, uint32_t texture_id)
 {
-    C3D_TexBind(tile, &sTexturePool[texture_id]);
-    sCurTex = texture_id;
-    sTexUnits[tile] = texture_id;
+    current_texture = &texture_pool[texture_id];
+    C3D_TexBind(tex_slot, &current_texture->c3d_tex);
+    gpu_textures[tex_slot] = current_texture;
 }
 
 static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int height)
@@ -482,18 +485,23 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
         }
     }
 
-    sTexturePoolScaleS[sCurTex] = width / (float)output_width;
-    sTexturePoolScaleT[sCurTex] = height / (float)output_height;
+    C3D_Tex* c3d_tex = &current_texture->c3d_tex;
+
+    current_texture->scale_s = width / (float)output_width;
+    current_texture->scale_t = height / (float)output_height;
+
     gfx_citro3d_pad_texture_rgba32(src_as_rgba32, tex_staging_buffer, width, height, output_width, output_height);
-    C3D_TexInit(&sTexturePool[sCurTex], output_width, output_height, GPU_RGBA8);
-    C3D_TexUpload(&sTexturePool[sCurTex], tex_staging_buffer);
-    C3D_TexFlush(&sTexturePool[sCurTex]);
+
+    C3D_TexInit(c3d_tex, output_width, output_height, GPU_RGBA8);
+    C3D_TexUpload(c3d_tex, tex_staging_buffer);
+    C3D_TexFlush(c3d_tex);
 }
 
-static void gfx_citro3d_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt)
+static void gfx_citro3d_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t cms, uint32_t cmt)
 {
-    C3D_TexSetFilter(&sTexturePool[sTexUnits[tile]], linear_filter ? GPU_LINEAR : GPU_NEAREST, linear_filter ? GPU_LINEAR : GPU_NEAREST);
-    C3D_TexSetWrap(&sTexturePool[sTexUnits[tile]], gfx_citro3d_convert_texture_clamp_mode(cms), gfx_citro3d_convert_texture_clamp_mode(cmt));
+    C3D_Tex* tex = &gpu_textures[tex_slot]->c3d_tex;
+    C3D_TexSetFilter(tex, linear_filter ? GPU_LINEAR : GPU_NEAREST, linear_filter ? GPU_LINEAR : GPU_NEAREST);
+    C3D_TexSetWrap(tex, gfx_citro3d_convert_texture_clamp_mode(cms), gfx_citro3d_convert_texture_clamp_mode(cmt));
 }
 
 static void update_depth()
@@ -574,8 +582,7 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
         adjust_state_for_one_color_tris();
 
     if (hasTex)
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale,
-            sTexturePoolScaleS[sCurTex], -sTexturePoolScaleT[sCurTex], 1, 1);
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, current_texture->scale_s, -current_texture->scale_t, 1, 1);
 
     C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
 }
