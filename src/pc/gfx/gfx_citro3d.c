@@ -83,8 +83,8 @@ struct FogCache fog_cache;
 static union RGBA32 fog_color = { .u32 = 0 };
 
 static struct TexHandle texture_pool[TEXTURE_POOL_SIZE];
-static struct TexHandle* current_texture;
-static struct TexHandle* gpu_textures[2]; // 
+static struct TexHandle* current_texture = &texture_pool[0];
+static struct TexHandle* gpu_textures[2] = { &texture_pool[0], &texture_pool[0] };
 static uint32_t api_texture_index = 0;
 
 static bool sDepthTestOn = false;
