@@ -30,7 +30,6 @@
 // N64 shader program
 struct ShaderProgram {
     uint32_t shader_id; // N64 shader_id
-    uint8_t program_id; // num_shader_programs
     struct VideoBuffer* video_buffer;
     struct CCFeatures cc_features;
     bool swap_input;
@@ -308,7 +307,7 @@ static void update_shader(bool swap_input)
 
 static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 {
-    current_shader_program = &shader_program_pool[new_prg->program_id];
+    current_shader_program = new_prg;
     current_video_buffer = new_prg->video_buffer;
 
     C3D_BindProgram(&current_video_buffer->shader_program);
@@ -407,7 +406,6 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
 {
     int id = num_shader_programs++;
     struct ShaderProgram *prg = &shader_program_pool[id];
-    prg->program_id = id;
 
     prg->shader_id = shader_id;
     gfx_cc_get_features(shader_id, &prg->cc_features);
