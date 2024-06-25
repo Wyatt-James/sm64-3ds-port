@@ -32,7 +32,7 @@ struct ShaderProgram {
     uint32_t shader_id; // N64 shader_id
     struct VideoBuffer* video_buffer;
     struct CCFeatures cc_features;
-    bool swap_input;
+    bool swap_input; // Avoids repeatedly recalculating texenvs
     C3D_TexEnv texenv0;
     C3D_TexEnv texenv1;
 };
@@ -118,6 +118,9 @@ static union ScreenClearConfigsN3ds screen_clear_configs = {
     .top    = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}, .depth = 0xFFFFFFFF},
     .bottom = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}, .depth = 0xFFFFFFFF},
 };
+
+// Forward declarations
+static void adjust_state_for_one_color_tris();
 
 // Handles 3DS screen clearing
 static void clear_buffers()
@@ -271,6 +274,7 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
     prg->swap_input = swap_input;
 }
 
+// Called with false when loading a shader and on frame end, and with true on adjust_state_for_two_color_tris
 static void update_shader(bool swap_input)
 {
     struct ShaderProgram *prg = current_shader_program;
@@ -323,7 +327,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
 
-    update_shader(false);
+    adjust_state_for_one_color_tris();
 }
 
 static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
@@ -567,9 +571,10 @@ static void adjust_state_for_two_color_tris(float buf_vbo[])
     C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
 }
 
+// Restore TEV to its single-color state
 static void adjust_state_for_one_color_tris()
 {
-    // Nothing needs to be in here at the moment.
+    update_shader(false);
 }
 
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
@@ -580,8 +585,8 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 
     if (cc_features->num_inputs > 1)
         adjust_state_for_two_color_tris(buf_vbo);
-    else
-        adjust_state_for_one_color_tris();
+    // else
+    //     adjust_state_for_one_color_tris();
 
     if (hasTex)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, current_texture->scale_s, -current_texture->scale_t, 1, 1);
@@ -738,7 +743,8 @@ static void gfx_citro3d_end_frame(void)
     gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
 
     // set the texenv back
-    update_shader(false);
+    // WYATT_TODO should this be done before drawing the bottom screen?
+    adjust_state_for_one_color_tris();
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
