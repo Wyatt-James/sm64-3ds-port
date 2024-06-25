@@ -191,10 +191,7 @@ GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input)
     }
 }
 
-void gfx_citro3d_configure_tex_env(
-    struct CCFeatures* cc_features,
-    C3D_TexEnv* texenv0,
-    C3D_TexEnv* texenv1)
+void gfx_citro3d_configure_tex_env(struct CCFeatures* cc_features, C3D_TexEnv* texenv0, C3D_TexEnv* texenv1)
 {
     const bool swap_input = (cc_features->num_inputs == 2) ? true : false;
 
