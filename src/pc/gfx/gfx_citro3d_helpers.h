@@ -93,9 +93,7 @@ GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input);
 void gfx_citro3d_configure_tex_env(
     struct CCFeatures* cc_features,
     C3D_TexEnv* texenv0,
-    C3D_TexEnv* texenv1,
-    bool* swap_input_out,
-    bool swap_input);
+    C3D_TexEnv* texenv1);
 
 // LUT: Converts an RSP texture clamp mode to its C3D counterpart.
 GPU_TEXTURE_WRAP_PARAM gfx_citro3d_convert_texture_clamp_mode(uint32_t val);
