@@ -29,8 +29,8 @@
 
 // N64 shader program
 struct ShaderProgram {
-    uint32_t shader_id;
-    uint8_t program_id; // N64 shader_id
+    uint32_t shader_id; // N64 shader_id
+    uint8_t program_id; // num_shader_programs
     struct VideoBuffer* video_buffer;
     struct CCFeatures cc_features;
     bool swap_input;
@@ -407,7 +407,6 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
 {
     int id = num_shader_programs++;
     struct ShaderProgram *prg = &shader_program_pool[id];
-
     prg->program_id = id;
 
     prg->shader_id = shader_id;
