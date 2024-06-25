@@ -167,6 +167,24 @@ void gfx_citro3d_pad_texture_rgba32(union RGBA32* src,
     }
 }
 
+union RGBA32 gfx_citro3d_get_env_color_from_vbo(float buf_vbo[], struct CCFeatures* cc_features)
+{
+    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
+    const bool hasAlpha = cc_features->opt_alpha;
+    const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
+
+    // Removed a hack from before vertex shaders. This new implementation
+    // probably isn't completely kosher, but it works.
+    // The endianness used to be reversed, but I think that this was actually an error.
+    // If I set G to 0 here, it gives magenta, as expected. If endianness were reversed,
+    // it would be yellow.
+    union RGBA32 env_color = ((union RGBA32*) buf_vbo)[color_1_offset];
+    if (!hasAlpha)
+        env_color.a = 255;
+
+    return env_color;
+}
+
 GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input)
 {
     switch (cc_input)

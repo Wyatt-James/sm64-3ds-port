@@ -35,7 +35,7 @@ struct ShaderProgram {
     C3D_TexEnv texenvs[2];
 };
 
-// 3DS shader's video buffer
+// 3DS shader's video buffer. May be shared by multiple ShaderPrograms.
 struct VideoBuffer {
     const struct n3ds_shader_info* shader_info;
     struct UniformLocations uniform_locations;
@@ -421,26 +421,6 @@ static void gfx_citro3d_set_use_alpha(bool use_alpha)
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
 }
 
-static void get_env_color_from_vbo(float buf_vbo[])
-{
-    struct CCFeatures* cc_features = &current_shader_program->cc_features;
-    
-    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
-    const bool hasAlpha = cc_features->opt_alpha;
-    const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
-
-    // Removed a hack from before vertex shaders. This new implementation
-    // probably isn't completely kosher, but it works.
-    // The endianness used to be reversed, but I think that this was actually an error.
-    // If I set G to 0 here, it gives magenta, as expected. If endianness were reversed,
-    // it would be yellow.
-    union RGBA32 env_color = ((union RGBA32*) buf_vbo)[color_1_offset];
-    if (!hasAlpha)
-        env_color.a = 255;
-
-    C3D_TexEnvColor(C3D_GetTexEnv(0), env_color.u32);
-}
-
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 {
     struct CCFeatures* cc_features = &current_shader_program->cc_features;
@@ -448,7 +428,7 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
     const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
 
     if (cc_features->num_inputs > 1)
-        get_env_color_from_vbo(buf_vbo);
+        C3D_TexEnvColor(C3D_GetTexEnv(0), gfx_citro3d_get_env_color_from_vbo(buf_vbo, cc_features).u32);
 
     if (hasTex)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, current_texture->scale_s, -current_texture->scale_t, 1, 1);

@@ -86,6 +86,10 @@ const struct n3ds_shader_info* get_shader_info_from_shader_code(uint8_t shader_c
 // Pads a texture from w * h to new_w * new_h by simply repeating data.
 void gfx_citro3d_pad_texture_rgba32(union RGBA32* src, union RGBA32* dest, uint32_t src_w, uint32_t src_h, uint32_t new_w, uint32_t new_h);
 
+// Fetches the ENV color from a given 2-color-tri VBO. VBO provided must already be offset.
+// WYATT_TODO remove this hack.
+union RGBA32 gfx_citro3d_get_env_color_from_vbo(float buf_vbo[], struct CCFeatures* cc_features);
+
 // LUT: Returns a GPU_TEVSRC based on which color combiner input is provided.
 GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input);
 
