@@ -30,7 +30,7 @@
 // N64 shader program
 struct ShaderProgram {
     uint32_t shader_id;
-    uint8_t program_id;
+    uint8_t program_id; // N64 shader_id
     struct VideoBuffer* video_buffer;
     struct CCFeatures cc_features;
     bool swap_input;
@@ -73,13 +73,13 @@ struct TexHandle {
 };
 
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
-static struct VideoBuffer *current_video_buffer = NULL;
+static struct VideoBuffer* current_video_buffer = NULL;
 static uint8_t num_video_buffers = 0;
 
 static struct ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
+static struct ShaderProgram* current_shader_program = NULL;
 static uint8_t num_shader_programs = 0;
 struct UniformLocations uniform_locations; // Uniform locations for the current shader program
-static int sCurShader = 0;
 
 struct FogCache fog_cache;
 static union RGBA32 fog_color = { .u32 = 0 };
@@ -274,7 +274,7 @@ static void update_tex_env(struct ShaderProgram *prg, bool swap_input)
 
 static void update_shader(bool swap_input)
 {
-    struct ShaderProgram *prg = &shader_program_pool[sCurShader];
+    struct ShaderProgram *prg = current_shader_program;
 
     // only Goddard
     if (prg->swap_input != swap_input)
@@ -308,7 +308,7 @@ static void update_shader(bool swap_input)
 
 static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 {
-    sCurShader = new_prg->program_id;
+    current_shader_program = &shader_program_pool[new_prg->program_id];
     current_video_buffer = new_prg->video_buffer;
 
     C3D_BindProgram(&current_video_buffer->shader_program);
@@ -551,9 +551,10 @@ static void gfx_citro3d_set_use_alpha(bool use_alpha)
 
 static void adjust_state_for_two_color_tris(float buf_vbo[])
 {
-    struct ShaderProgram* curShader = &shader_program_pool[sCurShader];
-    const bool hasTex = curShader->cc_features.used_textures[0] || curShader->cc_features.used_textures[1];
-    const bool hasAlpha = curShader->cc_features.opt_alpha;
+    struct CCFeatures* cc_features = &current_shader_program->cc_features;
+    
+    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
+    const bool hasAlpha = cc_features->opt_alpha;
     const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
 
     // Removed a hack from before vertex shaders. This new implementation
@@ -576,10 +577,11 @@ static void adjust_state_for_one_color_tris()
 
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 {
-    struct ShaderProgram* curShader = &shader_program_pool[sCurShader];
-    const bool hasTex = curShader->cc_features.used_textures[0] || curShader->cc_features.used_textures[1];
+    struct CCFeatures* cc_features = &current_shader_program->cc_features;
 
-    if (curShader->cc_features.num_inputs > 1)
+    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
+
+    if (cc_features->num_inputs > 1)
         adjust_state_for_two_color_tris(buf_vbo);
     else
         adjust_state_for_one_color_tris();
