@@ -40,6 +40,7 @@
 #include "gfx_3ds_shaders.h"
 #include "gfx_3ds.h"
 #include "color_formats.h"
+#include "gfx_cc.h"
 
 // A static definition of a C3D Identity Matrix
 #define C3D_STATIC_IDENTITY_MTX {\
@@ -87,6 +88,14 @@ void gfx_citro3d_pad_texture_rgba32(union RGBA32* src, union RGBA32* dest, uint3
 
 // LUT: Returns a GPU_TEVSRC based on which color combiner input is provided.
 GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input);
+
+// Configures a pair of C3D_TexEnvs and sets swap_input_out to the value of swap_input.
+void gfx_citro3d_configure_tex_env(
+    struct CCFeatures* cc_features,
+    C3D_TexEnv* texenv0,
+    C3D_TexEnv* texenv1,
+    bool* swap_input_out,
+    bool swap_input);
 
 // LUT: Converts an RSP texture clamp mode to its C3D counterpart.
 GPU_TEXTURE_WRAP_PARAM gfx_citro3d_convert_texture_clamp_mode(uint32_t val);
