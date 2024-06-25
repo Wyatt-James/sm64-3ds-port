@@ -27,22 +27,24 @@
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 #define BSWAP32(v_) (__builtin_bswap32(v_))
 
+// N64 shader program
 struct ShaderProgram {
     uint32_t shader_id;
     uint8_t program_id;
-    uint8_t buffer_id;
+    struct VideoBuffer* video_buffer;
     struct CCFeatures cc_features;
     bool swap_input;
     C3D_TexEnv texenv0;
     C3D_TexEnv texenv1;
-    struct UniformLocations uniform_locations;
 };
 
+// 3DS shader's video buffer
 struct VideoBuffer {
     const struct n3ds_shader_info* shader_info;
+    struct UniformLocations uniform_locations;
+    shaderProgram_s shader_program; // pica vertex shader
     float *ptr;
     uint32_t offset;
-    shaderProgram_s shader_program; // pica vertex shader
     C3D_AttrInfo attr_info;
     C3D_BufInfo buf_info;
 };
@@ -307,12 +309,12 @@ static void update_shader(bool swap_input)
 static void gfx_citro3d_load_shader(struct ShaderProgram *new_prg)
 {
     sCurShader = new_prg->program_id;
-    current_video_buffer = &video_buffers[new_prg->buffer_id];
+    current_video_buffer = new_prg->video_buffer;
 
     C3D_BindProgram(&current_video_buffer->shader_program);
 
     // Update uniforms
-    memcpy(&uniform_locations, &new_prg->uniform_locations, sizeof(struct UniformLocations));
+    memcpy(&uniform_locations, &current_video_buffer->uniform_locations, sizeof(struct UniformLocations));
 
     // Update buffer info
     C3D_SetBufInfo(&current_video_buffer->buf_info);
@@ -390,14 +392,15 @@ static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
 // Finds and saves the uniform locations of the given shader. Must already be initialized.
 static void get_uniform_locations(struct ShaderProgram *prg)
 {
-    shaderProgram_s shader_program = video_buffers[prg->buffer_id].shader_program;
+    struct VideoBuffer* video_buffer = prg->video_buffer;
+    shaderProgram_s shader_program = video_buffer->shader_program;
 
-    prg->uniform_locations.projection_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "projection_mtx");
-    prg->uniform_locations.model_view_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "model_view_mtx");
-    prg->uniform_locations.game_projection_mtx = shaderInstanceGetUniformLocation(shader_program.vertexShader, "game_projection_mtx");
+    video_buffer->uniform_locations.projection_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "projection_mtx");
+    video_buffer->uniform_locations.model_view_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "model_view_mtx");
+    video_buffer->uniform_locations.game_projection_mtx = shaderInstanceGetUniformLocation(shader_program.vertexShader, "game_projection_mtx");
     
     if (prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1])
-        prg->uniform_locations.tex_scale = shaderInstanceGetUniformLocation(shader_program.vertexShader, "tex_scale");
+        video_buffer->uniform_locations.tex_scale = shaderInstanceGetUniformLocation(shader_program.vertexShader, "tex_scale");
 }
 
 static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t shader_id)
@@ -416,7 +419,7 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
                                                 prg->cc_features.num_inputs > 0,
                                                 prg->cc_features.num_inputs > 1);
     const struct n3ds_shader_info* shader = get_shader_info_from_shader_code(shader_code);
-    prg->buffer_id = setup_video_buffer(shader);
+    prg->video_buffer = &video_buffers[setup_video_buffer(shader)];
 
     update_tex_env(prg, false);
     get_uniform_locations(prg);
