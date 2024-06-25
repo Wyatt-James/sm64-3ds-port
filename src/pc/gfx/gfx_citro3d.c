@@ -447,7 +447,7 @@ void gfx_citro3d_select_render_target(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > 256 * 1024 / 4)
+    if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > 256 * 1024 / sizeof(float))
     {
         printf("vertex buffer full!\n");
         return;
