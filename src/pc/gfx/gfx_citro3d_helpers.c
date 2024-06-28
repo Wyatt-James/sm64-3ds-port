@@ -386,7 +386,10 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
             w = (w < 0) ? -64.0f : 64.0f;
             break;
         default:
-        case STEREO_3D_SCORE_MENU: // WYATT_TODO FIXME this is broken as hell
+        // WYATT_TODO FIXME this causes a C3D GPU command buffer overrun, presumably because of
+        // N3DS P-matrix uniform update spam (13/frame in 2D, 801/frame in 3D). Doubling the GPUCMDBUF
+        // size fixes the crash, but that's not a real solution.
+        case STEREO_3D_SCORE_MENU:
         case STEREO_2D_NORMAL:
             strength = 0.0f;
             break;
