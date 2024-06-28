@@ -3022,7 +3022,7 @@ void print_score_file_star_score(s8 fileIndex, s16 courseIndex, s16 x, s16 y) {
  void print_save_file_scores(s8 fileIndex) {
 #ifdef TARGET_N3DS
     gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 4); // vetoed
+    gDPSet2d(gDisplayListHead++, 4); // vetoed (causes N3DS GPU command buffer overrun and crash)
 #endif
 #ifndef VERSION_EU
     unsigned char textMario[] = { TEXT_MARIO };
