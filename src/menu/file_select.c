@@ -28,6 +28,8 @@
 #endif
 
 #ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+
 const float aspectScale = 1.25f; // 1.25f = (current aspect ratio / default aspect ratio) for 3DS
 const float scalerNorm = 0.11111111f; // menu state and default scale
 const float scalerNarrow = scalerNorm / aspectScale; // button state divides out hardcoded x-axis scaling
@@ -3022,7 +3024,7 @@ void print_score_file_star_score(s8 fileIndex, s16 courseIndex, s16 x, s16 y) {
  void print_save_file_scores(s8 fileIndex) {
 #ifdef TARGET_N3DS
     gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 4); // vetoed (causes N3DS GPU command buffer overrun and crash)
+    gDPSet2d(gDisplayListHead++, STEREO_MODE_3D_SCORE_MENU); // vetoed (causes N3DS GPU command buffer overrun and crash)
 #endif
 #ifndef VERSION_EU
     unsigned char textMario[] = { TEXT_MARIO };
@@ -3196,14 +3198,14 @@ Gfx *geo_file_select_strings_and_menu_cursor(s32 callContext, UNUSED struct Grap
     if (callContext == GEO_CONTEXT_RENDER) {
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++);
-        gDPSet2d(gDisplayListHead++, 1);
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
         gDPSetIod(gDisplayListHead++, iodFileSelect);
 #endif
         print_file_select_strings();
         print_menu_cursor();
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++);
-        gDPSet2d(gDisplayListHead++, 0);
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     }
     return NULL;

@@ -375,13 +375,13 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
     ************************************************************************************************************ */
 
     switch (mode_2d) {
-        case STEREO_3D_NORMAL:
+        case STEREO_MODE_3D:
             break;
-        case STEREO_3D_GODDARD_HAND: 
+        case STEREO_MODE_3D_GODDARD_HAND: 
             z = (z < 0) ? -32.0f : 32.0f;
             w = (w < 0) ? -32.0f : 32.0f;
             break;
-        case STEREO_3D_CREDITS:
+        case STEREO_MODE_3D_CREDITS:
             z = (z < 0) ? -64.0f : 64.0f;
             w = (w < 0) ? -64.0f : 64.0f;
             break;
@@ -389,8 +389,8 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
         // WYATT_TODO FIXME this causes a C3D GPU command buffer overrun, presumably because of
         // N3DS P-matrix uniform update spam (13/frame in 2D, 801/frame in 3D). Doubling the GPUCMDBUF
         // size fixes the crash, but that's not a real solution.
-        case STEREO_3D_SCORE_MENU:
-        case STEREO_2D_NORMAL:
+        case STEREO_MODE_3D_SCORE_MENU:
+        case STEREO_MODE_2D:
             strength = 0.0f;
             break;
     }
@@ -478,8 +478,8 @@ void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, flo
 
 enum Stereoscopic3dMode gfx_citro3d_convert_2d_mode(int mode_2d)
 {
-    if (mode_2d < 0 || mode_2d > STEREO_3D_COUNT)
-        mode_2d = STEREO_3D_NORMAL;
+    if (mode_2d < 0 || mode_2d > STEREO_MODE_COUNT)
+        mode_2d = STEREO_MODE_3D;
 
     return (enum Stereoscopic3dMode) mode_2d;
 }

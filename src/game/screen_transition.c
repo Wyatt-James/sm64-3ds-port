@@ -13,6 +13,10 @@
 #include "segment2.h"
 #include "sm64.h"
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 u8 sTransitionColorFadeCount[4] = { 0 };
 u16 sTransitionTextureFadeCount[2] = { 0 };
 
@@ -64,7 +68,7 @@ s32 dl_transition_color(s8 fadeTimer, u8 transTime, struct WarpTransitionData *t
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++);
-        gDPSet2d(gDisplayListHead++, 1);
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
 #endif
     if (verts != NULL) {
         gSPDisplayList(gDisplayListHead++, dl_proj_mtx_fullscreen);
@@ -76,7 +80,7 @@ s32 dl_transition_color(s8 fadeTimer, u8 transTime, struct WarpTransitionData *t
     }
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++);
-        gDPSet2d(gDisplayListHead++, 0);
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     return set_and_reset_transition_fade_timer(fadeTimer, transTime);
 }
@@ -184,7 +188,7 @@ s32 render_textured_transition(s8 fadeTimer, s8 transTime, struct WarpTransition
 
 #ifdef TARGET_N3DS
     gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 1);
+    gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
 #endif
     if (verts != NULL) {
         load_tex_transition_vertex(verts, fadeTimer, transData, centerTransX, centerTransY, texTransRadius, transTexType);
@@ -217,7 +221,7 @@ s32 render_textured_transition(s8 fadeTimer, s8 transTime, struct WarpTransition
     }
 #ifdef TARGET_N3DS
     gDPForceFlush(gDisplayListHead++);
-    gDPSet2d(gDisplayListHead++, 0);
+    gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     return set_and_reset_transition_fade_timer(fadeTimer, transTime);
 }

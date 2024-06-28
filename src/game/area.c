@@ -22,6 +22,10 @@
 #include "save_file.h"
 #include "level_table.h"
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 struct SpawnInfo gPlayerSpawnInfos[1];
 struct GraphNode *D_8033A160[0x100];
 struct Area gAreaData[8];
@@ -376,7 +380,7 @@ void render_game(void) {
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush anything
-        gDPSet2d(gDisplayListHead++, 1); // HUD, text labels and cutscene text are 2D
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D); // HUD, text labels and cutscene text are 2D
 #endif
 
         render_hud();
@@ -386,21 +390,21 @@ void render_game(void) {
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush HUD, text labels and cutscene text
-        gDPSet2d(gDisplayListHead++, 2); // set mode2
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D_GODDARD_HAND); // set mode2
 #endif
 
         render_press_start(); // "press start" handler
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush press start
-        gDPSet2d(gDisplayListHead++, 3); // credits are mode3
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D_CREDITS); // credits are mode3
 #endif
 
         print_displaying_credits_entry();
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush credits
-        gDPSet2d(gDisplayListHead++, 1); // dialog/menus are 2D
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D); // dialog/menus are 2D
 #endif
 
         gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, BORDER_HEIGHT, SCREEN_WIDTH,
@@ -409,7 +413,7 @@ void render_game(void) {
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush dialog/menus
-        gDPSet2d(gDisplayListHead++, 0); // reset 2D mode
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D); // reset 2D mode
 #endif
 
         if (gPauseScreenMode != 0) {
@@ -441,14 +445,14 @@ void render_game(void) {
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush anything
-        gDPSet2d(gDisplayListHead++, 1); // text labels are 2D
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D); // text labels are 2D
 #endif
 
         render_text_labels();
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush text labels
-        gDPSet2d(gDisplayListHead++, 0); // reset 2D mode
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D); // reset 2D mode
 #endif
 
         if (D_8032CE78 != 0) {

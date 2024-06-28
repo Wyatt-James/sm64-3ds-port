@@ -41,6 +41,7 @@
 #include "gfx_3ds.h"
 #include "color_formats.h"
 #include "gfx_cc.h"
+#include "gfx_3ds_constants.h"
 
 // A static definition of a C3D Identity Matrix
 #define C3D_STATIC_IDENTITY_MTX {\
@@ -51,15 +52,6 @@
             {.w = 1.0f}\
         }\
     }
-
-enum Stereoscopic3dMode {
-    STEREO_3D_NORMAL,       // 3D
-    STEREO_2D_NORMAL,       // Pure 2D
-    STEREO_3D_GODDARD_HAND, // Goddard hand and press start text
-    STEREO_3D_CREDITS,      // Credits
-    STEREO_3D_SCORE_MENU,   // The goddamned score menu
-    STEREO_3D_COUNT         // Number of modes
-};
 
 struct ScissorConfig {
     int x1, y1, x2, y2;

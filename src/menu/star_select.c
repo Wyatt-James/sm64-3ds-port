@@ -20,6 +20,10 @@
 #include "text_strings.h"
 #include "prevent_bss_reordering.h"
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 #if defined TARGET_N3DS && !defined DISABLE_AUDIO
     #include "src/pc/audio/audio_3ds_threading.h"
 #endif
@@ -383,13 +387,13 @@ Gfx *geo_act_selector_strings(s16 callContext, UNUSED struct GraphNode *node) {
     if (callContext == GEO_CONTEXT_RENDER) {
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++);
-        gDPSet2d(gDisplayListHead++, 1);
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
         gDPSetIod(gDisplayListHead++, iodStarSelect);
 #endif
         print_act_selector_strings();
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++);
-        gDPSet2d(gDisplayListHead++, 0);
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     }
     return NULL;

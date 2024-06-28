@@ -14,6 +14,7 @@
 #ifdef TARGET_N3DS
 #include "src/pc/gfx/gfx_citro3d.h"
 #include "src/pc/gfx/color_conversion.h"
+#include "src/pc/gfx/gfx_3ds_constants.h"
 #endif
 
 /**
@@ -533,13 +534,13 @@ static void geo_process_background(struct GraphNodeBackground *node) {
         gDPSetFillColor(gfx++, node->background);
 #ifdef TARGET_N3DS
         gDPForceFlush(gfx++);
-        gDPSet2d(gfx++, 1);
+        gDPSet2d(gfx++, STEREO_MODE_2D);
 #endif
         gDPFillRectangle(gfx++, GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(0), BORDER_HEIGHT,
         GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(0) - 1, SCREEN_HEIGHT - BORDER_HEIGHT - 1);
 #ifdef TARGET_N3DS
         gDPForceFlush(gfx++);
-        gDPSet2d(gfx++, 0);
+        gDPSet2d(gfx++, STEREO_MODE_3D);
 #endif
         gDPPipeSync(gfx++);
         gDPSetCycleType(gfx++, G_CYC_1CYCLE);

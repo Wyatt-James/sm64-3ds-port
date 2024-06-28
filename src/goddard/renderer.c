@@ -21,6 +21,10 @@
 #include "shape_helper.h"
 #include "skin.h"
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 #define MAX_GD_DLS 1000
 #define OS_MESG_SI_COMPLETE 0x33333333
 
@@ -3444,7 +3448,7 @@ void gd_put_sprite(u16 *sprite, s32 x, s32 y, s32 wx, s32 wy) {
 
 #ifdef TARGET_N3DS
     gDPForceFlush(next_gfx());
-    gDPSet2d(next_gfx(), 2);
+    gDPSet2d(next_gfx(), STEREO_MODE_3D_GODDARD_HAND);
 #endif
     gSPDisplayList(next_gfx(), osVirtualToPhysical(gd_dl_sprite_start_tex_block));
     for (r = 0; r < wy; r += 32) {
@@ -3463,7 +3467,7 @@ void gd_put_sprite(u16 *sprite, s32 x, s32 y, s32 wx, s32 wy) {
 
 #ifdef TARGET_N3DS
     gDPForceFlush(next_gfx());
-    gDPSet2d(next_gfx(), 0);
+    gDPSet2d(next_gfx(), STEREO_MODE_3D);
 #endif
 }
 

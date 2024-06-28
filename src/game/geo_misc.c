@@ -17,6 +17,10 @@
 #include "save_file.h"
 #include "segment2.h"
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 /**
  * @file geo_misc.c
  * This file contains miscellaneous geo_asm scripts.
@@ -205,7 +209,7 @@ Gfx *geo_exec_cake_end_screen(s32 callContext, struct GraphNode *node, UNUSED f3
 
         generatedNode->fnNode.node.flags = (generatedNode->fnNode.node.flags & 0xFF) | 0x100;
         gDPForceFlush(displayListHead++);
-        gDPSet2d(displayListHead++, 1);
+        gDPSet2d(displayListHead++, STEREO_MODE_2D);
 #else
     if (callContext == GEO_CONTEXT_RENDER) {
         displayList = alloc_display_list(3 * sizeof(*displayList));
