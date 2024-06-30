@@ -334,6 +334,7 @@ static uint32_t gfx_citro3d_new_texture(void)
     return api_texture_index++;
 }
 
+// WYATT_TODO move this optimiaztion to the emulation layer.
 static void gfx_citro3d_select_texture(int tex_slot, uint32_t texture_id)
 {
     current_texture = &texture_pool[texture_id];
