@@ -390,7 +390,7 @@ void render_game(void) {
 
 #ifdef TARGET_N3DS
         gDPForceFlush(gDisplayListHead++); // flush HUD, text labels and cutscene text
-        gDPSet2d(gDisplayListHead++, STEREO_MODE_3D_GODDARD_HAND); // set mode2
+        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
 #endif
 
         render_press_start(); // "press start" handler
