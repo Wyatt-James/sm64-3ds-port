@@ -187,7 +187,7 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
         C3D_SetTexEnv(1, &prg->texenvs[0]);
     } else {
         C3D_SetTexEnv(0, &prg->texenvs[0]);
-        C3D_TexEnvInit(C3D_GetTexEnv(1)); // WYATT_TODO is this necessary?
+        C3D_TexEnvInit(C3D_GetTexEnv(1));
     }
 
     if (prg->cc_features.opt_fog)
