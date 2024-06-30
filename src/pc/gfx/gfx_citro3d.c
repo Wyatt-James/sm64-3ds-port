@@ -337,8 +337,10 @@ static uint32_t gfx_citro3d_new_texture(void)
 static void gfx_citro3d_select_texture(int tex_slot, uint32_t texture_id)
 {
     current_texture = &texture_pool[texture_id];
-    C3D_TexBind(tex_slot, &current_texture->c3d_tex);
-    gpu_textures[tex_slot] = current_texture;
+    if (gpu_textures[tex_slot] != current_texture) {
+        gpu_textures[tex_slot]  = current_texture;
+        C3D_TexBind(tex_slot, &current_texture->c3d_tex);
+    }
 }
 
 static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int height)
