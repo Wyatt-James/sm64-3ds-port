@@ -96,9 +96,9 @@ struct ViewportConfig viewport_config = { 0, 0, 0, 0 };
 // calling SetViewport resets scissor
 struct ScissorConfig scissor_config = { .enable = false };
 
-static struct IodConfig iod_config = { .z = 8.0f, .w = 16.0f };
-
 static enum Stereoscopic3dMode s2DMode = 0;
+static struct IodConfig iod_config = { .z = 8.0f, .w = 16.0f };
+static bool recalculate_stereo_p_mtx = true;
 
 // Selectable groups of game matrix sets
 static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
@@ -107,7 +107,9 @@ static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
 // Projection is the 3DS-specific P-matrix.
 // Model_view is the N64 MV-matrix.
 // Game_projection is the N64 P-matrix.
-static C3D_Mtx  projection      = C3D_STATIC_IDENTITY_MTX,
+static C3D_Mtx  projection_2d        = C3D_STATIC_IDENTITY_MTX,
+                projection_left      = C3D_STATIC_IDENTITY_MTX,
+                projection_right     = C3D_STATIC_IDENTITY_MTX,
                *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].model_view,
                *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
 
@@ -145,11 +147,13 @@ static void clear_buffers()
 static void gfx_citro3d_set_2d_mode(int mode_2d)
 {
     s2DMode = gfx_citro3d_convert_2d_mode(mode_2d);
+    recalculate_stereo_p_mtx = true;
 }
 
 void gfx_citro3d_set_iod(float z, float w)
 {
     gfx_citro3d_convert_iod_settings(&iod_config, z, w);
+    recalculate_stereo_p_mtx = true;
 }
 
 static void gfx_citro3d_unload_shader(UNUSED struct ShaderProgram *old_prg)
@@ -171,7 +175,8 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
     C3D_SetAttrInfo(&current_video_buffer->attr_info);
 
     // Set up matrices
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
+    if (!gGfx3DEnabled)
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_2d);
     gfx_citro3d_apply_model_view_matrix();
     gfx_citro3d_apply_game_projection_matrix();
 
@@ -445,6 +450,23 @@ void gfx_citro3d_select_render_target(C3D_RenderTarget* target)
         C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2); // WYATT_TODO FIXME bug? should the last two params be reversed?
 }
 
+// Called only when 3D is enabled.
+static void recalculate_stereo_matrices()
+{
+    if (s2DMode == STEREO_MODE_2D) {
+        Mtx_Identity(&projection_left);
+        gfx_citro3d_apply_projection_mtx_preset(&projection_left);
+    } else {
+        Mtx_Identity(&projection_left);
+        gfx_citro3d_mtx_stereo_tilt(&projection_left, &projection_left, s2DMode, -iod_config.z, -iod_config.w, gSliderLevel);
+        gfx_citro3d_apply_projection_mtx_preset(&projection_left);
+
+        Mtx_Identity(&projection_right);
+        gfx_citro3d_mtx_stereo_tilt(&projection_right, &projection_right, s2DMode, iod_config.z, iod_config.w, gSliderLevel);
+        gfx_citro3d_apply_projection_mtx_preset(&projection_right);
+    }
+}
+
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
     if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > 256 * 1024 / sizeof(float))
@@ -454,25 +476,30 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     }
 
     // WYATT_TODO actually prevent buffer overruns.
-
     float* const buf_vbo_head = current_video_buffer->ptr + current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride;
     memcpy(buf_vbo_head, buf_vbo, buf_vbo_len * sizeof(float));
 
     if (gGfx3DEnabled)
     {
+        if (recalculate_stereo_p_mtx) {
+            recalculate_stereo_p_mtx = false;
+            recalculate_stereo_matrices();
+
+            if (s2DMode == STEREO_MODE_2D)
+                C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_left);
+        }
+
         // left screen
-        Mtx_Identity(&projection);
-        gfx_citro3d_mtx_stereo_tilt(&projection, &projection, s2DMode, -iod_config.z, -iod_config.w, gSliderLevel);
-        gfx_citro3d_apply_projection_mtx_preset(&projection);
-        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
+        if (s2DMode != STEREO_MODE_2D)
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_left);
+
         gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
-        Mtx_Identity(&projection);
-        gfx_citro3d_mtx_stereo_tilt(&projection, &projection, s2DMode, iod_config.z, iod_config.w, gSliderLevel);
-        gfx_citro3d_apply_projection_mtx_preset(&projection);
-        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection);
+        if (s2DMode != STEREO_MODE_2D)
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_right);
+
         gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
     } else {
@@ -502,6 +529,9 @@ static void gfx_citro3d_init(void)
         memcpy(&game_matrix_sets[i].model_view,      &IDENTITY_MTX, sizeof(C3D_Mtx));
     }
 
+    Mtx_Identity(&projection_2d);
+    gfx_citro3d_apply_projection_mtx_preset(&projection_2d);
+
     fog_cache_init(&fog_cache);
 }
 
@@ -525,6 +555,12 @@ static void gfx_citro3d_start_frame(void)
         current_gfx_mode = gGfx3DSMode;
     }
 
+    static float prev_slider_level = -1.0f;
+    if (prev_slider_level != gSliderLevel) {
+        prev_slider_level  = gSliderLevel;
+        recalculate_stereo_p_mtx = true;
+    }
+
     // Due to hardware differences, the PC port always clears the depth buffer,
     // rather than just when the N64 would clear it.
     gfx_citro3d_set_viewport_clear_buffer_mode(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
@@ -535,10 +571,8 @@ static void gfx_citro3d_start_frame(void)
     screen_clear_configs.top.bufs = 
     screen_clear_configs.bottom.bufs = VIEW_CLEAR_BUFFER_NONE;
 
-    Mtx_Identity(&projection);
-    gfx_citro3d_apply_projection_mtx_preset(&projection);
-
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &projection);
+    if (!gGfx3DEnabled)
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, &projection_2d);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
 }
