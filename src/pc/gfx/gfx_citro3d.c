@@ -99,6 +99,7 @@ struct OptimizationFlags {
     bool consecutive_fog;
     bool consecutive_stereo_p_mtx;
     bool alpha_test;
+    bool gpu_textures;
 };
 
 struct RenderState {
@@ -160,7 +161,8 @@ static union ScreenClearConfigsN3ds screen_clear_configs = {
 struct OptimizationFlags optimize = {
     .consecutive_fog = true,
     .consecutive_stereo_p_mtx = true,
-    .alpha_test = true
+    .alpha_test = true,
+    .gpu_textures = true
 };
 
 struct RenderState render_state = {
@@ -386,7 +388,7 @@ static uint32_t gfx_citro3d_new_texture(void)
 static void gfx_citro3d_select_texture(int tex_slot, uint32_t texture_id)
 {
     current_texture = &texture_pool[texture_id];
-    if (gpu_textures[tex_slot] != current_texture) {
+    if (gpu_textures[tex_slot] != current_texture || OPT_DISABLED(optimize.gpu_textures)) {
         gpu_textures[tex_slot]  = current_texture;
         C3D_TexBind(tex_slot, &current_texture->c3d_tex);
     }
@@ -593,6 +595,7 @@ static void gfx_citro3d_init(void)
     optimize.consecutive_fog = true;
     optimize.consecutive_stereo_p_mtx = true;
     optimize.alpha_test = true;
+    optimize.gpu_textures = true;
 }
 
 static void gfx_citro3d_start_frame(void)
