@@ -98,11 +98,13 @@ struct TexHandle {
 struct OptimizationFlags {
     bool consecutive_fog;
     bool consecutive_stereo_p_mtx;
+    bool alpha_test;
 };
 
 struct RenderState {
     bool fog_enabled;
     C3D_FogLut* fog_lut;
+    bool alpha_test;
 };
 
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
@@ -156,12 +158,14 @@ static union ScreenClearConfigsN3ds screen_clear_configs = {
 
 struct OptimizationFlags optimize = {
     .consecutive_fog = true,
-    .consecutive_stereo_p_mtx = true
+    .consecutive_stereo_p_mtx = true,
+    .alpha_test = true
 };
 
 struct RenderState render_state = {
     .fog_enabled = 0xFF,
-    .fog_lut = NULL
+    .fog_lut = NULL,
+    .alpha_test = 0xFF
 };
 
 // Handles 3DS screen clearing
@@ -241,10 +245,11 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
         C3D_FogGasMode(mode, GPU_PLAIN_DENSITY, true);
     }
 
-    if (prg->cc_features.opt_texture_edge && prg->cc_features.opt_alpha)
-        C3D_AlphaTest(true, GPU_GREATER, 77);
-    else
-        C3D_AlphaTest(true, GPU_GREATER, 0);
+    const uint8_t alpha_test = prg->cc_features.opt_texture_edge & prg->cc_features.opt_alpha;
+    if (render_state.alpha_test != alpha_test || OPT_DISABLED(optimize.alpha_test)) {
+        render_state.alpha_test  = alpha_test;
+        C3D_AlphaTest(true, GPU_GREATER, alpha_test ? 77 : 0);
+    }
 }
 
 static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
@@ -584,6 +589,7 @@ static void gfx_citro3d_init(void)
     render_state.fog_lut = NULL;
     optimize.consecutive_fog = true;
     optimize.consecutive_stereo_p_mtx = true;
+    optimize.alpha_test = true;
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -592,6 +598,9 @@ static void gfx_citro3d_start_frame(void)
     {
         video_buffers[i].offset = 0;
     }
+
+    // if (frames_touch_screen_held == 1)
+    //     BOOL_INVERT(optimize.alpha_test);
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -668,6 +677,8 @@ static void gfx_citro3d_end_frame(void)
 
     // TOOD: draw the minimap here
     gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
+
+    // printf("%s CMD %d\n", OPT_ENABLED(optimize.alpha_test) ? "Y" : "N", (int) gpuCmdBufOffset);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
