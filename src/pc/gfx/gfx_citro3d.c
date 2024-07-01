@@ -58,7 +58,7 @@ struct ShaderProgram {
     uint32_t shader_id; // N64 shader_id
     struct VideoBuffer* video_buffer;
     struct CCFeatures cc_features;
-    C3D_TexEnv texenvs[2];
+    C3D_TexEnv texenv_slot_0;
 };
 
 // 3DS shader's video buffer. May be shared by multiple ShaderPrograms.
@@ -114,6 +114,7 @@ static uint8_t num_video_buffers = 0;
 static struct ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
 static struct ShaderProgram* current_shader_program = NULL;
 static uint8_t num_shader_programs = 0;
+static C3D_TexEnv texenv_slot_1;
 struct UniformLocations uniform_locations; // Uniform locations for the current shader program
 
 struct FogCache fog_cache;
@@ -232,10 +233,10 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
     // Configure TEV
     if (prg->cc_features.num_inputs == 2)
     {
-        C3D_SetTexEnv(0, &prg->texenvs[1]);
-        C3D_SetTexEnv(1, &prg->texenvs[0]);
+        C3D_SetTexEnv(0, &texenv_slot_1);
+        C3D_SetTexEnv(1, &prg->texenv_slot_0);
     } else {
-        C3D_SetTexEnv(0, &prg->texenvs[0]);
+        C3D_SetTexEnv(0, &prg->texenv_slot_0);
         C3D_TexEnvInit(C3D_GetTexEnv(1));
     }
 
@@ -345,7 +346,7 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
     prg->video_buffer = &video_buffers[setup_video_buffer(shader)];
 
     // Preconfigure TEV settings
-    gfx_citro3d_configure_tex_env(&prg->cc_features, &prg->texenvs[0], &prg->texenvs[1]);
+    gfx_citro3d_configure_tex_env_slot_0(&prg->cc_features, &prg->texenv_slot_0);
     get_uniform_locations(prg);
     
     gfx_citro3d_load_shader(prg);
@@ -584,6 +585,8 @@ static void gfx_citro3d_init(void)
     gfx_citro3d_apply_projection_mtx_preset(&projection_2d);
 
     fog_cache_init(&fog_cache);
+
+    gfx_citro3d_configure_tex_env_slot_1(&texenv_slot_1);
 
     render_state.fog_enabled = 0xFF;
     render_state.fog_lut = NULL;

@@ -85,8 +85,11 @@ union RGBA32 gfx_citro3d_get_env_color_from_vbo(float buf_vbo[], struct CCFeatur
 // LUT: Returns a GPU_TEVSRC based on which color combiner input is provided.
 GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input);
 
-// Configures a pair of C3D_TexEnvs and sets swap_input_out to the value of swap_input.
-void gfx_citro3d_configure_tex_env(struct CCFeatures* cc_features, C3D_TexEnv* texenv0, C3D_TexEnv* texenv1);
+// Configures a C3D_TexEnv for slot 0.
+void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_TexEnv* texenv);
+
+// Configures a C3D_TexEnv for slot 1. The result is always identical!
+void gfx_citro3d_configure_tex_env_slot_1(C3D_TexEnv* texenv);
 
 // LUT: Converts an RSP texture clamp mode to its C3D counterpart.
 GPU_TEXTURE_WRAP_PARAM gfx_citro3d_convert_texture_clamp_mode(uint32_t val);
