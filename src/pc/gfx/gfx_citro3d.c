@@ -97,7 +97,6 @@ struct TexHandle {
 
 struct OptimizationFlags {
     bool consecutive_fog;
-    bool consecutive_fog_lut;
     bool consecutive_stereo_p_mtx;
 };
 
@@ -157,7 +156,6 @@ static union ScreenClearConfigsN3ds screen_clear_configs = {
 
 struct OptimizationFlags optimize = {
     .consecutive_fog = true,
-    .consecutive_fog_lut = true,
     .consecutive_stereo_p_mtx = true
 };
 
@@ -465,6 +463,7 @@ static void gfx_citro3d_set_scissor(int x, int y, int width, int height)
     gfx_citro3d_convert_scissor_settings(&scissor_config, gGfx3DSMode, x, y, width, height);
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_use_alpha(bool use_alpha)
 {
     if (use_alpha)
@@ -584,7 +583,6 @@ static void gfx_citro3d_init(void)
     render_state.fog_enabled = 0xFF;
     render_state.fog_lut = NULL;
     optimize.consecutive_fog = true;
-    optimize.consecutive_fog_lut = true;
     optimize.consecutive_stereo_p_mtx = true;
 }
 
@@ -674,24 +672,20 @@ static void gfx_citro3d_end_frame(void)
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
 {
     // FIXME: The near/far factors are personal preference
     // BOB:  6400, 59392 => 0.16, 116
     // JRB:  1280, 64512 => 0.80, 126
-    enum FogCacheResult res = fog_cache_load(&fog_cache, from, to);
-    C3D_FogLut* lut = fog_cache_current(&fog_cache);
-
-    if (res == FOGCACHE_MISS)
+    if (fog_cache_load(&fog_cache, from, to) == FOGCACHE_MISS) {
+        C3D_FogLut* lut = fog_cache_current(&fog_cache);
         FogLut_Exp(lut, 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
-
-    // Hefty savings in areas with fog, especially JRB.
-    if (render_state.fog_lut != lut || OPT_DISABLED(optimize.consecutive_fog_lut)) {
-        render_state.fog_lut  = lut;
         C3D_FogLutBind(lut);
     }
 }
 
+// Optimizations seem pretty fruitless
 static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
     union RGBA32 fog_color = {.r = r, .g = g, .b = b, .a = a};

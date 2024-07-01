@@ -169,7 +169,10 @@ static struct RSP {
     bool lights_changed;
 
     uint32_t geometry_mode;
+
+#ifndef TARGET_N3DS
     int16_t fog_mul, fog_offset;
+#endif
 
     struct {
         // U0.16
@@ -225,6 +228,7 @@ static struct ShaderState {
     struct ColorCombiner *combiner;
     uint8_t num_inputs;
     bool used_textures[2];
+    uint32_t fog_settings;
 } shader_state;
 
 static struct RenderingState {
@@ -1069,11 +1073,17 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uint32_t data) {
             rsp.lights_changed = 1;
             break;
         case G_MW_FOG:
+#ifdef TARGET_N3DS
+            if (shader_state.fog_settings != data) {
+                shader_state.fog_settings  = data;
+                gfx_flush();
+                uint16_t fog_mul = (int16_t)(data >> 16),
+                         fog_offset = (int16_t)data;
+                gfx_rapi->set_fog(fog_mul, fog_offset);
+            }
+#else
             rsp.fog_mul = (int16_t)(data >> 16);
             rsp.fog_offset = (int16_t)data;
-#ifdef TARGET_N3DS
-            // WYATT_TODO we should probably flush here.
-            gfx_rapi->set_fog(rsp.fog_mul, rsp.fog_offset);
 #endif
             break;
     }
