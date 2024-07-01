@@ -22,10 +22,36 @@
 #define MAX_VIDEO_BUFFERS 16
 #define MAX_SHADER_PROGRAMS 32
 
+// Valid values: ON, SELECTABLE, OFF. Never define an option to be 0, or the #else will not work!
+#define OPT_ON 1
+#define OPT_SELECTABLE 2
+#define OPT_OFF 3
+
+#define OPTIMIZATION_SETTING OPT_SELECTABLE
+
+#if OPTIMIZATION_SETTING == OPT_ON
+#define ENABLE_OPTIMIZATIONS          true  // If disabled, optimizations are forced OFF.
+#define FORCE_OPTIMIZATIONS           true  // If enabled, optimizations are forced ON, unless ENABLE_OPTIMIZATIONS is false.
+
+#elif OPTIMIZATION_SETTING == OPT_SELECTABLE
+#define ENABLE_OPTIMIZATIONS          true  // If disabled, optimizations are forced OFF.
+#define FORCE_OPTIMIZATIONS           false // If enabled, optimizations are forced ON, unless ENABLE_OPTIMIZATIONS is false.
+
+#elif OPTIMIZATION_SETTING == OPT_OFF
+#define ENABLE_OPTIMIZATIONS          false // If disabled, optimizations are forced OFF.
+#define FORCE_OPTIMIZATIONS           false // If enabled, optimizations are forced ON, unless ENABLE_OPTIMIZATIONS is false.
+
+#else
+prevent compile // Invalid OPTIMIZATION_SETTING
+#endif
+
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 #define BSWAP32(v_) (__builtin_bswap32(v_))
+#define BOOL_INVERT(v_) do {v_ = !v_;} while (0)
+#define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
+#define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))                                        // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
 
 // N64 shader program
 struct ShaderProgram {
@@ -69,6 +95,16 @@ struct TexHandle {
     float scale_s, scale_t;
 };
 
+struct OptimizationFlags {
+    bool consecutive_fog;
+    bool consecutive_fog_lut;
+};
+
+struct RenderState {
+    bool fog_enabled;
+    C3D_FogLut* fog_lut;
+};
+
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
 static struct VideoBuffer* current_video_buffer = NULL;
 static uint8_t num_video_buffers = 0;
@@ -79,7 +115,6 @@ static uint8_t num_shader_programs = 0;
 struct UniformLocations uniform_locations; // Uniform locations for the current shader program
 
 struct FogCache fog_cache;
-static union RGBA32 fog_color = { .u32 = 0 };
 
 static struct TexHandle texture_pool[TEXTURE_POOL_SIZE];
 static struct TexHandle* current_texture = &texture_pool[0];
@@ -117,6 +152,16 @@ static C3D_Mtx  projection_2d        = C3D_STATIC_IDENTITY_MTX,
 static union ScreenClearConfigsN3ds screen_clear_configs = {
     .top    = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}, .depth = 0xFFFFFFFF},
     .bottom = {.bufs = VIEW_CLEAR_BUFFER_NONE, .color = {{0, 0, 0, 255}}, .depth = 0xFFFFFFFF},
+};
+
+struct OptimizationFlags optimize = {
+    .consecutive_fog = true,
+    .consecutive_fog_lut = true
+};
+
+struct RenderState render_state = {
+    .fog_enabled = 0xFF,
+    .fog_lut = NULL
 };
 
 // Handles 3DS screen clearing
@@ -190,13 +235,10 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
         C3D_TexEnvInit(C3D_GetTexEnv(1));
     }
 
-    if (prg->cc_features.opt_fog)
-    {
-        C3D_FogGasMode(GPU_FOG, GPU_PLAIN_DENSITY, true);
-        C3D_FogColor(fog_color.u32);
-        C3D_FogLutBind(fog_cache_current(&fog_cache));
-    } else {
-        C3D_FogGasMode(GPU_NO_FOG, GPU_PLAIN_DENSITY, false);
+    if (render_state.fog_enabled != prg->cc_features.opt_fog || OPT_DISABLED(optimize.consecutive_fog)) {
+        render_state.fog_enabled  = prg->cc_features.opt_fog;
+        GPU_FOGMODE mode = prg->cc_features.opt_fog ? GPU_FOG : GPU_NO_FOG;
+        C3D_FogGasMode(mode, GPU_PLAIN_DENSITY, true);
     }
 
     if (prg->cc_features.opt_texture_edge && prg->cc_features.opt_alpha)
@@ -536,6 +578,11 @@ static void gfx_citro3d_init(void)
     gfx_citro3d_apply_projection_mtx_preset(&projection_2d);
 
     fog_cache_init(&fog_cache);
+
+    render_state.fog_enabled = 0xFF;
+    render_state.fog_lut = NULL;
+    optimize.consecutive_fog = true;
+    optimize.consecutive_fog_lut = true;
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -629,16 +676,23 @@ static void gfx_citro3d_set_fog(uint16_t from, uint16_t to)
     // FIXME: The near/far factors are personal preference
     // BOB:  6400, 59392 => 0.16, 116
     // JRB:  1280, 64512 => 0.80, 126
-    if (fog_cache_load(&fog_cache, from, to) == FOGCACHE_MISS)
-        FogLut_Exp(fog_cache_current(&fog_cache), 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
+    enum FogCacheResult res = fog_cache_load(&fog_cache, from, to);
+    C3D_FogLut* lut = fog_cache_current(&fog_cache);
+
+    if (res == FOGCACHE_MISS)
+        FogLut_Exp(lut, 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
+
+    // Hefty savings in areas with fog, especially JRB.
+    if (render_state.fog_lut != lut || OPT_DISABLED(optimize.consecutive_fog_lut)) {
+        render_state.fog_lut  = lut;
+        C3D_FogLutBind(lut);
+    }
 }
 
 static void gfx_citro3d_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    fog_color.r = r;
-    fog_color.g = g;
-    fog_color.b = b;
-    fog_color.a = a;
+    union RGBA32 fog_color = {.r = r, .g = g, .b = b, .a = a};
+    C3D_FogColor(fog_color.u32);
 }
 
 void gfx_citro3d_set_viewport_clear_color(enum ViewportId3DS viewport, uint8_t r, uint8_t g, uint8_t b, uint8_t a)

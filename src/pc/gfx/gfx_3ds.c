@@ -57,6 +57,8 @@ bool gShowConfigMenu = false;
 bool gShouldRun = true;
 bool gUpdateSliderFlag = false;
 
+uint32_t frames_touch_screen_held = 0;
+
 static u8 debounce = 0;
 static s32 appSuspendCounter = 0; // > 0 when the 3DS lid is closed or home button is pressed
 static aptHookCookie apt_hook_cookie;
@@ -180,7 +182,14 @@ static void gfx_3ds_handle_touch() {
     if (debounce > 0)
         debounce--;
 
-    if (debounce == 0 && (pos.px || pos.py) && (pos.px < 160))
+    bool touched = (pos.px || pos.py);
+
+    if (touched)
+        frames_touch_screen_held++;
+    else
+        frames_touch_screen_held = 0;
+
+    if (debounce == 0 && touched)
     {
         debounce = DEBOUNCE_FRAMES; // wait quarter second between mashing
         menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);

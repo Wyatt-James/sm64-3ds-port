@@ -1294,12 +1294,13 @@ static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 #ifdef TARGET_N3DS
+    gfx_flush();
     gfx_rapi->set_fog_color(r, g, b, a);
 #else
-    rdp.fog_color.rgba.r = r;
-    rdp.fog_color.rgba.g = g;
-    rdp.fog_color.rgba.b = b;
-    rdp.fog_color.rgba.a = a;
+    rdp.fog_color.r = r;
+    rdp.fog_color.g = g;
+    rdp.fog_color.b = b;
+    rdp.fog_color.a = a;
 #endif
 }
 

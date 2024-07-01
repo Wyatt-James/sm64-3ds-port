@@ -72,6 +72,8 @@ extern struct GfxWindowManagerAPI gfx_3ds;
 extern Gfx3DSMode gGfx3DSMode;
 extern bool gGfx3DEnabled;
 
+extern uint32_t frames_touch_screen_held;
+
 static bool load_t3x_texture(C3D_Tex* tex, C3D_TexCube* cube, const void* data, size_t size)
 {
     Tex3DS_Texture t3x = Tex3DS_TextureImport(data, size, tex, cube, false);
