@@ -127,7 +127,6 @@ static uint32_t api_texture_index = 0;
 
 static bool sDepthTestOn = false;
 static bool sDepthUpdateOn = false;
-static bool sDepthDecal = false;
 
 // calling FrameDrawOn resets viewport
 struct ViewportConfig viewport_config = { 0, 0, 0, 0 };
@@ -430,6 +429,7 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
     C3D_TexFlush(c3d_tex);
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t cms, uint32_t cmt)
 {
     C3D_Tex* tex = &gpu_textures[tex_slot]->c3d_tex;
@@ -440,32 +440,35 @@ static void gfx_citro3d_set_sampler_parameters(int tex_slot, bool linear_filter,
 static void update_depth()
 {
     C3D_DepthTest(sDepthTestOn, GPU_LEQUAL, sDepthUpdateOn ? GPU_WRITE_ALL : GPU_WRITE_COLOR);
-    C3D_DepthMap(true, -1.0f, sDepthDecal ? -0.001f : 0);
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_depth_test(bool depth_test)
 {
     sDepthTestOn = depth_test;
     update_depth();
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_depth_mask(bool z_upd)
 {
     sDepthUpdateOn = z_upd;
     update_depth();
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_zmode_decal(bool zmode_decal)
 {
-    sDepthDecal = zmode_decal;
-    update_depth();
+    C3D_DepthMap(true, -1.0f, zmode_decal ? -0.001f : 0);
 }
 
+// Optimized in the emulation layer only for normal use; draw_rectangle is unoptomized.
 static void gfx_citro3d_set_viewport(int x, int y, int width, int height)
 {
     gfx_citro3d_convert_viewport_settings(&viewport_config, gGfx3DSMode, x, y, width, height);
 }
 
+// Optimized in the emulation layer
 static void gfx_citro3d_set_scissor(int x, int y, int width, int height)
 {
     gfx_citro3d_convert_scissor_settings(&scissor_config, gGfx3DSMode, x, y, width, height);
@@ -653,11 +656,13 @@ void gfx_citro3d_set_game_projection_matrix(float mtx[4][4])
     gfx_citro3d_convert_mtx(mtx, game_projection);
 }
 
+// Optimized in the emulation layer
 void gfx_citro3d_apply_model_view_matrix()
 {
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, model_view);
 }
 
+// Optimized in the emulation layer
 void gfx_citro3d_apply_game_projection_matrix()
 {
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, game_projection);
@@ -669,6 +674,7 @@ void gfx_citro3d_select_matrix_set(uint32_t matrix_set_id)
     game_projection = &game_matrix_sets[matrix_set_id].game_projection;
 }
 
+// Optimized in the emulation layer
 void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
 {
     C3D_CullFace(gfx_citro3d_convert_cull_mode(culling_mode));
