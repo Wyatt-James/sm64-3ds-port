@@ -98,6 +98,7 @@ struct TexHandle {
 struct OptimizationFlags {
     bool consecutive_fog;
     bool consecutive_fog_lut;
+    bool consecutive_stereo_p_mtx;
 };
 
 struct RenderState {
@@ -156,7 +157,8 @@ static union ScreenClearConfigsN3ds screen_clear_configs = {
 
 struct OptimizationFlags optimize = {
     .consecutive_fog = true,
-    .consecutive_fog_lut = true
+    .consecutive_fog_lut = true,
+    .consecutive_stereo_p_mtx = true
 };
 
 struct RenderState render_state = {
@@ -526,7 +528,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
 
     if (gGfx3DEnabled)
     {
-        if (recalculate_stereo_p_mtx) {
+        if (recalculate_stereo_p_mtx || OPT_DISABLED(optimize.consecutive_stereo_p_mtx)) {
             recalculate_stereo_p_mtx = false;
             recalculate_stereo_matrices();
 
@@ -583,6 +585,7 @@ static void gfx_citro3d_init(void)
     render_state.fog_lut = NULL;
     optimize.consecutive_fog = true;
     optimize.consecutive_fog_lut = true;
+    optimize.consecutive_stereo_p_mtx = true;
 }
 
 static void gfx_citro3d_start_frame(void)
