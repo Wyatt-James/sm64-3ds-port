@@ -77,7 +77,7 @@ static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int hei
 
 menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 {
-    if (!gShowConfigMenu)
+    if (!gShowConfigMenu && touch_x < 160)
     {
         return SHOW_MENU;
     }
