@@ -27,7 +27,7 @@
 #define OPT_SELECTABLE 2
 #define OPT_OFF 3
 
-#define OPTIMIZATION_SETTING OPT_SELECTABLE
+#define OPTIMIZATION_SETTING OPT_ON
 
 #if OPTIMIZATION_SETTING == OPT_ON
 #define ENABLE_OPTIMIZATIONS          true  // If disabled, optimizations are forced OFF.
