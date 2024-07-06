@@ -429,7 +429,8 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
     C3D_TexFlush(c3d_tex);
 }
 
-// Optimized in the emulation layer
+// Optimized in the emulation layer. This optimization is technically incomplete, as filter & cms/cmt can be updated
+// independently, but in practice this does not matter because this function is rarely called at all.
 static void gfx_citro3d_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t cms, uint32_t cmt)
 {
     C3D_Tex* tex = &gpu_textures[tex_slot]->c3d_tex;
