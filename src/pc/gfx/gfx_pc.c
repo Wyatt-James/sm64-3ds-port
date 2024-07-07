@@ -834,11 +834,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 static void gfx_sp_tri_update_state()
 {
     profiler_3ds_log_time(0);
-    // bool use_fog      = shader_state.use_fog;
-    // bool texture_edge = shader_state.texture_edge;
-    // bool use_alpha    = shader_state.use_alpha;
-    // bool use_noise    = shader_state.use_noise;
-    uint32_t cc_id       = shader_state.cc_id;
+    uint32_t cc_id = shader_state.cc_id;
 
     static uint32_t prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
@@ -1397,16 +1393,10 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     ur->xy.as_s16.upper = lrx16;
     ur->xy.as_s16.lower = uly16;
 
-    // The coordinates for texture rectangle shall bypass the viewport setting
-    struct XYWidthHeight default_viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
-    struct XYWidthHeight viewport_saved = rdp.viewport;
     uint32_t geometry_mode_saved = rsp.geometry_mode;
+    rsp.geometry_mode = 0; // WYATT_TODO this should use gfx_sp_geometry_mode(~0, 0); but this is currently extremely slow
 
-    rdp.viewport = default_viewport;
-    rsp.geometry_mode = 0;
-
-    gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
-    rendering_state.viewport = rdp.viewport;
+    gfx_rapi->set_viewport(0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height);
 
     static struct LoadedVertex* rect_triangles[] =
        {&rsp.rect_vertices[0],
@@ -1420,11 +1410,9 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     gfx_flush(); // 11: 12, 0
 
     rsp.matrix_set = saved_matrix_set;
-    rsp.geometry_mode = geometry_mode_saved;
-    rdp.viewport = viewport_saved;
-
+    
+    rsp.geometry_mode = geometry_mode_saved; // WYATT_TODO this should use gfx_sp_geometry_mode(0, geometry_mode_saved); but this is currently extremely slow
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
-    rendering_state.viewport = rdp.viewport;
 
     if (cycle_type == G_CYC_COPY)
         set_other_mode_h(saved_other_mode_h);
@@ -1440,7 +1428,8 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         // Color combiner is turned off in copy mode
         gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_TEXEL0), color_comb(0, 0, 0, G_ACMUX_TEXEL0)));
 
-        // Per documentation one extra pixel is added in this modes to each edge
+        // Per documentation one extra pixel is added in these modes to each edge
+        // WYATT_TODO should we not adjust the top-left coordinates as well?
         lrx += 1 << 2;
         lry += 1 << 2;
     }
@@ -1488,10 +1477,11 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
         // Don't clear Z buffer here since we already did it with glClear
         return;
     }
-    uint32_t mode = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
+    uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
 
-    if (mode == G_CYC_COPY || mode == G_CYC_FILL) {
-        // Per documentation one extra pixel is added in this modes to each edge
+    if (cycle_type == G_CYC_COPY || cycle_type == G_CYC_FILL) {
+        // Per documentation one extra pixel is added in these modes to each edge
+        // WYATT_TODO should we not adjust the top-left coordinates as well?
         lrx += 1 << 2;
         lry += 1 << 2;
     }
