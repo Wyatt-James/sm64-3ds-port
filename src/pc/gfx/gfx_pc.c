@@ -882,6 +882,22 @@ static void gfx_sp_tri_update_state()
         }
     }
 
+    // 75% savings with good numbers (potentially outdated metric)
+    const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
+    if (rendering_state.culling_mode != culling_mode) {
+        rendering_state.culling_mode = culling_mode;
+        gfx_flush(); // 6: 26, 28
+        gfx_citro3d_set_backface_culling_mode(culling_mode);
+    }
+
+    // Nearly 100% savings with good numbers (potentially outdated metric)
+    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
+    if (rendering_state.depth_test != depth_test) {
+        rendering_state.depth_test  = depth_test;
+        gfx_flush(); // 7: 0, 2
+        gfx_rapi->set_depth_test(depth_test);
+    }
+
     profiler_3ds_log_time(10); // gfx_sp_tri_update_state
 }
 
@@ -1011,22 +1027,6 @@ static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_tris) {
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     rsp.geometry_mode &= ~clear;
     rsp.geometry_mode |= set;
-
-    // 75% savings with good numbers
-    const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
-    if (culling_mode != rendering_state.culling_mode) {
-        gfx_flush(); // 6: 26, 28
-        gfx_citro3d_set_backface_culling_mode(culling_mode);
-        rendering_state.culling_mode = culling_mode;
-    }
-
-    // Nearly 100% savings with good numbers
-    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
-    if (depth_test != rendering_state.depth_test) {
-        gfx_flush(); // 7: 0, 2
-        gfx_rapi->set_depth_test(depth_test);
-        rendering_state.depth_test = depth_test;
-    }
 }
 
 static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
@@ -1394,7 +1394,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     ur->xy.as_s16.lower = uly16;
 
     uint32_t geometry_mode_saved = rsp.geometry_mode;
-    rsp.geometry_mode = 0; // WYATT_TODO this should use gfx_sp_geometry_mode(~0, 0); but this is currently extremely slow
+    gfx_sp_geometry_mode(~0, 0);
 
     gfx_rapi->set_viewport(0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height);
 
@@ -1411,7 +1411,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     rsp.matrix_set = saved_matrix_set;
     
-    rsp.geometry_mode = geometry_mode_saved; // WYATT_TODO this should use gfx_sp_geometry_mode(0, geometry_mode_saved); but this is currently extremely slow
+    gfx_sp_geometry_mode(0, geometry_mode_saved);
     gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
 
     if (cycle_type == G_CYC_COPY)
