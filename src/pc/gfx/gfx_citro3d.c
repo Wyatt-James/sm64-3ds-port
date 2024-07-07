@@ -17,6 +17,7 @@
 #include "gfx_citro3d_helpers.h"
 #include "gfx_citro3d_fog_cache.h"
 #include "color_conversion.h"
+#include "src/pc/pc_metrics.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define MAX_VIDEO_BUFFERS 16
@@ -733,7 +734,9 @@ static void gfx_citro3d_end_frame(void)
     // TOOD: draw the minimap here
     gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
 
-    // printf("%s CMD %d\n", OPT_ENABLED(optimize.alpha_test) ? "Y" : "N", (int) gpuCmdBufOffset);
+    // Requires <3ds/gpu/gpu.h>
+    // printf("%s C %d RSP %d\n", OPT_ENABLED(optimize.viewport_and_scissor) ? "VS" : "--", (int) gpuCmdBufOffset, num_rsp_commands_run);
+    // PC_METRIC_DO(num_rsp_commands_run = 0);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }

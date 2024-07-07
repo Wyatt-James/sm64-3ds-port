@@ -22,6 +22,7 @@
 #include "gfx_citro3d.h"
 #include "color_formats.h"
 #include "texture_conversion.h"
+#include "src/pc/pc_metrics.h"
 
 #ifdef TARGET_N3DS
 #include "gfx_3ds.h"
@@ -1585,6 +1586,7 @@ static void gfx_run_dl(Gfx* cmd) {
 
     for (;;) {
         uint32_t opcode = cmd->words.w0 >> 24;
+        PC_METRIC_DO(num_rsp_commands_run++);
 
         if (opcode != G_TRI1 && opcode != G_TRI2 && num_verts_batched) {
             gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
