@@ -100,12 +100,14 @@ struct OptimizationFlags {
     bool consecutive_stereo_p_mtx;
     bool alpha_test;
     bool gpu_textures;
+    bool consecutive_framebuf;
 };
 
 struct RenderState {
     bool fog_enabled;
     C3D_FogLut* fog_lut;
     bool alpha_test;
+    C3D_RenderTarget *cur_target;
 };
 
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
@@ -161,13 +163,15 @@ struct OptimizationFlags optimize = {
     .consecutive_fog = true,
     .consecutive_stereo_p_mtx = true,
     .alpha_test = true,
-    .gpu_textures = true
+    .gpu_textures = true,
+    .consecutive_framebuf = true
 };
 
 struct RenderState render_state = {
     .fog_enabled = 0xFF,
     .fog_lut = NULL,
-    .alpha_test = 0xFF
+    .alpha_test = 0xFF,
+    .cur_target = NULL
 };
 
 // Handles 3DS screen clearing
@@ -501,8 +505,17 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 
 void gfx_citro3d_select_render_target(C3D_RenderTarget* target)
 {
-    target->used = true;
-    C3D_SetFrameBuf(&target->frameBuf);
+    if (render_state.cur_target != target || OPT_DISABLED(optimize.consecutive_framebuf)) {
+        render_state.cur_target  = target;
+        target->used = true;
+        C3D_SetFrameBuf(&target->frameBuf);
+    }
+
+    // Must set viewport before scissor.
+    // C3D_SetFrameBuf: only overwrites framebuf settings
+    // C3D_FrameDrawOn: overwrites framebuf settings, viewport, and disables scissor (through viewport)
+    // C3D_SetViewport: overwrites viewport and disables scissor
+    // C3D_SetScissor: overwrites scissor.
     C3D_SetViewport(viewport_config.y, viewport_config.x, viewport_config.height, viewport_config.width);
     if (scissor_config.enable)
         C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2); // WYATT_TODO FIXME bug? should the last two params be reversed?
@@ -596,6 +609,9 @@ static void gfx_citro3d_init(void)
 
     render_state.fog_enabled = 0xFF;
     render_state.fog_lut = NULL;
+    render_state.alpha_test = 0xFF;
+    render_state.cur_target = NULL;
+
     optimize.consecutive_fog = true;
     optimize.consecutive_stereo_p_mtx = true;
     optimize.alpha_test = true;
@@ -610,7 +626,7 @@ static void gfx_citro3d_start_frame(void)
     }
 
     // if (frames_touch_screen_held == 1)
-    //     BOOL_INVERT(optimize.alpha_test);
+    //     BOOL_INVERT(optimize.consecutive_framebuf);
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -645,6 +661,10 @@ static void gfx_citro3d_start_frame(void)
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, &projection_2d);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
+
+    // Set each frame to ensure that target->used is set to true.
+    // WYATT_TODO we can go further, but it would require hooking screen initialization.
+    render_state.cur_target = NULL;
 }
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
