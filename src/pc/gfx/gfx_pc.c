@@ -72,6 +72,7 @@
 #define MATRIX_SET_NORMAL 0
 #define MATRIX_SET_IDENTITY 1
 #define MATRIX_SET_SCALED_NDC 2
+#define MATRIX_SET_INVALID (~MATRIX_SET_NORMAL)
 #define NDC_SCALE (INT16_MAX / 4) // Scaling factor for s16 NDC coordinates. See gfx_dimensions.h for more info.
 
 #define DELIBERATELY_INVALID_CC_ID ~0
@@ -156,10 +157,9 @@ static struct ColorCombiner color_combiner_pool[64];
 static uint8_t color_combiner_pool_size;
 
 static struct RSP {
+    uint32_t matrix_set;
     float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
     uint8_t modelview_matrix_stack_size;
-
-    // float MP_matrix[4][4];
     float P_matrix[4][4];
 
     Light_t current_lights[MAX_LIGHTS + 1];
@@ -229,6 +229,8 @@ static struct ShaderState {
     uint8_t num_inputs;
     bool used_textures[2];
     uint32_t fog_settings;
+    uint32_t matrix_set;
+    bool p_mtx_changed, mv_mtx_changed;
 } shader_state;
 
 static struct RenderingState {
@@ -251,7 +253,7 @@ static union VBOBuffer {
     uint32_t as_u32[MAX_BUFFERED_VERTS * 26];
     uint8_t as_u8[MAX_BUFFERED_VERTS * 26 * 4];
 } buf_vbo;
-// static ; 
+
 static size_t buf_vbo_len = 0;
 static size_t buf_vbo_num_verts = 0;
 
@@ -304,11 +306,44 @@ static void gfx_set_iod(unsigned int iod)
 }
 #endif
 
+static void gfx_apply_matrices()
+{
+    bool apply_p_mtx = false, apply_mv_mtx = false;
+
+    if (shader_state.matrix_set != rsp.matrix_set) {
+        shader_state.matrix_set  = rsp.matrix_set;
+        gfx_citro3d_select_matrix_set(rsp.matrix_set);
+        apply_p_mtx = apply_mv_mtx = true;
+    }
+
+    if (rsp.matrix_set == MATRIX_SET_NORMAL) {
+        if (shader_state.p_mtx_changed) {
+            shader_state.p_mtx_changed = false;
+            gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
+            apply_p_mtx = true;
+        }
+
+        if (shader_state.mv_mtx_changed) {
+            shader_state.mv_mtx_changed = false;
+            gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+            apply_mv_mtx = true;
+        }
+    }
+
+    if (apply_p_mtx)
+        gfx_citro3d_apply_game_projection_matrix();
+
+    if (apply_mv_mtx)
+        gfx_citro3d_apply_model_view_matrix();
+}
+
 static void gfx_flush(void) {
     profiler_3ds_log_time(0);
 
     // Over 50% of calls are pointless
     if (UNLIKELY(buf_vbo_num_verts > 0)) {
+        gfx_apply_matrices();
+
         gfx_rapi->draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;
@@ -630,59 +665,57 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         }
     }
 #else
-    const float* matrix = (float*) addr; // SHUT UP, COMPILER! UB but it works.
+    const float* matrix = (float*) addr; // WYATT_TODO SHUT UP, COMPILER! UB but it works.
 #endif
 
-    bool flush_needed = true;
     const bool is_load = parameters & G_MTX_LOAD,
                is_push = parameters & G_MTX_PUSH; // NOPUSH means multiplication dst and src overlap
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
 
-        if (last_p_mtx_addr == matrix && is_load)
-            flush_needed = false;
+        bool matrix_updated = !(last_p_mtx_addr == matrix && is_load);
+
+        if (matrix_updated) {
+            gfx_flush(); // 0: 73, 46 for both mtx types
+            last_p_mtx_addr = matrix;
+        }
 
         if (is_load) {
-            if (flush_needed)
+            if (matrix_updated) {
                 memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
+                shader_state.p_mtx_changed = true;
+            }
         }
-        else
+        else {
             gfx_matrix_mul_safe(rsp.P_matrix, matrix, rsp.P_matrix);
-            
-        if (flush_needed) {
-            gfx_flush(); // 0: 73, 46 for both mtx types
-
-            last_p_mtx_addr = matrix;
-            gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
-            gfx_citro3d_apply_game_projection_matrix();
+            shader_state.p_mtx_changed = true;
         }
 
     } else { // G_MTX_MODELVIEW
         const float* src = rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
         
-        if (last_mv_mtx_addr == matrix && is_load)
-            flush_needed = false;
+        bool matrix_updated = !(last_mv_mtx_addr == matrix && is_load);
+
+        if (matrix_updated) {
+            gfx_flush(); // 0: 73, 46 for both mtx types
+            last_mv_mtx_addr = matrix;
+            rsp.lights_changed = true;
+        }
         
         if (is_push && rsp.modelview_matrix_stack_size < 11)
             ++rsp.modelview_matrix_stack_size;
 
         if (is_load) {
-            if (flush_needed)
+            if (matrix_updated) {
+                shader_state.mv_mtx_changed = true;
                 memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
+            }
         } else {
+            shader_state.mv_mtx_changed = true;
             if (is_push)
                 gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
             else
                 gfx_matrix_mul_safe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
-        }
-
-        if (flush_needed) {
-            gfx_flush(); // 0: 73, 46 for both mtx types
-            
-            last_mv_mtx_addr = matrix;
-            gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-            gfx_citro3d_apply_model_view_matrix();
-            rsp.lights_changed = true;
         }
     }
 }
@@ -694,8 +727,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
     rsp.modelview_matrix_stack_size -= count;
-    gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-    gfx_citro3d_apply_model_view_matrix();
+    shader_state.mv_mtx_changed = true;
 }
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
@@ -1259,6 +1291,9 @@ static void shader_state_init(struct ShaderState* ss)
     ss->use_noise = false;
     ss->used_textures[0] = false;
     ss->used_textures[1] = false;
+    ss->matrix_set = MATRIX_SET_INVALID;
+    ss->p_mtx_changed = true;
+    ss->mv_mtx_changed = true;
 }
 
 static void calculate_cc_id()
@@ -1327,16 +1362,16 @@ static void gfx_dp_set_fill_color(uint32_t packed_color) {
 }
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
+    gfx_flush(); // 10: 0, 12
+
     uint32_t saved_other_mode_h = rdp.other_mode_h;
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
+    uint32_t saved_matrix_set = rsp.matrix_set;
 
     if (cycle_type == G_CYC_COPY)
         set_other_mode_h((rdp.other_mode_h & ~(3U << G_MDSFT_TEXTFILT)) | G_TF_POINT);
 
-    gfx_flush(); // 10: 0, 12
-    gfx_citro3d_select_matrix_set(MATRIX_SET_SCALED_NDC);
-    gfx_citro3d_apply_model_view_matrix();
-    gfx_citro3d_apply_game_projection_matrix();
+    rsp.matrix_set = MATRIX_SET_SCALED_NDC;
 
     // We need to scale our NDCs up here to keep precision with s16s, then back down
     // in the shader with one of the matrices.
@@ -1382,13 +1417,9 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
         &rsp.rect_vertices[3]};
 
     gfx_sp_tri_batched(rect_triangles, 2);
-
-    // Restore normal MTX set.
     gfx_flush(); // 11: 12, 0
-    gfx_citro3d_select_matrix_set(MATRIX_SET_NORMAL);
-    gfx_citro3d_apply_model_view_matrix();
-    gfx_citro3d_apply_game_projection_matrix();
 
+    rsp.matrix_set = saved_matrix_set;
     rsp.geometry_mode = geometry_mode_saved;
     rdp.viewport = viewport_saved;
 
@@ -1887,6 +1918,7 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     gfx_citro3d_set_game_projection_matrix(MTX_IDENTITY);
 
     gfx_citro3d_select_matrix_set(MATRIX_SET_NORMAL);
+    rsp.matrix_set = MATRIX_SET_NORMAL;
 }
 
 struct GfxRenderingAPI *gfx_get_current_rendering_api(void) {
