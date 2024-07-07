@@ -101,10 +101,10 @@ static void initialise_screens()
 
     u32 transferFlags = DISPLAY_TRANSFER_FLAGS;
 
-    if (useAA && !useWide)
-        transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_XY);
-    else if (useAA && useWide)
+    if (useAA && useWide)
         transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X);
+    else if (useAA && !useWide)
+        transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_XY);
     else
         transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO);
 
@@ -116,15 +116,14 @@ static void initialise_screens()
 
     if (!useWide)
     {
-        gfxSetWide(false);
+        gfxSetWide(false); // Set mode to 2D
         gTargetRight = C3D_RenderTargetCreate(height, width, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
         C3D_RenderTargetSetOutput(gTargetRight, GFX_TOP, GFX_RIGHT, transferFlags);
-        gfxSet3D(true);
+        gfxSet3D(true); // ...then set mode to 3D?
     }
     else
     {
-        gfxSet3D(false);
-        gfxSetWide(true);
+        gfxSetWide(true); // Just set mode to wide
     }
 
     // used to determine scissoring
@@ -162,7 +161,7 @@ static void gfx_3ds_update_stereoscopy(void)
         gGfx3DEnabled = true;
 	} else
     {
-        // default to true; this is different to initialisation where both are false
+        // default to 800px + AA
 		gfx_config.useAA = true;
 		gfx_config.useWide = true;
         gGfx3DEnabled = false;
