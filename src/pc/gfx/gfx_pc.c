@@ -82,6 +82,8 @@
 #define UNLIKELY(cond)            __builtin_expect(!!(cond), 0)
 #define EXPECT(val, expected)     __builtin_expect(val, expected)
 
+#define XYWH_EQUAL(vp1_, vp2_) (vp1_.x == vp2_.x && vp1_.y == vp2_.y && vp1_.width == vp2_.width && vp1_.height == vp2_.height) // Compares two XYWidthHeight structs
+
 #ifdef TARGET_N3DS
 #define UCLAMP8(v) ((uint8_t) __usat(v, 8))
 #else
@@ -213,7 +215,7 @@ static struct RDP {
 #else
     union RGBA32 env_color, prim_color, fog_color, fill_color;
 #endif
-    struct XYWidthHeight viewport, scissor;
+    struct XYWidthHeight viewport;
     void *z_buf_address;
     void *color_image_address;
 } rdp;
@@ -883,6 +885,7 @@ static void gfx_sp_tri_update_state()
     }
 
     // 75% savings with good numbers (potentially outdated metric)
+    // Handled here to optimize rectangle drawing
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
     if (rendering_state.culling_mode != culling_mode) {
         rendering_state.culling_mode = culling_mode;
@@ -891,11 +894,19 @@ static void gfx_sp_tri_update_state()
     }
 
     // Nearly 100% savings with good numbers (potentially outdated metric)
+    // Handled here to optimize rectangle drawing
     const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
         gfx_flush(); // 7: 0, 2
         gfx_rapi->set_depth_test(depth_test);
+    }
+
+    // Handled here to optimize rectangle drawing
+    if (!XYWH_EQUAL(rendering_state.viewport, rdp.viewport)) {
+        rendering_state.viewport = rdp.viewport;
+        gfx_flush(); // 8: 0, 0
+        gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
 
     profiler_3ds_log_time(10); // gfx_sp_tri_update_state
@@ -1029,28 +1040,27 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     rsp.geometry_mode |= set;
 }
 
-static void gfx_calc_and_set_viewport(const Vp_t *viewport) {
+static void gfx_set_viewport(struct XYWidthHeight viewport) {
+    rdp.viewport.x = viewport.x;
+    rdp.viewport.y = viewport.y;
+    rdp.viewport.width = viewport.width;
+    rdp.viewport.height = viewport.height;
+}
+
+static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
     // 2 bits fraction
-    float width = 2.0f * viewport->vscale[0] / 4.0f;
-    float height = 2.0f * viewport->vscale[1] / 4.0f;
-    float x = (viewport->vtrans[0] / 4.0f) - width / 2.0f;
-    float y = SCREEN_HEIGHT - ((viewport->vtrans[1] / 4.0f) + height / 2.0f);
+    float width = 2.0f * viewport_raw->vscale[0] / 4.0f;
+    float height = 2.0f * viewport_raw->vscale[1] / 4.0f;
+    float x = (viewport_raw->vtrans[0] / 4.0f) - width / 2.0f;
+    float y = SCREEN_HEIGHT - ((viewport_raw->vtrans[1] / 4.0f) + height / 2.0f);
 
     width *= RATIO_X;
     height *= RATIO_Y;
     x *= RATIO_X;
     y *= RATIO_Y;
 
-    rdp.viewport.x = x;
-    rdp.viewport.y = y;
-    rdp.viewport.width = width;
-    rdp.viewport.height = height;
-    
-    if (memcmp(&rdp.viewport, &rendering_state.viewport, sizeof(rdp.viewport)) != 0) {
-        gfx_flush(); // 8: 0, 0
-        gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
-        rendering_state.viewport = rdp.viewport;
-    }
+    struct XYWidthHeight viewport = {x, y, width, height};
+    gfx_set_viewport(viewport);
 }
 
 static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
@@ -1128,15 +1138,11 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     float width = (lrx - ulx) / 4.0f * RATIO_X;
     float height = (lry - uly) / 4.0f * RATIO_Y;
 
-    rdp.scissor.x = x;
-    rdp.scissor.y = y;
-    rdp.scissor.width = width;
-    rdp.scissor.height = height;
-
-    if (memcmp(&rdp.scissor, &rendering_state.scissor, sizeof(rdp.scissor)) != 0) {
+    struct XYWidthHeight scissor = {x, y, width, height};
+    if (!XYWH_EQUAL(rendering_state.scissor, scissor)) {
+        rendering_state.scissor = scissor;
         gfx_flush(); // 9: 0, 0
-        gfx_rapi->set_scissor(rdp.scissor.x, rdp.scissor.y, rdp.scissor.width, rdp.scissor.height);
-        rendering_state.scissor = rdp.scissor;
+        gfx_rapi->set_scissor(scissor.x, scissor.y, scissor.width, scissor.height);
     }
 }
 
@@ -1396,7 +1402,9 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     uint32_t geometry_mode_saved = rsp.geometry_mode;
     gfx_sp_geometry_mode(~0, 0);
 
-    gfx_rapi->set_viewport(0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height);
+    struct XYWidthHeight viewport_saved = rdp.viewport;
+    struct XYWidthHeight viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
+    gfx_set_viewport(viewport);
 
     static struct LoadedVertex* rect_triangles[] =
        {&rsp.rect_vertices[0],
@@ -1412,7 +1420,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     rsp.matrix_set = saved_matrix_set;
     
     gfx_sp_geometry_mode(0, geometry_mode_saved);
-    gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
+    gfx_set_viewport(viewport_saved);
 
     if (cycle_type == G_CYC_COPY)
         set_other_mode_h(saved_other_mode_h);
