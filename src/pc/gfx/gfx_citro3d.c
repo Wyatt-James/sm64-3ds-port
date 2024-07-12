@@ -636,6 +636,7 @@ static void gfx_citro3d_init(void)
     optimize.consecutive_stereo_p_mtx = true;
     optimize.alpha_test = true;
     optimize.gpu_textures = true;
+    optimize.consecutive_framebuf = true;
     optimize.viewport_and_scissor = true;
 }
 
