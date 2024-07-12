@@ -121,17 +121,39 @@ struct XYWidthHeight {
 
 union int16x2 {
     struct {
-        int16_t upper;
-        int16_t lower;
-    } as_s16;
-    uint32_t as_u32;
+        int16_t s16_upper;
+        int16_t s16_lower;
+    };
+    uint32_t u32;
+};
+
+union int16x4 {
+    struct {
+        int16_t s16_1;
+        int16_t s16_2;
+        int16_t s16_3;
+        int16_t s16_4;
+    };
+    struct {
+        int16_t x;
+        int16_t y;
+        int16_t z;
+        int16_t w;
+    };
+    struct {
+        uint32_t u32_upper;
+        uint32_t u32_lower;
+    };
+    uint64_t u64;
+    int64_t s64;
+    double f64;
 };
 
 // Total size: 20 bytes
 struct LoadedVertex {
-    union int16x2 xy, zw; // 8 bytes (w is unused)
-    float u, v;           // 8 bytes
-    union RGBA32 color;   // 4 bytes
+    union int16x4 position; // 8 bytes (w is unused, garbage value)
+    float u, v;             // 8 bytes
+    union RGBA32 color;     // 4 bytes
 };
 
 struct TextureHashmapNode {
@@ -741,8 +763,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         const Vtx_t *v = &vertices[vert].v;
         struct LoadedVertex *d = &rsp.loaded_vertices[dest];
         
-        d->xy.as_u32 = *((uint32_t*) (&v->ob[0])); // X and Y stored together
-        d->zw.as_s16.upper = v->ob[2];             // Z. W is ignored, no need to write.
+        d->position.u64 = *((uint64_t*) (&v->ob[0])); // W is set to garbage
         d->color.u32 = *((uint32_t*) v->cn);
     }
     profiler_3ds_log_time(5); // Vertex Copy
@@ -932,8 +953,9 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 
     for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
 
-        buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->xy.as_u32;
-        buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->zw.as_u32;
+        // Why is f64 one instruction shorter than u64? Keep as doubles for now, I guess.
+        *((double*) (&buf_vbo.as_u32[buf_vbo_len])) = v_arr[vtx]->position.f64;
+        buf_vbo_len += 2;
 
         // The inner logic here takes ~600us in the BoB benchmark
         if (use_texture) {
@@ -1388,17 +1410,17 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
     static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
 
-    ul->xy.as_s16.upper = ulx16;
-    ul->xy.as_s16.lower = uly16;
+    ul->position.x = ulx16;
+    ul->position.y = uly16;
 
-    ll->xy.as_s16.upper = ulx16;
-    ll->xy.as_s16.lower = lry16;
+    ll->position.x = ulx16;
+    ll->position.y = lry16;
 
-    lr->xy.as_s16.upper = lrx16;
-    lr->xy.as_s16.lower = lry16;
+    lr->position.x = lrx16;
+    lr->position.y = lry16;
 
-    ur->xy.as_s16.upper = lrx16;
-    ur->xy.as_s16.lower = uly16;
+    ur->position.x = lrx16;
+    ur->position.y = uly16;
 
     uint32_t geometry_mode_saved = rsp.geometry_mode;
     gfx_sp_geometry_mode(~0, 0);
@@ -1863,10 +1885,10 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     shader_state_init(&shader_state);
 
     // Screen-space rect Z will always be -1.
-    rsp.rect_vertices[0].zw.as_s16.upper =
-    rsp.rect_vertices[1].zw.as_s16.upper =
-    rsp.rect_vertices[2].zw.as_s16.upper =
-    rsp.rect_vertices[3].zw.as_s16.upper = -1;
+    rsp.rect_vertices[0].position.z =
+    rsp.rect_vertices[1].position.z =
+    rsp.rect_vertices[2].position.z =
+    rsp.rect_vertices[3].position.z = -1;
 
     // Initialize the matstack to identity
     for (int i = 0; i < MAT_STACK_SIZE; i++)
