@@ -516,7 +516,6 @@ void gfx_citro3d_select_render_target(C3D_RenderTarget* target)
 {
     if (render_state.cur_target != target || OPT_DISABLED(optimize.consecutive_framebuf)) {
         render_state.cur_target  = target;
-        render_state.viewport_changed = true;
         target->used = true;
         C3D_SetFrameBuf(&target->frameBuf);
     }
