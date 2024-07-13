@@ -499,16 +499,6 @@ static void gfx_citro3d_set_use_alpha(bool use_alpha)
 
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_num_tris)
 {
-    struct CCFeatures* cc_features = &current_shader_program->cc_features;
-
-    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
-
-    if (cc_features->num_inputs > 1)
-        C3D_TexEnvColor(C3D_GetTexEnv(0), gfx_citro3d_get_env_color_from_vbo(buf_vbo, cc_features).u32);
-
-    if (hasTex)
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, current_texture->scale_s, -current_texture->scale_t, 1, 1);
-
     C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
 }
 
@@ -562,6 +552,15 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
         printf("vertex buffer full!\n");
         return;
     }
+
+    struct CCFeatures* cc_features = &current_shader_program->cc_features;
+    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
+
+    if (cc_features->num_inputs > 1)
+        C3D_TexEnvColor(C3D_GetTexEnv(0), gfx_citro3d_get_env_color_from_vbo(buf_vbo, cc_features).u32);
+
+    if (hasTex)
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, current_texture->scale_s, -current_texture->scale_t, 1, 1);
 
     // WYATT_TODO actually prevent buffer overruns.
     float* const buf_vbo_head = current_video_buffer->ptr + current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride;
