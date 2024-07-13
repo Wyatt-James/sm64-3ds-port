@@ -54,6 +54,49 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 #define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
 #define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))                                        // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
 
+/*
+ * Used to speed up some dual-float comparisons (namely, tex scale).
+ * Notably, this comparison CAN use an f64 comparison on a f32x2.
+ * This is valid because of the following:
+ *   - Floats have the following special cases: +-0, +-INF, NaN, Denormalized numbers (D), and Normalized numbers (N).
+ *   - The N3DS is IEEE-754 compliant.
+ *   - F32s have the following bit structure: 1 sign bit, 8 exp bits, 23 mantissa bits
+ *   - F64s have the following bit structure: 1 sign bit, 11 exp bits, 52 mantissa bits
+ * Observations:
+ *   - The F64's validity is determined solely by the upper F32. Its sign is identical,
+ *     and F64's exponent gains the first 3 bits of F32's mantissa.
+ * Cases:
+ *   +0: the input data will never have a tex_scale of +0, so we don't care.
+ *   -0: the input data will never have a tex_scale of -0, so we don't care.
+ *   +-INF: Infinity is reached when all exponent bits are 1, thus requiring F32 to also have all exponent bits as 1,
+ *       and therefore F32 must already be INF32 to reach INF64. This will never occur, so we don't care.
+ *   NaN: NaN is reached when all exponent bits are 1, thus requiring F32 to also have all exponent bits as 1,
+ *       and therefore F32 must already be NaN32 to reach NaN64. This will never occur, so we don't care.
+ *   Denorm: D is reached when all exponent bits are 0, thus requiring F32 to also have all exponent bits as 0,
+ *       and therefore F32 must already be D32 to reach D64. Our inputs should never be denormalized, as that
+ *       requires exceptionally small numbers to achieve underflow.
+ *   Norm: N is the only remaining case, and all combinations of N32 forming an N64 will be unique, thus
+ *       validating the comparison.
+ * Defaults:
+ *   Comparisons between an INF and N are valid and will always fail, meaning that INF can be used as an initial value.
+ * 
+ * Therefore, in this domain, comparing an f32x2 as f64 is valid. Unfortunately, it appears that performance is slower
+ * than U64, even though U64 generates 32-bit loads and an extra 32-bit store. I would love to be proven wrong.
+ */
+union f32x2 {
+    struct {
+        float f32_upper;
+        float f32_lower;
+    };
+    struct {
+        float s;
+        float t;
+    };
+    uint64_t u64;
+    int64_t s64;
+    double f64;
+};
+
 // N64 shader program
 struct ShaderProgram {
     uint32_t shader_id; // N64 shader_id
@@ -93,7 +136,7 @@ struct GameMtxSet {
 
 struct TexHandle {
     C3D_Tex c3d_tex;
-    float scale_s, scale_t;
+    union f32x2 scale;
 };
 
 struct OptimizationFlags {
@@ -103,6 +146,7 @@ struct OptimizationFlags {
     bool gpu_textures;
     bool consecutive_framebuf;
     bool viewport_and_scissor;
+    bool tex_scale;
 };
 
 struct RenderState {
@@ -112,6 +156,7 @@ struct RenderState {
     C3D_RenderTarget *cur_target;
     bool viewport_changed;
     bool scissor_changed;
+    union f32x2 tex_scale;
 };
 
 static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
@@ -169,7 +214,8 @@ struct OptimizationFlags optimize = {
     .alpha_test = true,
     .gpu_textures = true,
     .consecutive_framebuf = true,
-    .viewport_and_scissor = true
+    .viewport_and_scissor = true,
+    .tex_scale = true
 };
 
 struct RenderState render_state = {
@@ -178,7 +224,8 @@ struct RenderState render_state = {
     .alpha_test = 0xFF,
     .cur_target = NULL,
     .viewport_changed = true,
-    .scissor_changed = true
+    .scissor_changed = true,
+    .tex_scale = {.f64 = INFINITY}
 };
 
 // Handles 3DS screen clearing
@@ -263,6 +310,8 @@ static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
         render_state.alpha_test  = alpha_test;
         C3D_AlphaTest(true, GPU_GREATER, alpha_test ? 77 : 0);
     }
+
+    render_state.tex_scale.f64 = INFINITY; // Forces a uniform set when loading a shader
 }
 
 static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
@@ -430,8 +479,8 @@ static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int
 
     C3D_Tex* c3d_tex = &current_texture->c3d_tex;
 
-    current_texture->scale_s = width / (float)output_width;
-    current_texture->scale_t = height / (float)output_height;
+    current_texture->scale.s = width / (float)output_width;
+    current_texture->scale.t = -(height / (float)output_height);
 
     gfx_citro3d_pad_texture_rgba32(src_as_rgba32, tex_staging_buffer, width, height, output_width, output_height);
 
@@ -559,8 +608,12 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     if (cc_features->num_inputs > 1)
         C3D_TexEnvColor(C3D_GetTexEnv(0), gfx_citro3d_get_env_color_from_vbo(buf_vbo, cc_features).u32);
 
-    if (hasTex)
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, current_texture->scale_s, -current_texture->scale_t, 1, 1);
+    // See the definition of `union f32x2` for an explanation of why we use U64 comparison instead of F64.
+    struct TexHandle* tex = current_texture;
+    if (hasTex && (render_state.tex_scale.u64 != tex->scale.u64 || OPT_DISABLED(optimize.tex_scale))) {
+            render_state.tex_scale.u64 = tex->scale.u64;
+            C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, tex->scale.s, tex->scale.t, 1, 1);
+    }
 
     // WYATT_TODO actually prevent buffer overruns.
     float* const buf_vbo_head = current_video_buffer->ptr + current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride;
@@ -629,6 +682,7 @@ static void gfx_citro3d_init(void)
     render_state.cur_target = NULL;
     render_state.viewport_changed = true;
     render_state.scissor_changed = true;
+    render_state.tex_scale.f64 = INFINITY;
 
     optimize.consecutive_fog = true;
     optimize.consecutive_stereo_p_mtx = true;
@@ -636,6 +690,7 @@ static void gfx_citro3d_init(void)
     optimize.gpu_textures = true;
     optimize.consecutive_framebuf = true;
     optimize.viewport_and_scissor = true;
+    optimize.tex_scale = true;
 }
 
 static void gfx_citro3d_start_frame(void)
@@ -646,7 +701,7 @@ static void gfx_citro3d_start_frame(void)
     }
 
     // if (frames_touch_screen_held == 1)
-    //     BOOL_INVERT(optimize.viewport_and_scissor);
+    //     BOOL_INVERT(optimize.tex_scale);
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -687,6 +742,7 @@ static void gfx_citro3d_start_frame(void)
     render_state.cur_target = NULL;
     render_state.viewport_changed = true;
     render_state.scissor_changed = true;
+    render_state.tex_scale.f64 = INFINITY;
 }
 
 void gfx_citro3d_set_model_view_matrix(float mtx[4][4])
@@ -734,7 +790,7 @@ static void gfx_citro3d_end_frame(void)
     gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
 
     // Requires <3ds/gpu/gpu.h>
-    // printf("%s C %d RSP %d\n", OPT_ENABLED(optimize.viewport_and_scissor) ? "VS" : "--", (int) gpuCmdBufOffset, num_rsp_commands_run);
+    // printf("%s C %d RSP %d\n", OPT_ENABLED(optimize.tex_scale) ? "Y" : "-", (int) gpuCmdBufOffset, num_rsp_commands_run);
     // PC_METRIC_DO(num_rsp_commands_run = 0);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
