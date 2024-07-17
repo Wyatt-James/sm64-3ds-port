@@ -238,7 +238,7 @@ ASM_DIRS := lib
 ifeq ($(TARGET_N64),1)
   ASM_DIRS := asm $(ASM_DIRS)
 else
-  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/audio src/pc/controller src/pc/n3ds
+  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/gfx/shader_programs src/pc/audio src/pc/controller src/pc/n3ds
   # If this is enabled, you can do ASM debugging on these files.
   # SRC_DIRS := $(SRC_DIRS) src/pc/mixer_implementations
   ASM_DIRS :=
@@ -913,20 +913,31 @@ $(BUILD_DIR)/$(TARGET).objdump: $(ELF)
 else
 ifeq ($(TARGET_N3DS),1)
 
-# for building the vertex shaders
+# for building the shader binaries
 
-PICA_DIR := src/pc/gfx/shaders
-PICA_SRC := $(wildcard $(PICA_DIR)/*.v.pica)
-PICA_SHBIN := $(foreach file,$(PICA_SRC),$(BUILD_DIR)/$(file:.v.pica=.shbin))
+PICA_ROOT_DIR := src/pc/gfx/shaders
+PICA_PROG_FILES := $(wildcard $(PICA_ROOT_DIR)/*.shprog)
+PICA_SHBIN := $(foreach file,$(PICA_PROG_FILES),$(BUILD_DIR)/$(file:.shprog=.shbin))
 PICA_O := $(foreach file,$(PICA_SHBIN),$(file:.shbin=.shbin.o))
+
+# TODO remove me if possible! This hack forces each shader's recompilation to depend on ALL described .pica files.
+# This is necessary because, to my knowledge, we can't dynamically evaluate the file in the dependencies.
+PICA_DEPENDENCY_HACK := $(foreach pica_path,$(foreach shprog_path, $(PICA_PROG_FILES),$(shell cat ${shprog_path})),$(PICA_ROOT_DIR)/$(pica_path))
 
 $(BUILD_DIR)/%.shbin.o: $(BUILD_DIR)/%.shbin
 	printf "$(DEVKITPRO)/tools/bin/bin2s $< | $(AS) -o $@"
 	$(DEVKITPRO)/tools/bin/bin2s $< | $(AS) -o $@
 
-$(BUILD_DIR)/%.shbin: %.v.pica
-	printf "$(DEVKITPRO)/tools/bin/picasso -o $@ $<"
-	$(DEVKITPRO)/tools/bin/picasso -o $@ $<
+$(BUILD_DIR)/%.shbin: %.shprog $(PICA_DEPENDENCY_HACK)
+	$(eval $@shprog_file_path := $<)
+	@echo "Building PICA200 shader: $($@shprog_file_path)"
+
+# Load .shprog file and extend its paths to be relative to working directory, rather than the pica root dir
+	$(eval $@loaded_shprog   := $(shell cat ${$@shprog_file_path}))
+	$(eval $@extended_shprog := $(foreach file,$($@loaded_shprog),$(PICA_ROOT_DIR)/$(file)))
+
+	@echo "$(DEVKITPRO)/tools/bin/picasso -o $@ $($@extended_shprog)"
+	$(DEVKITPRO)/tools/bin/picasso -o $@ $($@extended_shprog)
 
 SMDH_TITLE ?= Super Mario 64
 SMDH_DESCRIPTION ?= Super Mario 64 3DS Port

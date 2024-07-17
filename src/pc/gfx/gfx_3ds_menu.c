@@ -3,6 +3,7 @@
 #include "gfx_3ds.h"
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
+#include "shader_programs/gfx_n3ds_shprog_emu64.h"
 
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
@@ -24,8 +25,8 @@ static void gfx_3ds_menu_draw_button(float *vbo_buffer, int x, int y, C3D_Tex te
 
     Mtx_OrthoTilt(&projection_mtx, 0.0, 320.0, 0.0, 240.0, 0.0, 1.0, true);
 
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, &model_view_mtx);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_mtx);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.model_view_mtx, &model_view_mtx);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_mtx);
 
     const vertex *vertex_list = thin ? vertex_list_button_thin : vertex_list_button;
 
@@ -164,7 +165,7 @@ void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButto
 
     C3D_FrameDrawOn(gTargetBottom);
 
-    // WYATT_TODO Load shader 5 and set up identity MTX
+    // WYATT_TODO Load non-emu shader program and set up identity MTX
 
     buffer_offset = vertex_offset;
 

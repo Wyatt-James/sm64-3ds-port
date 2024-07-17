@@ -1,18 +1,21 @@
-; position, color rgb
+; position, 2 colors rgba
 
 ; Uniforms
 .fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
 
 ; Constants
-.constf myconst(0.0, 1.0, -1.0, 0.00392156862)
+.constf main_const_1(0.0, 1.0, -1.0, 0.00392156862)
 
-.alias  zeros       myconst.xxxx ; Vector full of zeros
-.alias  ones        myconst.yyyy ; Vector full of ones
-.alias  color_scale myconst.wwww ; Vector full of 1/255
+.alias zeros       main_const_1.xxxx ; Vector full of zeros
+.alias ones        main_const_1.yyyy ; Vector full of ones
+.alias nones       main_const_1.zzzz ; Vector full of negative ones
+.alias color_scale main_const_1.wwww ; Vector full of 1/255
+.alias tcofs       main_const_1.xyxx ; Vector of [ tcof1, tcof2, 0, 0 ]
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
 .in inclr v1
+.in inclr2 v2
 
 ; Outputs
 .out outpos position  ; xyzw
@@ -20,7 +23,8 @@
 .out outtc1 texcoord1 ; texture unit 1
 .out outclr color     ; rgba
 
-.proc main
+.entry main_20
+.proc main_20
 
 setup:
     mov r0, inpos
@@ -49,8 +53,7 @@ texture:
     mov outtc1, zeros
 color:
     ; copy color, scaling it by 1/255
-    mul outclr.xyz, color_scale, inclr.xyz
-    mov outclr.w, ones
+    mul outclr, color_scale, inclr2
 
     ; We're finished
     end

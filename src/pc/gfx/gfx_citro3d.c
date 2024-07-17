@@ -19,6 +19,8 @@
 #include "color_conversion.h"
 #include "src/pc/pc_metrics.h"
 
+#include "shader_programs/gfx_n3ds_shprog_emu64.h"
+
 #define TEXTURE_POOL_SIZE 4096
 #define MAX_VIDEO_BUFFERS 16
 #define MAX_SHADER_PROGRAMS 32
@@ -108,7 +110,6 @@ struct ShaderProgram {
 // 3DS shader's video buffer. May be shared by multiple ShaderPrograms.
 struct VideoBuffer {
     const struct n3ds_shader_info* shader_info;
-    struct UniformLocations uniform_locations;
     shaderProgram_s shader_program; // pica vertex shader
     float *ptr;
     uint32_t offset;
@@ -167,7 +168,6 @@ static struct ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
 static struct ShaderProgram* current_shader_program = NULL;
 static uint8_t num_shader_programs = 0;
 static C3D_TexEnv texenv_slot_1;
-struct UniformLocations uniform_locations; // Uniform locations for the current shader program
 
 struct FogCache fog_cache;
 
@@ -271,23 +271,16 @@ static void gfx_citro3d_unload_shader(UNUSED struct ShaderProgram *old_prg)
 
 static void gfx_citro3d_load_shader(struct ShaderProgram *prg)
 {
+    struct VideoBuffer* vb = prg->video_buffer;
+
     current_shader_program = prg;
-    current_video_buffer = prg->video_buffer;
+    current_video_buffer = vb;
 
-    C3D_BindProgram(&current_video_buffer->shader_program);
-
-    // Update uniforms
-    memcpy(&uniform_locations, &current_video_buffer->uniform_locations, sizeof(struct UniformLocations));
+    C3D_BindProgram(&vb->shader_program);
 
     // Update buffer info
     C3D_SetBufInfo(&current_video_buffer->buf_info);
     C3D_SetAttrInfo(&current_video_buffer->attr_info);
-
-    // Set up matrices
-    if (!gGfx3DEnabled)
-        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_2d);
-    gfx_citro3d_apply_model_view_matrix();
-    gfx_citro3d_apply_game_projection_matrix();
 
     // Configure TEV
     if (prg->cc_features.num_inputs == 2)
@@ -325,69 +318,56 @@ static uint8_t setup_video_buffer(const struct n3ds_shader_info* shader_info)
 
     // not found, create new
     int id = num_video_buffers++;
-    struct VideoBuffer *cb = &video_buffers[id];
-    cb->shader_info = shader_info;
+    struct VideoBuffer *vb = &video_buffers[id];
+    vb->shader_info = shader_info;
 
-    DVLB_s* vertex_shader_dvlb = DVLB_ParseFile((__3ds_u32*)shader_info->shader_binary, *shader_info->shader_size); 
-
-    shaderProgramInit(&cb->shader_program);
-    shaderProgramSetVsh(&cb->shader_program, &vertex_shader_dvlb->DVLE[0]);
+    uint32_t dvle_index = vb->shader_info->dvle_index;
+    
+    shaderProgramInit(&vb->shader_program);
+    shaderProgramSetVsh(&vb->shader_program, &vb->shader_info->binary->dvlb->DVLE[dvle_index]);
+    shaderProgramSetGsh(&vb->shader_program, NULL, 0);
 
     // Configure attributes for use with the vertex shader
     int attr = 0;
     uint32_t attr_mask = 0;
 
-    AttrInfo_Init(&cb->attr_info);
+    AttrInfo_Init(&vb->attr_info);
 
     if (shader_info->vbo_info.has_position)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_SHORT, 4); // XYZW (W is set to 1.0f in the shader)
+        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_SHORT, 4); // XYZW (W is set to 1.0f in the shader)
     }
     if (shader_info->vbo_info.has_texture)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 2);
+        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_FLOAT, 2);
     }
     // if (shader_info->vbo_info.has_fog)
     // {
     //     attr_mask += attr * (1 << 4 * attr);
-    //     AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_FLOAT, 4);
+    //     AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_FLOAT, 4);
     // }
     if (shader_info->vbo_info.has_color1)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
+        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
     }
     if (shader_info->vbo_info.has_color2)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&cb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
+        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4);
     }
 
     // Create the VBO (vertex buffer object)
-    cb->ptr = linearAlloc(256 * 1024); // sizeof(float) * 10000 vertexes * 10 floats per vertex?
-    cb->offset = 0;
+    vb->ptr = linearAlloc(256 * 1024); // sizeof(float) * 10000 vertexes * 10 floats per vertex?
+    vb->offset = 0;
 
     // Configure buffers
-    BufInfo_Init(&cb->buf_info);
-    BufInfo_Add(&cb->buf_info, cb->ptr, shader_info->vbo_info.stride * sizeof(float), attr, attr_mask);
+    BufInfo_Init(&vb->buf_info);
+    BufInfo_Add(&vb->buf_info, vb->ptr, shader_info->vbo_info.stride * sizeof(float), attr, attr_mask);
 
     return id;
-}
-
-// Finds and saves the uniform locations of the given shader. Must already be initialized.
-static void get_uniform_locations(struct ShaderProgram *prg)
-{
-    struct VideoBuffer* video_buffer = prg->video_buffer;
-    shaderProgram_s shader_program = video_buffer->shader_program;
-
-    video_buffer->uniform_locations.projection_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "projection_mtx");
-    video_buffer->uniform_locations.model_view_mtx =      shaderInstanceGetUniformLocation(shader_program.vertexShader, "model_view_mtx");
-    video_buffer->uniform_locations.game_projection_mtx = shaderInstanceGetUniformLocation(shader_program.vertexShader, "game_projection_mtx");
-    
-    if (prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1])
-        video_buffer->uniform_locations.tex_scale = shaderInstanceGetUniformLocation(shader_program.vertexShader, "tex_scale");
 }
 
 static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t shader_id)
@@ -408,7 +388,6 @@ static struct ShaderProgram *gfx_citro3d_create_and_load_new_shader(uint32_t sha
 
     // Preconfigure TEV settings
     gfx_citro3d_configure_tex_env_slot_0(&prg->cc_features, &prg->texenv_slot_0);
-    get_uniform_locations(prg);
     
     gfx_citro3d_load_shader(prg);
     return prg;
@@ -612,7 +591,7 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
     struct TexHandle* tex = current_texture;
     if (hasTex && (render_state.tex_scale.u64 != tex->scale.u64 || OPT_DISABLED(optimize.tex_scale))) {
             render_state.tex_scale.u64 = tex->scale.u64;
-            C3D_FVUnifSet(GPU_VERTEX_SHADER, uniform_locations.tex_scale, tex->scale.s, tex->scale.t, 1, 1);
+            C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_scale, tex->scale.s, tex->scale.t, 1, 1);
     }
 
     // WYATT_TODO actually prevent buffer overruns.
@@ -626,19 +605,19 @@ static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_le
             recalculate_stereo_matrices();
 
             if (s2DMode == STEREO_MODE_2D)
-                C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_left);
+                C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_left);
         }
 
         // left screen
         if (s2DMode != STEREO_MODE_2D)
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_left);
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_left);
 
         gfx_citro3d_select_render_target(gTarget);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
 
         // right screen
         if (s2DMode != STEREO_MODE_2D)
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx, &projection_right);
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_right);
 
         gfx_citro3d_select_render_target(gTargetRight);
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_num_tris);
@@ -733,9 +712,9 @@ static void gfx_citro3d_start_frame(void)
     screen_clear_configs.bottom.bufs = VIEW_CLEAR_BUFFER_NONE;
 
     if (!gGfx3DEnabled)
-        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, &projection_2d);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_2d);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.model_view_mtx,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.game_projection_mtx, &IDENTITY_MTX);
 
     // Set each frame to ensure that target->used is set to true.
     // WYATT_TODO we can go further, but it would require hooking screen initialization.
@@ -758,13 +737,13 @@ void gfx_citro3d_set_game_projection_matrix(float mtx[4][4])
 // Optimized in the emulation layer
 void gfx_citro3d_apply_model_view_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx, model_view);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.model_view_mtx, model_view);
 }
 
 // Optimized in the emulation layer
 void gfx_citro3d_apply_game_projection_matrix()
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, game_projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.game_projection_mtx, game_projection);
 }
 
 void gfx_citro3d_select_matrix_set(uint32_t matrix_set_id)
@@ -781,9 +760,10 @@ void gfx_citro3d_set_backface_culling_mode(uint32_t culling_mode)
 
 static void gfx_citro3d_end_frame(void)
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.projection_mtx,      &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.model_view_mtx,      &IDENTITY_MTX);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uniform_locations.game_projection_mtx, &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.model_view_mtx,      &IDENTITY_MTX);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.game_projection_mtx, &IDENTITY_MTX);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_scale, 1, 1, 1, 1);
     C3D_CullFace(GPU_CULL_NONE);
 
     // TOOD: draw the minimap here

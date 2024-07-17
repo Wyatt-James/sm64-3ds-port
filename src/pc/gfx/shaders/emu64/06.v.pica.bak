@@ -6,9 +6,13 @@
 .bool draw_fog
 
 ; Constants
-.constf myconst(0.0, 1.0, -1.0, -0.5)
-.alias  zeros myconst.xxxx ; Vector full of zeros
-.alias  ones  myconst.yyyy ; Vector full of ones
+.constf main_const_1(0.0, 1.0, -1.0, 0.00392156862)
+
+.alias zeros       main_const_1.xxxx ; Vector full of zeros
+.alias ones        main_const_1.yyyy ; Vector full of ones
+.alias nones       main_const_1.zzzz ; Vector full of negative ones
+.alias color_scale main_const_1.wwww ; Vector full of 1/255
+.alias tcofs       main_const_1.xyxx ; Vector of [ tcof1, tcof2, 0, 0 ]
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
@@ -21,7 +25,8 @@
 .out outtc1 texcoord1 ; texture unit 1
 .out outclr color     ; rgba
 
-.proc main
+.entry main_06
+.proc main_06
 
 setup:
     mov r0, inpos

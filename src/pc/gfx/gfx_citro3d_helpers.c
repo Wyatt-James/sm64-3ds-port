@@ -3,6 +3,7 @@
 
 #include "gfx_citro3d_helpers.h"
 #include "gfx_cc.h"
+#include "shader_programs/gfx_n3ds_shprog_emu64.h"
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -73,7 +74,7 @@ uint8_t gfx_citro3d_calculate_shader_code(bool has_texture,
     return shader_code;
 }
 
-const struct n3ds_shader_info* get_shader_info_from_shader_code (uint8_t shader_code)
+const struct n3ds_shader_info* get_shader_info_from_shader_code(uint8_t shader_code)
 {
     const struct n3ds_shader_info* shader = NULL;
 
@@ -90,37 +91,37 @@ const struct n3ds_shader_info* get_shader_info_from_shader_code (uint8_t shader_
     switch(shader_code)
     {
         case 1:
-            shader = &shader_1;
+            shader = &emu64_shader_1;
             break;
         // case 3:
-        //     shader = &shader_3;
+        //     shader = &emu64_shader_3;
         //     break;
         case 4:
-            shader = &shader_4;
+            shader = &emu64_shader_4;
             break;
         case 5:
-            shader = &shader_5;
+            shader = &emu64_shader_5;
             break;
         // case 6:
-        //     shader = &shader_6;
+        //     shader = &emu64_shader_6;
         //     break;
         // case 7:
-        //     shader = &shader_7;
+        //     shader = &emu64_shader_7;
         //     break;
         case 8:
-            shader = &shader_8;
+            shader = &emu64_shader_8;
             break;
         case 9:
-            shader = &shader_9;
+            shader = &emu64_shader_9;
             break;
         case 20:
-            shader = &shader_20;
+            shader = &emu64_shader_20;
             break;
         case 41:
-            shader = &shader_41;
+            shader = &emu64_shader_41;
             break;
         default:
-            shader = &shader_default;
+            shader = &emu64_shader_9;
             fprintf(stderr, "Warning! Using default shader for %u\n", shader_code);
             break;
     }
@@ -171,7 +172,7 @@ union RGBA32 gfx_citro3d_get_env_color_from_vbo(float buf_vbo[], struct CCFeatur
 {
     const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
     const bool hasAlpha = cc_features->opt_alpha;
-    const int color_1_offset = hasTex ? STRIDE_POSITION + STRIDE_TEXTURE : STRIDE_POSITION;
+    const int color_1_offset = hasTex ? EMU64_STRIDE_POSITION + EMU64_STRIDE_TEXTURE : EMU64_STRIDE_POSITION;
 
     // Removed a hack from before vertex shaders. This new implementation
     // probably isn't completely kosher, but it works.
@@ -386,9 +387,6 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
             w = (w < 0) ? -64.0f : 64.0f;
             break;
         default:
-        // WYATT_TODO FIXME this causes a C3D GPU command buffer overrun, presumably because of
-        // N3DS P-matrix uniform update spam (13/frame in 2D, 801/frame in 3D). Doubling the GPUCMDBUF
-        // size fixes the crash, but that's not a real solution.
         case STEREO_MODE_2D:
             strength = 0.0f;
             break;

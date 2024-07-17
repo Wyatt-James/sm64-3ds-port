@@ -1,23 +1,22 @@
-; position, texture, fog, color rgba
-; disabled for fog. Uses shader_5 instead.
+; position, texture, color rgba
 
 ; Uniforms
 .fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
 .fvec tex_scale
-.bool draw_fog
 
 ; Constants
-.constf myconst(0.0, 1.0, -1.0, -0.5)
-.constf tcofs(0.0, 1.0, 0.0, 0.0)
+.constf main_const_1(0.0, 1.0, -1.0, 0.00392156862)
 
-.alias  zeros myconst.xxxx ; Vector full of zeros
-.alias  ones  myconst.yyyy ; Vector full of ones
+.alias zeros       main_const_1.xxxx ; Vector full of zeros
+.alias ones        main_const_1.yyyy ; Vector full of ones
+.alias nones       main_const_1.zzzz ; Vector full of negative ones
+.alias color_scale main_const_1.wwww ; Vector full of 1/255
+.alias tcofs       main_const_1.xyxx ; Vector of [ tcof1, tcof2, 0, 0 ]
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
 .in intex v1 ; uv
-.in infog v2
-.in inclr v3
+.in inclr v2
 
 ; Outputs
 .out outpos position  ; xyzw
@@ -25,7 +24,8 @@
 .out outtc1 texcoord1 ; texture unit 1
 .out outclr color     ; rgba
 
-.proc main
+.entry main_05
+.proc main_05
 
 setup:
     mov r0, inpos
@@ -54,12 +54,9 @@ texture:
     add outtc0, tcofs, r2
     mov outtc1, outtc0
 color:
-    ifu draw_fog
-        mov outclr, infog
-    .else
-        ; copy color
-        mov outclr, inclr
-    .end
+    ; copy color, scaling it by 1/255
+    mul outclr, color_scale, inclr
+
     ; We're finished
     end
 .end
