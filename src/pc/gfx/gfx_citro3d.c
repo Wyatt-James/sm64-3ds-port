@@ -56,35 +56,7 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 #define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
 #define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))                                        // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
 
-/*
- * Used to speed up some dual-float comparisons (namely, tex scale).
- * Notably, this comparison CAN use an f64 comparison on a f32x2.
- * This is valid because of the following:
- *   - Floats have the following special cases: +-0, +-INF, NaN, Denormalized numbers (D), and Normalized numbers (N).
- *   - The N3DS is IEEE-754 compliant.
- *   - F32s have the following bit structure: 1 sign bit, 8 exp bits, 23 mantissa bits
- *   - F64s have the following bit structure: 1 sign bit, 11 exp bits, 52 mantissa bits
- * Observations:
- *   - The F64's validity is determined solely by the upper F32. Its sign is identical,
- *     and F64's exponent gains the first 3 bits of F32's mantissa.
- * Cases:
- *   +0: the input data will never have a tex_scale of +0, so we don't care.
- *   -0: the input data will never have a tex_scale of -0, so we don't care.
- *   +-INF: Infinity is reached when all exponent bits are 1, thus requiring F32 to also have all exponent bits as 1,
- *       and therefore F32 must already be INF32 to reach INF64. This will never occur, so we don't care.
- *   NaN: NaN is reached when all exponent bits are 1, thus requiring F32 to also have all exponent bits as 1,
- *       and therefore F32 must already be NaN32 to reach NaN64. This will never occur, so we don't care.
- *   Denorm: D is reached when all exponent bits are 0, thus requiring F32 to also have all exponent bits as 0,
- *       and therefore F32 must already be D32 to reach D64. Our inputs should never be denormalized, as that
- *       requires exceptionally small numbers to achieve underflow.
- *   Norm: N is the only remaining case, and all combinations of N32 forming an N64 will be unique, thus
- *       validating the comparison.
- * Defaults:
- *   Comparisons between an INF and N are valid and will always fail, meaning that INF can be used as an initial value.
- * 
- * Therefore, in this domain, comparing an f32x2 as f64 is valid. Unfortunately, it appears that performance is slower
- * than U64, even though U64 generates 32-bit loads and an extra 32-bit store. I would love to be proven wrong.
- */
+// See f32x2_note.txt
 union f32x2 {
     struct {
         float f32_upper;
