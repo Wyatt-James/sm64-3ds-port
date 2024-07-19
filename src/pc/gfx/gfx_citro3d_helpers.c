@@ -32,8 +32,13 @@
 #undef s8
 
 #define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
-#define ARR_INDEX_2D(x_, y_, w_) (y_ * w_ + x_)
+#define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 #define U32_AS_FLOAT(v_) (*(float*) &v_)
+
+#define BSWAP32(v_) (__builtin_bswap32(v_))        // u32
+#define BSWAP16(v_) (__builtin_bswap16(v_))        // u16
+#define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_)) // u32
+#define NUM_ONES(v_) (__builtin_popcount(v_))      // u32
 
 const C3D_Mtx IDENTITY_MTX = C3D_STATIC_IDENTITY_MTX;
 
@@ -46,6 +51,15 @@ const C3D_Mtx DEPTH_ADD_W_MTX = {
                         {.w = 1.0f}
                     }
                };
+
+static const int texture_tile_order[4][4] =
+{
+    {0,  1,   4,  5},
+    {2,  3,   6,  7},
+
+    {8,  9,  12, 13},
+    {10, 11, 14, 15}
+};
 
 uint8_t gfx_citro3d_calculate_shader_code(bool has_texture,
                                           UNUSED bool has_fog,
@@ -129,39 +143,125 @@ const struct n3ds_shader_info* get_shader_info_from_shader_code(uint8_t shader_c
     return shader;
 }
 
-void gfx_citro3d_pad_texture_rgba32(union RGBA32* src,
-                                    union RGBA32* dest,
-                                    uint32_t src_w,
-                                    uint32_t src_h,
-                                    uint32_t new_w,
-                                    uint32_t new_h)
+struct TextureSize gfx_citro3d_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size)
 {
-    static const int sTileOrder[] =
-    {
-        0,  1,   4,  5,
-        2,  3,   6,  7,
+    struct TextureSize result = input_size; // Struct copy
+    result.success = true;
+    bool padded = false;
+    
+    // Dimensions must be >= 8
+    if (result.width  < 8 || result.height < 8) padded = true;
+    if (result.width  < 8) result.width  = 8;
+    if (result.height < 8) result.height = 8;
 
-        8,  9,  12, 13,
-        10, 11, 14, 15
-    };
+    // Dimensions must be powers of 2
+    if (NUM_ONES(result.width | result.height << 16) != 2) {
+        result.width  = (uint16_t) (1 << (32 - NUM_LEADING_ZEROES(result.width  - 1))); // NUM_LEADING_ZEROES does int promotion.
+        result.height = (uint16_t) (1 << (32 - NUM_LEADING_ZEROES(result.height - 1)));
+        padded = true;
+
+        if (result.width * result.height * unit_size > buffer_size) {
+            printf("Scaled tex too big: %d, %d\n", (int) result.width, (int) result.height);
+            result.success = false;
+        }
+    } else {
+        if (input_size.width * input_size.height * unit_size > buffer_size) {
+            printf("Unscaled tex too big: %d, %d\n", (int) input_size.width, (int) input_size.height);
+            result.success = false;
+        }
+    }
+    
+    if (padded)
+        printf("Padding tex from %d,%d to %d,%d\n", input_size.width, input_size.height, result.width, result.height);
+
+    return result;
+}
+
+void gfx_citro3d_pad_and_tile_texture_u32(uint32_t* src,
+                                          uint32_t* dest,
+                                          struct TextureSize src_size,
+                                          struct TextureSize new_size)
+{
+    uint32_t src_w = src_size.width,
+             src_h = src_size.height,
+             new_w = new_size.width,
+             new_h = new_size.height;
+
 
     for (u32 y = 0; y < new_h; y += 8) {
         for (u32 x = 0; x < new_w; x += 8) {
             for (u32 i = 0; i < 64; i++)
             {
-                int x2 = i % 8; // Tiling nonsense
-                int y2 = i / 8;
+                int tile_x = i % 8;
+                int tile_y = i / 8;
 
-                u32 src_x = FAST_SINGLE_MOD(x + x2, src_w);
-                u32 src_y = FAST_SINGLE_MOD(y + y2, src_h);
+                u32 src_x = FAST_SINGLE_MOD(x + tile_x, src_w);
+                u32 src_y = FAST_SINGLE_MOD(y + tile_y, src_h);
 
-                union RGBA32 color = src[ARR_INDEX_2D(src_x, src_y, src_w)];
-                u32 out_index = sTileOrder[x2 % 4 + y2 % 4 * 4] + 16 * (x2 / 4) + 32 * (y2 / 4);
+                u32 in_index = ARR_INDEX_2D(src_x, src_y, src_w);
+                u32 out_index = texture_tile_order[tile_y % 4][tile_x % 4] + 16 * (tile_x / 4) + 32 * (tile_y / 4);
 
-                dest[out_index].r = color.a;
-                dest[out_index].g = color.b;
-                dest[out_index].b = color.g;
-                dest[out_index].a = color.r;
+                dest[out_index] = BSWAP32(src[in_index]);
+            }
+            dest += 64;
+        }
+    }
+}
+
+void gfx_citro3d_pad_and_tile_texture_u16(uint16_t* src,
+                                          uint16_t* dest,
+                                          struct TextureSize src_size,
+                                          struct TextureSize new_size)
+{
+    uint32_t src_w = src_size.width,
+             src_h = src_size.height,
+             new_w = new_size.width,
+             new_h = new_size.height;
+
+    for (u32 y = 0; y < new_h; y += 8) {
+        for (u32 x = 0; x < new_w; x += 8) {
+            for (u32 i = 0; i < 64; i++)
+            {
+                int tile_x = i % 8;
+                int tile_y = i / 8;
+
+                u32 src_x = FAST_SINGLE_MOD(x + tile_x, src_w);
+                u32 src_y = FAST_SINGLE_MOD(y + tile_y, src_h);
+
+                u32 in_index = ARR_INDEX_2D(src_x, src_y, src_w);
+                u32 out_index = texture_tile_order[tile_y % 4][tile_x % 4] + 16 * (tile_x / 4) + 32 * (tile_y / 4);
+
+                dest[out_index] = BSWAP16(src[in_index]);
+            }
+            dest += 64;
+        }
+    }
+}
+
+void gfx_citro3d_pad_and_tile_texture_u8(uint8_t* src,
+                                         uint8_t* dest,
+                                         struct TextureSize src_size,
+                                         struct TextureSize new_size)
+{
+    uint32_t src_w = src_size.width,
+             src_h = src_size.height,
+             new_w = new_size.width,
+             new_h = new_size.height;
+
+    for (u32 y = 0; y < new_h; y += 8) {
+        for (u32 x = 0; x < new_w; x += 8) {
+            for (u32 i = 0; i < 64; i++)
+            {
+                int tile_x = i % 8;
+                int tile_y = i / 8;
+
+                u32 src_x = FAST_SINGLE_MOD(x + tile_x, src_w);
+                u32 src_y = FAST_SINGLE_MOD(y + tile_y, src_h);
+
+                u32 in_index = ARR_INDEX_2D(src_x, src_y, src_w);
+                u32 out_index = texture_tile_order[tile_y % 4][tile_x % 4] + 16 * (tile_x / 4) + 32 * (tile_y / 4);
+
+                dest[out_index] = src[in_index];
             }
             dest += 64;
         }

@@ -66,6 +66,11 @@ struct IodConfig {
     float z, w;
 };
 
+struct TextureSize {
+    uint16_t width, height;
+    bool success;
+};
+
 // Constant matrices, set during initialization.
 extern const C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
@@ -75,8 +80,17 @@ uint8_t gfx_citro3d_calculate_shader_code(bool has_texture, UNUSED bool has_fog,
 // Looks up an n3ds_shader_info struct from the given GFX_Citro3D shader code
 const struct n3ds_shader_info* get_shader_info_from_shader_code(uint8_t shader_code);
 
-// Pads a texture from w * h to new_w * new_h by simply repeating data.
-void gfx_citro3d_pad_texture_rgba32(union RGBA32* src, union RGBA32* dest, uint32_t src_w, uint32_t src_h, uint32_t new_w, uint32_t new_h);
+// Adjusts a texture's dimensions to fit within the 3DS' limitations (8 pixels minimum, power-of-2 for each dimension)
+struct TextureSize gfx_citro3d_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size);
+
+// Pads a texture with u32 from w * h to new_w * new_h by repeating data while converting it to the 3DS' tiling layout. Handles endianness.
+void gfx_citro3d_pad_and_tile_texture_u32(uint32_t* src, uint32_t* dest, struct TextureSize src_size, struct TextureSize new_size);
+
+// Pads a texture with u16 units from w * h to new_w * new_h by repeating data while converting it to the 3DS' tiling layout. Handles endianness.
+void gfx_citro3d_pad_and_tile_texture_u16(uint16_t* src, uint16_t* dest, struct TextureSize src_size, struct TextureSize new_size);
+
+// Pads a texture with u8 units from w * h to new_w * new_h by repeating data while converting it to the 3DS' tiling layout. Handles endianness.
+void gfx_citro3d_pad_and_tile_texture_u8(uint8_t* src, uint8_t* dest, struct TextureSize src_size, struct TextureSize new_size);
 
 // Fetches the ENV color from a given 2-color-tri VBO. VBO provided must already be offset.
 // WYATT_TODO remove this hack, either by simplifying the VBO or by handling two-color tris in the vshader.

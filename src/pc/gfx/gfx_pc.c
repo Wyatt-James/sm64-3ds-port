@@ -85,6 +85,21 @@
 
 #define XYWH_EQUAL(vp1_, vp2_) (vp1_.x == vp2_.x && vp1_.y == vp2_.y && vp1_.width == vp2_.width && vp1_.height == vp2_.height) // Compares two XYWidthHeight structs
 
+// Supported Texture formats (see import_texture)
+// Max val for format_: 0b100 (range [0-4])
+// Max val for size_:   0b101 (range [0-5])
+#define TEX_FORMAT(format_, size_) ((((uint32_t) format_) << 3 ) | (uint32_t) size_)
+
+#define TEXFMT_RGBA32 TEX_FORMAT(G_IM_FMT_RGBA, G_IM_SIZ_32b) // Unused by SM64
+#define TEXFMT_RGBA16 TEX_FORMAT(G_IM_FMT_RGBA, G_IM_SIZ_16b)
+#define TEXFMT_IA4    TEX_FORMAT(G_IM_FMT_IA,   G_IM_SIZ_4b)  // Used by text only
+#define TEXFMT_IA8    TEX_FORMAT(G_IM_FMT_IA,   G_IM_SIZ_8b)
+#define TEXFMT_IA16   TEX_FORMAT(G_IM_FMT_IA,   G_IM_SIZ_16b)
+#define TEXFMT_I4     TEX_FORMAT(G_IM_FMT_I,    G_IM_SIZ_4b)  // Unused by SM64
+#define TEXFMT_I8     TEX_FORMAT(G_IM_FMT_I,    G_IM_SIZ_8b)  // Unused by SM64
+#define TEXFMT_CI4    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_4b)  // Unused by SM64
+#define TEXFMT_CI8    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_8b)  // Unused by SM64
+
 #ifdef TARGET_N3DS
 #define UCLAMP8(v) ((uint8_t) __usat(v, 8))
 #else
@@ -482,91 +497,6 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     return false;
 }
 
-static union RGBA32 rgba32_buf[8192] __attribute__((aligned(32)));
-
-static void import_texture_rgba16(int tile) {
-    convert_rgba16_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes / 2;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-// Unused by SM64
-static void import_texture_rgba32(int tile) {
-    uint32_t width = rdp.texture_tile.line_size_bytes / 2;
-    uint32_t height = (rdp.loaded_texture[tile].size_bytes / 2) / rdp.texture_tile.line_size_bytes;
-    gfx_rapi->upload_texture(rdp.loaded_texture[tile].addr, width, height);
-}
-
-static void import_texture_ia4(int tile) {
-    convert_ia4_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes * 2;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-static void import_texture_ia8(int tile) {
-    convert_ia8_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-static void import_texture_ia16(int tile) {
-    convert_ia16_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes / 2;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-// Unused by SM64
-static void import_texture_i4(int tile) {
-    convert_i4_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes * 2;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-// Unused by SM64
-static void import_texture_i8(int tile) {
-    convert_i8_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-// Unused by SM64
-static void import_texture_ci4(int tile) {
-    convert_ci4_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes, rdp.palette);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes * 2;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
-// Unused by SM64
-static void import_texture_ci8(int tile) {
-    convert_ci8_to_rgba32(rgba32_buf, rdp.loaded_texture[tile].addr, rdp.loaded_texture[tile].size_bytes, rdp.palette);
-
-    uint32_t width = rdp.texture_tile.line_size_bytes;
-    uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile.line_size_bytes;
-
-    gfx_rapi->upload_texture((const uint8_t*) rgba32_buf, width, height);
-}
-
 static void import_texture(int tile) {
     uint8_t fmt = rdp.texture_tile.fmt;
     uint8_t siz = rdp.texture_tile.siz;
@@ -575,46 +505,65 @@ static void import_texture(int tile) {
         return;
     }
 
-    if (fmt == G_IM_FMT_RGBA) {
-        if (siz == G_IM_SIZ_16b) {
-            import_texture_rgba16(tile);
-        } else if (siz == G_IM_SIZ_32b) {
-            import_texture_rgba32(tile); // Unused by SM64
-        } else {
+    uint32_t line_size = rdp.texture_tile.line_size_bytes,
+             tile_size = rdp.loaded_texture[tile].size_bytes;
+
+    int width, height;
+
+    switch (siz) {
+        case G_IM_SIZ_32b:
+            width = line_size / 2;
+            height = (tile_size / 2) / line_size;
+            break;
+        case G_IM_SIZ_16b:
+            width = line_size / 2;
+            height = tile_size / line_size;
+            break;
+        case G_IM_SIZ_8b:
+            width = line_size;
+            height = tile_size / line_size;
+            break;
+        case G_IM_SIZ_4b:
+            width = line_size * 2;
+            height = tile_size / line_size;
+            break;
+        default:
             abort();
-        }
-    } else if (fmt == G_IM_FMT_IA) {
-        if (siz == G_IM_SIZ_4b) {        // Used by text only
-            import_texture_ia4(tile);
-        } else if (siz == G_IM_SIZ_8b) {
-            import_texture_ia8(tile);
-        } else if (siz == G_IM_SIZ_16b) {
-            import_texture_ia16(tile);
-        } else {
+    }
+
+    const uint8_t* data = rdp.loaded_texture[tile].addr;
+    const uint8_t *palette = rdp.palette;
+
+    switch (TEX_FORMAT(fmt, siz)) {
+        case TEXFMT_RGBA32:
+            gfx_rapi->upload_texture_rgba32(data, width, height); // Unused by SM64
+            break;
+        case TEXFMT_RGBA16:
+            gfx_rapi->upload_texture_rgba16(data, width, height);
+            break;
+        case TEXFMT_IA4:
+            gfx_rapi->upload_texture_ia4(data, width, height); // Used by text only
+            break;
+        case TEXFMT_IA8:
+            gfx_rapi->upload_texture_ia8(data, width, height);
+            break;
+        case TEXFMT_IA16:
+            gfx_rapi->upload_texture_ia16(data, width, height);
+            break;
+        case TEXFMT_I4:
+            gfx_rapi->upload_texture_i4(data, width, height); // Unused by SM64
+            break;
+        case TEXFMT_I8:
+            gfx_rapi->upload_texture_i8(data, width, height); // Unused by SM64
+            break;
+        case TEXFMT_CI4:
+            gfx_rapi->upload_texture_ci4(data, palette, width, height); // Unused by SM64
+            break;
+        case TEXFMT_CI8:
+            gfx_rapi->upload_texture_ci8(data, palette, width, height); // Unused by SM64
+            break;
+        default:
             abort();
-        }
-        
-    // Unused by SM64
-    } else if (fmt == G_IM_FMT_CI) {
-        if (siz == G_IM_SIZ_4b) {
-            import_texture_ci4(tile);
-        } else if (siz == G_IM_SIZ_8b) {
-            import_texture_ci8(tile);
-        } else {
-            abort();
-        }
-    
-    // Unused by SM64
-    } else if (fmt == G_IM_FMT_I) {
-        if (siz == G_IM_SIZ_4b) {
-            import_texture_i4(tile);
-        } else if (siz == G_IM_SIZ_8b) {
-            import_texture_i8(tile);
-        } else {
-            abort();
-        }
-    } else {
-        abort();
     }
 }
 

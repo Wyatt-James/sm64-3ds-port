@@ -18,6 +18,8 @@
 #include "gfx_citro3d_fog_cache.h"
 #include "color_conversion.h"
 #include "src/pc/pc_metrics.h"
+#include "texture_conversion.h"
+#include "color_formats.h"
 
 #include "shader_programs/gfx_n3ds_shprog_emu64.h"
 
@@ -50,7 +52,6 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 
-#define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_))
 #define BSWAP32(v_) (__builtin_bswap32(v_))
 #define BOOL_INVERT(v_) do {v_ = !v_;} while (0)
 #define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
@@ -147,6 +148,8 @@ static struct TexHandle texture_pool[TEXTURE_POOL_SIZE];
 static struct TexHandle* current_texture = &texture_pool[0];
 static struct TexHandle* gpu_textures[2] = { &texture_pool[0], &texture_pool[0] };
 static uint32_t api_texture_index = 0;
+static union RGBA32 tex_conversion_buffer[16 * 1024] __attribute__((aligned(32))); // For converting textures between formats
+static union RGBA32 tex_scaling_buffer[16 * 1024] __attribute__((aligned(32)));    // For padding and tiling textures
 
 static bool sDepthTestOn = false;
 static bool sDepthUpdateOn = false;
@@ -199,6 +202,17 @@ struct RenderState render_state = {
     .scissor_changed = true,
     .tex_scale = {.f64 = INFINITY}
 };
+
+// Forward Declarations
+static void gfx_citro3d_upload_texture_rgba16(const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_rgba32(const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_ia4   (const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_ia8   (const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_ia16  (const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_i4    (const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_i8    (const uint8_t *data, int width, int height);
+static void gfx_citro3d_upload_texture_ci4   (const uint8_t *data, const uint8_t* palette, int width, int height);
+static void gfx_citro3d_upload_texture_ci8   (const uint8_t *data, const uint8_t* palette, int width, int height);
 
 // Handles 3DS screen clearing
 static void clear_buffers()
@@ -404,40 +418,90 @@ static void gfx_citro3d_select_texture(int tex_slot, uint32_t texture_id)
     }
 }
 
-static void gfx_citro3d_upload_texture(const uint8_t *rgba32_buf, int width, int height)
+static void upload_texture_common(void* data, struct TextureSize input_size, struct TextureSize output_size, GPU_TEXCOLOR format)
 {
-    static union RGBA32 tex_staging_buffer[16 * 1024] __attribute__((aligned(32)));
+    C3D_Tex* tex = &current_texture->c3d_tex;
 
-    union RGBA32* src_as_rgba32 = (union RGBA32*) rgba32_buf;
-    u32 output_width = width, output_height = height;
+    current_texture->scale.s =   input_size.width  / (float) output_size.width;
+    current_texture->scale.t = -(input_size.height / (float) output_size.height);
 
-    // Dimensions must each be a power-of-2 >= 8.
-    if (width < 8 || height < 8 || (width & (width - 1)) || (height & (height - 1))) {
-        // Round the dimensions up to the nearest power-of-2 >= 8
-        output_width  = width  < 8 ? 8 : (1 << (32 - NUM_LEADING_ZEROES(width  - 1)));
-        output_height = height < 8 ? 8 : (1 << (32 - NUM_LEADING_ZEROES(height - 1)));
+    if (C3D_TexInit(tex, output_size.width, output_size.height, format)) {
+        C3D_TexUpload(tex, data);
+        C3D_TexFlush(tex);
+    } else
+       printf("Tex init failed! Size: %d, %d\n", (int) output_size.width, (int) output_size.height);
+}
 
-        if (output_width * output_height > ARRAY_COUNT(tex_staging_buffer)) {
-            printf("Scaled texture too big: %d,%d\n", output_width, output_height);
-            return;
-        }
-    } else {
-        if (width * height > ARRAY_COUNT(tex_staging_buffer)) {
-            printf("Unscaled texture too big: %d,%d\n", width, height);
-            return;
-        }
+// Template function to resize, swizzle, and upload a texture of given format.
+#define UPLOAD_TEXTURE_TEMPLATE(type_, swizzle_func_name_, gpu_tex_format_) \
+    type_* src = (type_*) data;                                                                                                 \
+    GPU_TEXCOLOR format = gpu_tex_format_;                                                                                      \
+    size_t unit_size = sizeof(src[0]);                                                                                          \
+                                                                                                                                \
+    struct TextureSize input_size = { .width = width, .height = height };                                                       \
+    struct TextureSize output_size = gfx_citro3d_adjust_texture_dimensions(input_size, unit_size, sizeof(tex_scaling_buffer));  \
+                                                                                                                                \
+    if (output_size.success) {                                                                                                  \
+        swizzle_func_name_(src, (type_*) tex_scaling_buffer, input_size, output_size);                                          \
+        upload_texture_common((type_*) tex_scaling_buffer, input_size, output_size, format);                                    \
     }
 
-    C3D_Tex* c3d_tex = &current_texture->c3d_tex;
+static void gfx_citro3d_upload_texture_rgba32(const uint8_t* data, int width, int height)
+{
+    UPLOAD_TEXTURE_TEMPLATE(uint32_t, gfx_citro3d_pad_and_tile_texture_u32, GPU_RGBA8)
+}
 
-    current_texture->scale.s = width / (float)output_width;
-    current_texture->scale.t = -(height / (float)output_height);
+static void gfx_citro3d_upload_texture_rgba16(const uint8_t *data, int width, int height) {
+    UPLOAD_TEXTURE_TEMPLATE(uint16_t, gfx_citro3d_pad_and_tile_texture_u16, GPU_RGBA5551)
+}
 
-    gfx_citro3d_pad_texture_rgba32(src_as_rgba32, tex_staging_buffer, width, height, output_width, output_height);
+/*
+* The GPU doesn't support an IA4 format, so we need to convert.
+* IA16 is the next format with decent accuracy (3-bit to 8-bit intensity).
+* We could use IA8 (4-bit intensity), but this would cause a fairly large error.
+*/
+static void gfx_citro3d_upload_texture_ia4(const uint8_t *data, int width, int height)
+{
+    convert_ia4_to_ia16((union IA16*) tex_conversion_buffer, data, width, height);
+    gfx_citro3d_upload_texture_ia16((const uint8_t*) tex_conversion_buffer, width, height);
+}
 
-    C3D_TexInit(c3d_tex, output_width, output_height, GPU_RGBA8);
-    C3D_TexUpload(c3d_tex, tex_staging_buffer);
-    C3D_TexFlush(c3d_tex);
+static void gfx_citro3d_upload_texture_ia8(const uint8_t *data, int width, int height) 
+{
+    UPLOAD_TEXTURE_TEMPLATE(uint8_t, gfx_citro3d_pad_and_tile_texture_u8, GPU_LA4)
+}
+
+static void gfx_citro3d_upload_texture_ia16(const uint8_t *data, int width, int height)
+{
+    UPLOAD_TEXTURE_TEMPLATE(uint16_t, gfx_citro3d_pad_and_tile_texture_u16, GPU_LA8)
+}
+
+// Untested because it's unused in SM64
+static void gfx_citro3d_upload_texture_i4(const uint8_t *data, int width, int height)
+{
+    UPLOAD_TEXTURE_TEMPLATE(uint8_t, gfx_citro3d_pad_and_tile_texture_u8, GPU_L4)
+}
+
+// Untested because it's unused in SM64
+static void gfx_citro3d_upload_texture_i8(const uint8_t *data, int width, int height)
+{
+    UPLOAD_TEXTURE_TEMPLATE(uint8_t, gfx_citro3d_pad_and_tile_texture_u8, GPU_L8)
+}
+
+// Untested because it's unused in SM64
+// The GPU doesn't support palletized textures, so we need to convert.
+static void gfx_citro3d_upload_texture_ci4(const uint8_t *data, const uint8_t* palette, int width, int height)
+{
+    convert_ci4_to_rgba16((union RGBA16*) tex_conversion_buffer, data, palette, width, height);
+    gfx_citro3d_upload_texture_rgba16((const uint8_t*) tex_conversion_buffer, width, height);
+}
+
+// Untested because it's unused in SM64
+// The GPU doesn't support palletized textures, so we need to convert.
+static void gfx_citro3d_upload_texture_ci8(const uint8_t *data, const uint8_t* palette, int width, int height)
+{
+    convert_ci8_to_rgba16((union RGBA16*) tex_conversion_buffer, data, palette, width, height);
+    gfx_citro3d_upload_texture_rgba16((const uint8_t*) tex_conversion_buffer, width, height);
 }
 
 // Optimized in the emulation layer. This optimization is technically incomplete, as filter & cms/cmt can be updated
@@ -805,7 +869,7 @@ struct GfxRenderingAPI gfx_citro3d_api = {
     gfx_citro3d_shader_get_info,
     gfx_citro3d_new_texture,
     gfx_citro3d_select_texture,
-    gfx_citro3d_upload_texture,
+    gfx_citro3d_upload_texture_rgba32, // Duplicate of gfx_rendering_api::upload_texture_rgba32
     gfx_citro3d_set_sampler_parameters,
     gfx_citro3d_set_depth_test,
     gfx_citro3d_set_depth_mask,
@@ -822,7 +886,16 @@ struct GfxRenderingAPI gfx_citro3d_api = {
     gfx_citro3d_set_fog,
     gfx_citro3d_set_fog_color,
     gfx_citro3d_set_2d_mode,
-    gfx_citro3d_set_iod
+    gfx_citro3d_set_iod,
+    gfx_citro3d_upload_texture_rgba16,
+    gfx_citro3d_upload_texture_rgba32, // Duplicate of gfx_rendering_api::upload_texture
+    gfx_citro3d_upload_texture_ia4,
+    gfx_citro3d_upload_texture_ia8,
+    gfx_citro3d_upload_texture_ia16,
+    gfx_citro3d_upload_texture_i4,
+    gfx_citro3d_upload_texture_i8,
+    gfx_citro3d_upload_texture_ci4,
+    gfx_citro3d_upload_texture_ci8
 };
 
 #endif

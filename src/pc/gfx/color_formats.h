@@ -15,13 +15,13 @@ union RGBA32 {
     uint32_t u32;
 };
 
-// One 16-bit RGBA color
+// One 16-bit RGBA color. Uses u16 bitfields because u8s bloat the struct size to 4U.
 union RGBA16 {
     struct {
-        uint8_t r : 5;
-        uint8_t g : 5;
-        uint8_t b : 5;
-        uint8_t a : 1;
+        uint16_t r : 5;
+        uint16_t g : 5;
+        uint16_t b : 5;
+        uint16_t a : 1;
     };
     uint16_t u16;
 };
