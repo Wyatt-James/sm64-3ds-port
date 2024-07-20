@@ -26,7 +26,7 @@
 #endif
 
 #include "gfx_cc.h"
-#include "gfx_rendering_api.h"
+#include "src/pc/gfx/gfx_rendering_api.h"
 
 struct ShaderProgram {
     uint32_t shader_id;
@@ -49,7 +49,7 @@ static GLuint opengl_vbo;
 static uint32_t frame_count;
 static uint32_t current_height;
 
-static bool gfx_opengl_z_is_from_0_to_1(void) {
+static bool gfx_rapi_z_is_from_0_to_1(void) {
     return false;
 }
 
@@ -71,7 +71,7 @@ static void gfx_opengl_set_uniforms(struct ShaderProgram *prg) {
     }
 }
 
-static void gfx_opengl_unload_shader(struct ShaderProgram *old_prg) {
+static void gfx_rapi_unload_shader(struct ShaderProgram *old_prg) {
     if (old_prg != NULL) {
         for (int i = 0; i < old_prg->num_attribs; i++) {
             glDisableVertexAttribArray(old_prg->attrib_locations[i]);
@@ -79,7 +79,7 @@ static void gfx_opengl_unload_shader(struct ShaderProgram *old_prg) {
     }
 }
 
-static void gfx_opengl_load_shader(struct ShaderProgram *new_prg) {
+static void gfx_rapi_load_shader(struct ShaderProgram *new_prg) {
     glUseProgram(new_prg->opengl_program_id);
     gfx_opengl_vertex_array_set_attribs(new_prg);
     gfx_opengl_set_uniforms(new_prg);
@@ -164,7 +164,7 @@ static void append_formula(char *buf, size_t *len, uint8_t c[2][4], bool do_sing
     }
 }
 
-static struct ShaderProgram *gfx_opengl_create_and_load_new_shader(uint32_t shader_id) {
+static struct ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader_id) {
     struct CCFeatures cc_features;
     gfx_cc_get_features(shader_id, &cc_features);
 
@@ -359,7 +359,7 @@ static struct ShaderProgram *gfx_opengl_create_and_load_new_shader(uint32_t shad
     prg->num_floats = num_floats;
     prg->num_attribs = cnt;
 
-    gfx_opengl_load_shader(prg);
+    gfx_rapi_load_shader(prg);
 
     if (cc_features.used_textures[0]) {
         GLint sampler_location = glGetUniformLocation(shader_program, "uTex0");
@@ -381,7 +381,7 @@ static struct ShaderProgram *gfx_opengl_create_and_load_new_shader(uint32_t shad
     return prg;
 }
 
-static struct ShaderProgram *gfx_opengl_lookup_shader(uint32_t shader_id) {
+static struct ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
     for (size_t i = 0; i < shader_program_pool_size; i++) {
         if (shader_program_pool[i].shader_id == shader_id) {
             return &shader_program_pool[i];
@@ -390,24 +390,24 @@ static struct ShaderProgram *gfx_opengl_lookup_shader(uint32_t shader_id) {
     return NULL;
 }
 
-static void gfx_opengl_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
+static void gfx_rapi_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
     *num_inputs = prg->num_inputs;
     used_textures[0] = prg->used_textures[0];
     used_textures[1] = prg->used_textures[1];
 }
 
-static GLuint gfx_opengl_new_texture(void) {
+static GLuint gfx_rapi_new_texture(void) {
     GLuint ret;
     glGenTextures(1, &ret);
     return ret;
 }
 
-static void gfx_opengl_select_texture(int tile, GLuint texture_id) {
+static void gfx_rapi_select_texture(int tile, GLuint texture_id) {
     glActiveTexture(GL_TEXTURE0 + tile);
     glBindTexture(GL_TEXTURE_2D, texture_id);
 }
 
-static void gfx_opengl_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
+static void gfx_rapi_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba32_buf);
 }
 
@@ -418,7 +418,7 @@ static uint32_t gfx_cm_to_opengl(uint32_t val) {
     return (val & G_TX_MIRROR) ? GL_MIRRORED_REPEAT : GL_REPEAT;
 }
 
-static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
+static void gfx_rapi_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
     glActiveTexture(GL_TEXTURE0 + tile);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linear_filter ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linear_filter ? GL_LINEAR : GL_NEAREST);
@@ -426,7 +426,7 @@ static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gfx_cm_to_opengl(cmt));
 }
 
-static void gfx_opengl_set_depth_test(bool depth_test) {
+static void gfx_rapi_set_depth_test(bool depth_test) {
     if (depth_test) {
         glEnable(GL_DEPTH_TEST);
     } else {
@@ -434,11 +434,11 @@ static void gfx_opengl_set_depth_test(bool depth_test) {
     }
 }
 
-static void gfx_opengl_set_depth_mask(bool z_upd) {
+static void gfx_rapi_set_depth_mask(bool z_upd) {
     glDepthMask(z_upd ? GL_TRUE : GL_FALSE);
 }
 
-static void gfx_opengl_set_zmode_decal(bool zmode_decal) {
+static void gfx_rapi_set_zmode_decal(bool zmode_decal) {
     if (zmode_decal) {
         glPolygonOffset(-2, -2);
         glEnable(GL_POLYGON_OFFSET_FILL);
@@ -448,16 +448,16 @@ static void gfx_opengl_set_zmode_decal(bool zmode_decal) {
     }
 }
 
-static void gfx_opengl_set_viewport(int x, int y, int width, int height) {
+static void gfx_rapi_set_viewport(int x, int y, int width, int height) {
     glViewport(x, y, width, height);
     current_height = height;
 }
 
-static void gfx_opengl_set_scissor(int x, int y, int width, int height) {
+static void gfx_rapi_set_scissor(int x, int y, int width, int height) {
     glScissor(x, y, width, height);
 }
 
-static void gfx_opengl_set_use_alpha(bool use_alpha) {
+static void gfx_rapi_set_use_alpha(bool use_alpha) {
     if (use_alpha) {
         glEnable(GL_BLEND);
     } else {
@@ -465,13 +465,13 @@ static void gfx_opengl_set_use_alpha(bool use_alpha) {
     }
 }
 
-static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
+static void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
     //printf("flushing %d tris\n", buf_vbo_num_tris);
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * buf_vbo_len, buf_vbo, GL_STREAM_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, 3 * buf_vbo_num_tris);
 }
 
-static void gfx_opengl_init(void) {
+static void gfx_rapi_init(void) {
 #if FOR_WINDOWS
     glewInit();
 #endif
@@ -484,10 +484,10 @@ static void gfx_opengl_init(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-static void gfx_opengl_on_resize(void) {
+static void gfx_rapi_on_resize(void) {
 }
 
-static void gfx_opengl_start_frame(void) {
+static void gfx_rapi_start_frame(void) {
     frame_count++;
 
     glDisable(GL_SCISSOR_TEST);
@@ -497,35 +497,10 @@ static void gfx_opengl_start_frame(void) {
     glEnable(GL_SCISSOR_TEST);
 }
 
-static void gfx_opengl_end_frame(void) {
+static void gfx_rapi_end_frame(void) {
 }
 
-static void gfx_opengl_finish_render(void) {
+static void gfx_rapi_finish_render(void) {
 }
-
-struct GfxRenderingAPI gfx_opengl_api = {
-    gfx_opengl_z_is_from_0_to_1,
-    gfx_opengl_unload_shader,
-    gfx_opengl_load_shader,
-    gfx_opengl_create_and_load_new_shader,
-    gfx_opengl_lookup_shader,
-    gfx_opengl_shader_get_info,
-    gfx_opengl_new_texture,
-    gfx_opengl_select_texture,
-    gfx_opengl_upload_texture,
-    gfx_opengl_set_sampler_parameters,
-    gfx_opengl_set_depth_test,
-    gfx_opengl_set_depth_mask,
-    gfx_opengl_set_zmode_decal,
-    gfx_opengl_set_viewport,
-    gfx_opengl_set_scissor,
-    gfx_opengl_set_use_alpha,
-    gfx_opengl_draw_triangles,
-    gfx_opengl_init,
-    gfx_opengl_on_resize,
-    gfx_opengl_start_frame,
-    gfx_opengl_end_frame,
-    gfx_opengl_finish_render
-};
 
 #endif

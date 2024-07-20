@@ -12,14 +12,12 @@
 #include "audio/external.h"
 
 #include "gfx/gfx_pc.h"
-#include "gfx/gfx_opengl.h"
-#include "gfx/gfx_direct3d11.h"
-#include "gfx/gfx_direct3d12.h"
-#include "gfx/gfx_dxgi.h"
-#include "gfx/gfx_glx.h"
-#include "gfx/gfx_sdl.h"
-#include "gfx/gfx_3ds.h"
-#include "gfx/gfx_citro3d.h"
+
+// Windowing APIs
+#include "gfx/windowing_apis/dxgi/gfx_dxgi.h"
+#include "gfx/windowing_apis/glx/gfx_glx.h"
+#include "gfx/windowing_apis/sdl/gfx_sdl.h"
+#include "gfx/windowing_apis/3ds/gfx_3ds.h"
 
 #include "audio/audio_api.h"
 #include "audio/audio_wasapi.h"
@@ -54,7 +52,6 @@ s8 gShowDebugText;
 
 static struct AudioAPI *audio_api;
 static struct GfxWindowManagerAPI *wm_api;
-static struct GfxRenderingAPI *rendering_api;
 
 extern void gfx_run(Gfx *commands);
 extern void thread5_game_loop(void *arg);
@@ -190,13 +187,10 @@ void main_func(void) {
 #endif
 
 #if defined(ENABLE_DX12)
-    rendering_api = &gfx_direct3d12_api;
     wm_api = &gfx_dxgi_api;
 #elif defined(ENABLE_DX11)
-    rendering_api = &gfx_direct3d11_api;
     wm_api = &gfx_dxgi_api;
 #elif defined(ENABLE_OPENGL)
-    rendering_api = &gfx_opengl_api;
     #if defined(__linux__) || defined(__BSD__)
         wm_api = &gfx_glx;
     #else
@@ -204,10 +198,9 @@ void main_func(void) {
     #endif
 #elif defined(TARGET_N3DS)
     wm_api = &gfx_3ds;
-    rendering_api = &gfx_citro3d_api;
 #endif
 
-    gfx_init(wm_api, rendering_api, "Super Mario 64 Port", configFullscreen);
+    gfx_init(wm_api, "Super Mario 64 Port", configFullscreen);
 
     wm_api->set_fullscreen_changed_callback(on_fullscreen_changed);
     wm_api->set_keyboard_callbacks(keyboard_on_key_down, keyboard_on_key_up, keyboard_on_all_keys_up);

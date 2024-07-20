@@ -20,11 +20,11 @@
 #endif
 #include <PR/gbi.h>
 
-#include "gfx_window_manager_api.h"
-#include "gfx_rendering_api.h"
-#include "gfx_direct3d_common.h"
-#include "gfx_screen_config.h"
-#include "gfx_pc.h"
+#include "src/pc/gfx/gfx_window_manager_api.h"
+#include "src/pc/gfx/gfx_rendering_api.h"
+#include "src/pc/gfx/rendering_apis/gfx_direct3d_common.h"
+#include "src/pc/gfx/gfx_screen_config.h"
+#include "src/pc/gfx/gfx_pc.h"
 
 #define DECLARE_GFX_DXGI_FUNCTIONS
 #include "gfx_dxgi.h"
@@ -195,7 +195,7 @@ static void toggle_borderless_window_full_screen(bool enable, bool call_callback
 
 static void gfx_dxgi_on_resize(void) {
     if (dxgi.swap_chain.Get() != nullptr) {
-        gfx_get_current_rendering_api()->on_resize();
+        gfx_rapi_on_resize();
 
         DXGI_SWAP_CHAIN_DESC1 desc1;
         ThrowIfFailed(dxgi.swap_chain->GetDesc1(&desc1));

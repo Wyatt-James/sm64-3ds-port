@@ -1,8 +1,7 @@
 #ifdef TARGET_N3DS
 
-#include "gfx_3ds.h"
+#include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "gfx_3ds_menu.h"
-#include "gfx_citro3d.h"
 #include "shader_programs/gfx_n3ds_shprog_emu64.h"
 
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off

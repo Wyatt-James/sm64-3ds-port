@@ -33,8 +33,8 @@
 #include "gfx_dxgi.h"
 
 #include "gfx_cc.h"
-#include "gfx_window_manager_api.h"
-#include "gfx_rendering_api.h"
+#include "src/pc/gfx/gfx_window_manager_api.h"
+#include "src/pc/gfx/gfx_rendering_api.h"
 #include "gfx_direct3d_common.h"
 
 #include "gfx_screen_config.h"
@@ -218,19 +218,19 @@ static D3D12_RESOURCE_ALLOCATION_INFO get_resource_allocation_info(const D3D12_R
 #endif
 }
 
-static bool gfx_direct3d12_z_is_from_0_to_1(void) {
+bool gfx_rapi_z_is_from_0_to_1(void) {
     return true;
 }
 
-static void gfx_direct3d12_unload_shader(struct ShaderProgram *old_prg) {
+void gfx_rapi_unload_shader(struct ShaderProgram *old_prg) {
 }
 
-static void gfx_direct3d12_load_shader(struct ShaderProgram *new_prg) {
+void gfx_rapi_load_shader(struct ShaderProgram *new_prg) {
     d3d.shader_program = (struct ShaderProgramD3D12 *)new_prg;
     d3d.must_reload_pipeline = true;
 }
 
-static struct ShaderProgram *gfx_direct3d12_create_and_load_new_shader(uint32_t shader_id) {
+ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader_id) {
     /*static FILE *fp;
     if (!fp) {
         fp = fopen("shaders.txt", "w");
@@ -266,7 +266,7 @@ static struct ShaderProgram *gfx_direct3d12_create_and_load_new_shader(uint32_t 
     return (struct ShaderProgram *)(d3d.shader_program = prg);
 }
 
-static struct ShaderProgram *gfx_direct3d12_lookup_shader(uint32_t shader_id) {
+struct ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
     for (size_t i = 0; i < d3d.shader_program_pool_size; i++) {
         if (d3d.shader_program_pool[i].shader_id == shader_id) {
             return (struct ShaderProgram *)&d3d.shader_program_pool[i];
@@ -275,7 +275,7 @@ static struct ShaderProgram *gfx_direct3d12_lookup_shader(uint32_t shader_id) {
     return nullptr;
 }
 
-static void gfx_direct3d12_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
+void gfx_rapi_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
     struct ShaderProgramD3D12 *p = (struct ShaderProgramD3D12 *)prg;
     
     *num_inputs = p->num_inputs;
@@ -283,17 +283,17 @@ static void gfx_direct3d12_shader_get_info(struct ShaderProgram *prg, uint8_t *n
     used_textures[1] = p->used_textures[1];
 }
 
-static uint32_t gfx_direct3d12_new_texture(void) {
+uint32_t gfx_rapi_new_texture(void) {
     d3d.textures.resize(d3d.textures.size() + 1);
     return (uint32_t)(d3d.textures.size() - 1);
 }
 
-static void gfx_direct3d12_select_texture(int tile, uint32_t texture_id) {
+void gfx_rapi_select_texture(int tile, uint32_t texture_id) {
     d3d.current_tile = tile;
     d3d.current_texture_ids[tile] = texture_id;
 }
 
-static void gfx_direct3d12_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
+void gfx_rapi_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
     texture_uploads++;
     
     ComPtr<ID3D12Resource> texture_resource;
@@ -417,38 +417,38 @@ static int gfx_cm_to_index(uint32_t val) {
     return (val & G_TX_MIRROR) ? 1 : 0;
 }
 
-static void gfx_direct3d12_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
+void gfx_rapi_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
     d3d.textures[d3d.current_texture_ids[tile]].sampler_parameters = linear_filter * 9 + gfx_cm_to_index(cms) * 3 + gfx_cm_to_index(cmt);
 }
 
-static void gfx_direct3d12_set_depth_test(bool depth_test) {
+void gfx_rapi_set_depth_test(bool depth_test) {
     d3d.depth_test = depth_test;
     d3d.must_reload_pipeline = true;
 }
 
-static void gfx_direct3d12_set_depth_mask(bool z_upd) {
+void gfx_rapi_set_depth_mask(bool z_upd) {
     d3d.depth_mask = z_upd;
     d3d.must_reload_pipeline = true;
 }
 
-static void gfx_direct3d12_set_zmode_decal(bool zmode_decal) {
+void gfx_rapi_set_zmode_decal(bool zmode_decal) {
     d3d.zmode_decal = zmode_decal;
     d3d.must_reload_pipeline = true;
 }
 
-static void gfx_direct3d12_set_viewport(int x, int y, int width, int height) {
+void gfx_rapi_set_viewport(int x, int y, int width, int height) {
     d3d.viewport = CD3DX12_VIEWPORT(x, d3d.current_height - y - height, width, height);
 }
 
-static void gfx_direct3d12_set_scissor(int x, int y, int width, int height) {
+void gfx_rapi_set_scissor(int x, int y, int width, int height) {
     d3d.scissor = CD3DX12_RECT(x, d3d.current_height - y - height, x + width, d3d.current_height - y);
 }
 
-static void gfx_direct3d12_set_use_alpha(bool use_alpha) {
+void gfx_rapi_set_use_alpha(bool use_alpha) {
     // Already part of the pipeline state from shader info
 }
 
-static void gfx_direct3d12_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
+void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
     struct ShaderProgramD3D12 *prg = d3d.shader_program;
     
     if (d3d.must_reload_pipeline) {
@@ -581,7 +581,7 @@ static void gfx_direct3d12_draw_triangles(float buf_vbo[], size_t buf_vbo_len, s
     d3d.command_list->DrawInstanced(3 * buf_vbo_num_tris, 1, 0, 0);
 }
 
-static void gfx_direct3d12_start_frame(void) {
+void gfx_rapi_start_frame(void) {
     ++d3d.frame_counter;
     d3d.srv_pos = 0;
     texture_uploads = 0;
@@ -667,7 +667,7 @@ static void create_depth_buffer(void) {
     d3d.device->CreateDepthStencilView(d3d.depth_stencil_buffer.Get(), &dsv_desc, get_cpu_descriptor_handle(d3d.dsv_heap));
 }
 
-static void gfx_direct3d12_on_resize(void) {
+void gfx_rapi_on_resize(void) {
     if (d3d.render_targets[0].Get() != nullptr) {
         d3d.render_targets[0].Reset();
         d3d.render_targets[1].Reset();
@@ -678,7 +678,7 @@ static void gfx_direct3d12_on_resize(void) {
     }
 }
 
-static void gfx_direct3d12_init(void ) {
+void gfx_rapi_init(void ) {
     // Load d3d12.dll
     d3d.d3d12_module = LoadLibraryW(L"d3d12.dll");
     if (d3d.d3d12_module == nullptr) {
@@ -868,7 +868,7 @@ static void gfx_direct3d12_init(void ) {
     }
 }
 
-static void gfx_direct3d12_end_frame(void) {
+void gfx_rapi_end_frame(void) {
     if (max_texture_uploads < texture_uploads && texture_uploads != 38 && texture_uploads != 34 && texture_uploads != 29) {
         max_texture_uploads = texture_uploads;
     }
@@ -904,7 +904,7 @@ static void gfx_direct3d12_end_frame(void) {
     }
 }
 
-static void gfx_direct3d12_finish_render(void) {
+void gfx_rapi_finish_render(void) {
     LARGE_INTEGER t0, t1, t2;
     QueryPerformanceCounter(&t0);
     
@@ -937,30 +937,5 @@ static void gfx_direct3d12_finish_render(void) {
 }
 
 } // namespace
-
-struct GfxRenderingAPI gfx_direct3d12_api = {
-    gfx_direct3d12_z_is_from_0_to_1,
-    gfx_direct3d12_unload_shader,
-    gfx_direct3d12_load_shader,
-    gfx_direct3d12_create_and_load_new_shader,
-    gfx_direct3d12_lookup_shader,
-    gfx_direct3d12_shader_get_info,
-    gfx_direct3d12_new_texture,
-    gfx_direct3d12_select_texture,
-    gfx_direct3d12_upload_texture,
-    gfx_direct3d12_set_sampler_parameters,
-    gfx_direct3d12_set_depth_test,
-    gfx_direct3d12_set_depth_mask,
-    gfx_direct3d12_set_zmode_decal,
-    gfx_direct3d12_set_viewport,
-    gfx_direct3d12_set_scissor,
-    gfx_direct3d12_set_use_alpha,
-    gfx_direct3d12_draw_triangles,
-    gfx_direct3d12_init,
-    gfx_direct3d12_on_resize,
-    gfx_direct3d12_start_frame,
-    gfx_direct3d12_end_frame,
-    gfx_direct3d12_finish_render
-};
 
 #endif

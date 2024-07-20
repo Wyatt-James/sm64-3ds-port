@@ -19,7 +19,7 @@
 
 #include "gfx_cc.h"
 #include "gfx_window_manager_api.h"
-#include "gfx_rendering_api.h"
+#include "src/pc/gfx/gfx_rendering_api.c"
 #include "gfx_direct3d_common.h"
 
 #define DECLARE_GFX_DXGI_FUNCTIONS
@@ -187,7 +187,7 @@ static void create_render_target_views(bool is_resize) {
     d3d.current_height = desc1.Height;
 }
 
-static void gfx_d3d11_init(void) {
+void gfx_rapi_init(void) {
     // Load d3d11.dll
     d3d.d3d11_module = LoadLibraryW(L"d3d11.dll");
     if (d3d.d3d11_module == nullptr) {
@@ -306,18 +306,18 @@ static void gfx_d3d11_init(void) {
 }
 
 
-static bool gfx_d3d11_z_is_from_0_to_1(void) {
+bool gfx_rapi_z_is_from_0_to_1(void) {
     return true;
 }
 
-static void gfx_d3d11_unload_shader(struct ShaderProgram *old_prg) {
+void gfx_rapi_unload_shader(struct ShaderProgram *old_prg) {
 }
 
-static void gfx_d3d11_load_shader(struct ShaderProgram *new_prg) {
+void gfx_rapi_load_shader(struct ShaderProgram *new_prg) {
     d3d.shader_program = (struct ShaderProgramD3D11 *)new_prg;
 }
 
-static struct ShaderProgram *gfx_d3d11_create_and_load_new_shader(uint32_t shader_id) {
+struct ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader_id) {
     CCFeatures cc_features;
     gfx_cc_get_features(shader_id, &cc_features);
 
@@ -404,7 +404,7 @@ static struct ShaderProgram *gfx_d3d11_create_and_load_new_shader(uint32_t shade
     return (struct ShaderProgram *)(d3d.shader_program = prg);
 }
 
-static struct ShaderProgram *gfx_d3d11_lookup_shader(uint32_t shader_id) {
+struct ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
     for (size_t i = 0; i < d3d.shader_program_pool_size; i++) {
         if (d3d.shader_program_pool[i].shader_id == shader_id) {
             return (struct ShaderProgram *)&d3d.shader_program_pool[i];
@@ -413,7 +413,7 @@ static struct ShaderProgram *gfx_d3d11_lookup_shader(uint32_t shader_id) {
     return nullptr;
 }
 
-static void gfx_d3d11_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
+void gfx_rapi_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
     struct ShaderProgramD3D11 *p = (struct ShaderProgramD3D11 *)prg;
 
     *num_inputs = p->num_inputs;
@@ -421,24 +421,24 @@ static void gfx_d3d11_shader_get_info(struct ShaderProgram *prg, uint8_t *num_in
     used_textures[1] = p->used_textures[1];
 }
 
-static uint32_t gfx_d3d11_new_texture(void) {
+uint32_t gfx_rapi_new_texture(void) {
     d3d.textures.resize(d3d.textures.size() + 1);
     return (uint32_t)(d3d.textures.size() - 1);
 }
 
-static void gfx_d3d11_select_texture(int tile, uint32_t texture_id) {
+void gfx_rapi_select_texture(int tile, uint32_t texture_id) {
     d3d.current_tile = tile;
     d3d.current_texture_ids[tile] = texture_id;
 }
 
-static D3D11_TEXTURE_ADDRESS_MODE gfx_cm_to_d3d11(uint32_t val) {
+D3D11_TEXTURE_ADDRESS_MODE gfx_cm_to_d3d11(uint32_t val) {
     if (val & G_TX_CLAMP) {
         return D3D11_TEXTURE_ADDRESS_CLAMP;
     }
     return (val & G_TX_MIRROR) ? D3D11_TEXTURE_ADDRESS_MIRROR : D3D11_TEXTURE_ADDRESS_WRAP;
 }
 
-static void gfx_d3d11_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
+void gfx_rapi_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
     // Create texture
 
     D3D11_TEXTURE2D_DESC texture_desc;
@@ -486,7 +486,7 @@ static void gfx_d3d11_upload_texture(const uint8_t *rgba32_buf, int width, int h
     ThrowIfFailed(d3d.device->CreateShaderResourceView(texture.Get(), &resource_view_desc, texture_data->resource_view.GetAddressOf()));
 }
 
-static void gfx_d3d11_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
+void gfx_rapi_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
     D3D11_SAMPLER_DESC sampler_desc;
     ZeroMemory(&sampler_desc, sizeof(D3D11_SAMPLER_DESC));
 
@@ -512,19 +512,19 @@ static void gfx_d3d11_set_sampler_parameters(int tile, bool linear_filter, uint3
     ThrowIfFailed(d3d.device->CreateSamplerState(&sampler_desc, texture_data->sampler_state.GetAddressOf()));
 }
 
-static void gfx_d3d11_set_depth_test(bool depth_test) {
+void gfx_rapi_set_depth_test(bool depth_test) {
     d3d.depth_test = depth_test;
 }
 
-static void gfx_d3d11_set_depth_mask(bool depth_mask) {
+void gfx_rapi_set_depth_mask(bool depth_mask) {
     d3d.depth_mask = depth_mask;
 }
 
-static void gfx_d3d11_set_zmode_decal(bool zmode_decal) {
+void gfx_rapi_set_zmode_decal(bool zmode_decal) {
     d3d.zmode_decal = zmode_decal;
 }
 
-static void gfx_d3d11_set_viewport(int x, int y, int width, int height) {
+void gfx_rapi_set_viewport(int x, int y, int width, int height) {
     D3D11_VIEWPORT viewport;
     viewport.TopLeftX = x;
     viewport.TopLeftY = d3d.current_height - y - height;
@@ -536,7 +536,7 @@ static void gfx_d3d11_set_viewport(int x, int y, int width, int height) {
     d3d.context->RSSetViewports(1, &viewport);
 }
 
-static void gfx_d3d11_set_scissor(int x, int y, int width, int height) {
+void gfx_rapi_set_scissor(int x, int y, int width, int height) {
     D3D11_RECT rect;
     rect.left = x;
     rect.top = d3d.current_height - y - height;
@@ -546,11 +546,11 @@ static void gfx_d3d11_set_scissor(int x, int y, int width, int height) {
     d3d.context->RSSetScissorRects(1, &rect);
 }
 
-static void gfx_d3d11_set_use_alpha(bool use_alpha) {
+void gfx_rapi_set_use_alpha(bool use_alpha) {
     // Already part of the pipeline state from shader info
 }
 
-static void gfx_d3d11_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
+void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
 
     if (d3d.last_depth_test != d3d.depth_test || d3d.last_depth_mask != d3d.depth_mask) {
         d3d.last_depth_test = d3d.depth_test;
@@ -662,11 +662,11 @@ static void gfx_d3d11_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t
     d3d.context->Draw(buf_vbo_num_tris * 3, 0);
 }
 
-static void gfx_d3d11_on_resize(void) {
+void gfx_rapi_on_resize(void) {
     create_render_target_views(true);
 }
 
-static void gfx_d3d11_start_frame(void) {
+void gfx_rapi_start_frame(void) {
     // Set render targets
 
     d3d.context->OMSetRenderTargets(1, d3d.backbuffer_view.GetAddressOf(), d3d.depth_stencil_view.Get());
@@ -695,37 +695,12 @@ static void gfx_d3d11_start_frame(void) {
     d3d.context->Unmap(d3d.per_frame_cb.Get(), 0);
 }
 
-static void gfx_d3d11_end_frame(void) {
+void gfx_rapi_end_frame(void) {
 }
 
-static void gfx_d3d11_finish_render(void) {
+void gfx_rapi_finish_render(void) {
 }
 
 } // namespace
-
-struct GfxRenderingAPI gfx_direct3d11_api = {
-    gfx_d3d11_z_is_from_0_to_1,
-    gfx_d3d11_unload_shader,
-    gfx_d3d11_load_shader,
-    gfx_d3d11_create_and_load_new_shader,
-    gfx_d3d11_lookup_shader,
-    gfx_d3d11_shader_get_info,
-    gfx_d3d11_new_texture,
-    gfx_d3d11_select_texture,
-    gfx_d3d11_upload_texture,
-    gfx_d3d11_set_sampler_parameters,
-    gfx_d3d11_set_depth_test,
-    gfx_d3d11_set_depth_mask,
-    gfx_d3d11_set_zmode_decal,
-    gfx_d3d11_set_viewport,
-    gfx_d3d11_set_scissor,
-    gfx_d3d11_set_use_alpha,
-    gfx_d3d11_draw_triangles,
-    gfx_d3d11_init,
-    gfx_d3d11_on_resize,
-    gfx_d3d11_start_frame,
-    gfx_d3d11_end_frame,
-    gfx_d3d11_finish_render
-};
 
 #endif

@@ -12,7 +12,6 @@
 #include "sm64.h"
 
 #ifdef TARGET_N3DS
-#include "src/pc/gfx/gfx_citro3d.h"
 #include "src/pc/gfx/color_conversion.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
 #endif

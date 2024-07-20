@@ -1,50 +1,108 @@
 #ifndef GFX_RENDERING_API_H
 #define GFX_RENDERING_API_H
 
+/*
+ * Graphical rendering API. This is platform-dependent!
+ * Please ensure in the Makefile that only one implementation is actually compiled.
+ * Implementations must also define all incomplete types listed below.
+ * 
+ * The Rendering API is how the emulated RSP interfaces with the underlying graphics hardware.
+ * These functions are defined by the implementation, and the implementation should be selected by the makefile.
+ * There also exist optional features; these are NOT yet properly supported externally, but they are codified.
+ */
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-struct ShaderProgram;
+#include "multi_viewport/multi_viewport.h"
 
-struct GfxRenderingAPI {
-    bool (*z_is_from_0_to_1)(void);
-    void (*unload_shader)(struct ShaderProgram *old_prg);
-    void (*load_shader)(struct ShaderProgram *new_prg);
-    struct ShaderProgram *(*create_and_load_new_shader)(uint32_t shader_id);
-    struct ShaderProgram *(*lookup_shader)(uint32_t shader_id);
-    void (*shader_get_info)(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]);
-    uint32_t (*new_texture)(void);
-    void (*select_texture)(int tile, uint32_t texture_id);
-    void (*upload_texture)(const uint8_t *rgba32_buf, int width, int height);
-    void (*set_sampler_parameters)(int sampler, bool linear_filter, uint32_t cms, uint32_t cmt);
-    void (*set_depth_test)(bool depth_test);
-    void (*set_depth_mask)(bool z_upd);
-    void (*set_zmode_decal)(bool zmode_decal);
-    void (*set_viewport)(int x, int y, int width, int height);
-    void (*set_scissor)(int x, int y, int width, int height);
-    void (*set_use_alpha)(bool use_alpha);
-    void (*draw_triangles)(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);
-    void (*init)(void);
-    void (*on_resize)(void);
-    void (*start_frame)(void);
-    void (*end_frame)(void);
-    void (*finish_render)(void);
+#define GFX_DISABLE 0
+#define GFX_ENABLE 1
+
 #ifdef TARGET_N3DS
-    void (*set_fog)(uint16_t from, uint16_t to);
-    void (*set_fog_color)(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-    void (*set_2d)(int mode_2d);
-    void (*set_iod)(float z, float w);
-    void (*upload_texture_rgba16)(const uint8_t *data, int width, int height);
-    void (*upload_texture_rgba32)(const uint8_t *data, int width, int height);
-    void (*upload_texture_ia4)   (const uint8_t *data, int width, int height);
-    void (*upload_texture_ia8)   (const uint8_t *data, int width, int height);
-    void (*upload_texture_ia16)  (const uint8_t *data, int width, int height);
-    void (*upload_texture_i4)    (const uint8_t *data, int width, int height);
-    void (*upload_texture_i8)    (const uint8_t *data, int width, int height);
-    void (*upload_texture_ci4)   (const uint8_t *data, const uint8_t* palette, int width, int height);
-    void (*upload_texture_ci8)   (const uint8_t *data, const uint8_t* palette, int width, int height);
+#define GFX_RAPI_TEXTURE_FORMATS  GFX_ENABLE
+#define GFX_RAPI_STEREOSCOPIC_3D  GFX_ENABLE
+#define GFX_RAPI_FOG              GFX_ENABLE
+#define GFX_RAPI_MATRICES         GFX_ENABLE
+#define GFX_RAPI_MULTI_VIEWPORT   GFX_ENABLE
+#else
+#define GFX_RAPI_TEXTURE_FORMATS  GFX_DISABLE
+#define GFX_RAPI_STEREOSCOPIC_3D  GFX_DISABLE
+#define GFX_RAPI_FOG              GFX_DISABLE
+#define GFX_RAPI_MATRICES         GFX_DISABLE
+#define GFX_RAPI_MULTI_VIEWPORT   GFX_DISABLE
 #endif
-};
+
+// Types to be defined by the implementation
+struct ShaderProgram; 
+
+// Mandatory functions
+bool                    gfx_rapi_z_is_from_0_to_1           ();                                                                         // Returns true if the API's depth range is from 0 to 1.
+void                    gfx_rapi_unload_shader              (struct ShaderProgram *old_prg);                                            // Unloads the given shader.
+void                    gfx_rapi_load_shader                (struct ShaderProgram *new_prg);                                            // Loads the given shader.
+struct ShaderProgram*   gfx_rapi_create_and_load_new_shader (uint32_t shader_id);                                                       // Creates and loads a new shader with the given ID. 
+struct ShaderProgram*   gfx_rapi_lookup_shader              (uint32_t shader_id);                                                       // Looks up an existing shader with the given ID.
+void                    gfx_rapi_shader_get_info            (struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]);    // Returns info about the currently loaded shader.
+uint32_t                gfx_rapi_new_texture                ();                                                                         // Returns the index for a new texture. If no textures are available, it will return a valid texture, but which texture it is is implementation-defined.
+void                    gfx_rapi_select_texture             (int tile, uint32_t texture_id);                                            // Selects a currently loaded texture.
+void                    gfx_rapi_set_sampler_parameters     (int texture_slot, bool linear_filter, uint32_t cms, uint32_t cmt);         // Sets the texture sampling parameters for the given texture slot.
+void                    gfx_rapi_set_depth_test             (bool depth_test);                                                          // Enables or disables GPU depth test.
+void                    gfx_rapi_set_depth_mask             (bool z_upd);                                                               // Enables or disables GPU depth upadtes.
+void                    gfx_rapi_set_zmode_decal            (bool zmode_decal);                                                         // Enables or disables decal mode.
+void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                      // Sets the GPU viewport settings.
+void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                      // Sets the GPU scissor settings.
+void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                           // Enables or disables alpha blending.
+void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);             // Draws the given triangles.
+void                    gfx_rapi_init                       ();                                                                         // Initializes the GFX Rendering API.
+void                    gfx_rapi_on_resize                  ();                                                                         // Called when the window is resized.
+void                    gfx_rapi_start_frame                ();                                                                         // Called at the start of a frame.
+void                    gfx_rapi_end_frame                  ();                                                                         // Called at the end of a frame.
+void                    gfx_rapi_finish_render              ();                                                                         // Called after end_frame, but only if the frame was not dropped.
+
+// Optional feature: GPU handles texture formats individually
+#if GFX_RAPI_TEXTURE_FORMATS == GFX_ENABLE
+void                    gfx_rapi_upload_texture_rgba16      (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_rgba32      (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_ia4         (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_ia8         (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_ia16        (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_i4          (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_i8          (const uint8_t *data, int width, int height);                           // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_ci4         (const uint8_t *data, const uint8_t* palette, int width, int height);   // Uploads a texture with the given N64 format.
+void                    gfx_rapi_upload_texture_ci8         (const uint8_t *data, const uint8_t* palette, int width, int height);   // Uploads a texture with the given N64 format.
+#else
+void                    gfx_rapi_upload_texture             (const uint8_t *rgba32_buf, int width, int height);                     // Uploads a texture with the N64 RGBA8888 format.
+#endif
+
+// Optional feature: GPU handles fog rendering
+#if GFX_RAPI_FOG == GFX_ENABLE
+void                    gfx_rapi_set_fog                    (uint16_t from, uint16_t to);                   // Sets the GPU fog distance factors.
+void                    gfx_rapi_set_fog_color              (uint8_t r, uint8_t g, uint8_t b, uint8_t a);   // Sets the GPU fog color.
+void                    gfx_rapi_set_fog_color_u32          (uint32_t color);                               // Sets the GPU fog color, RGBA8888 format.
+#endif
+
+// Optional feature: stereoscopic 3D rendering
+#if GFX_RAPI_STEREOSCOPIC_3D == GFX_ENABLE
+void                    gfx_rapi_set_2d_mode                (int mode_2d);          // Used for depth overrides.
+void                    gfx_rapi_set_iod                    (float z, float w);     // Adjusts the strength of the depth effect.
+#endif
+
+// Optional feature: GPU handles matrix-vector multiplication
+#if GFX_RAPI_MATRICES == GFX_ENABLE
+void                    gfx_rapi_set_model_view_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
+void                    gfx_rapi_set_projection_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
+void                    gfx_rapi_apply_model_view_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
+void                    gfx_rapi_apply_projection_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
+void                    gfx_rapi_select_matrix_set          (uint32_t matrix_set_id);   // Selects one of the given matrix sets, but does not send it to the GPU.
+void                    gfx_rapi_set_backface_culling_mode  (uint32_t culling_mode);    // Sets the GPU's backface culling mode
+#endif
+
+// Optional feature: multiple viewports
+#if GFX_RAPI_MULTI_VIEWPORT == GFX_ENABLE
+void                    gfx_rapi_set_viewport_clear_color           (uint32_t viewport_id, uint8_t r, uint8_t g, uint8_t b, uint8_t a);     // Sets the clear color of the given viewport.
+void                    gfx_rapi_set_viewport_clear_color_u32       (uint32_t viewport_id, uint32_t color);                                 // Sets the clear color of the given viewport. Format RGBA8888.
+void                    gfx_rapi_enable_viewport_clear_buffer_flag  (uint32_t viewport_id, enum ViewportClearBuffer mode);                  // Enables a buffer clear flag for the specified viewport. Flags are reset at the start of the frame.
+#endif
 
 #endif

@@ -238,7 +238,12 @@ ASM_DIRS := lib
 ifeq ($(TARGET_N64),1)
   ASM_DIRS := asm $(ASM_DIRS)
 else
-  SRC_DIRS := $(SRC_DIRS) src/pc src/pc/gfx src/pc/gfx/multi_viewport src/pc/gfx/shader_programs src/pc/audio src/pc/controller src/pc/n3ds
+	RENDERING_APIS := citro3d direct3d opengl
+	WINDOWING_APIS := 3ds dxgi glx sdl
+	GFX_ROOT_DIR := src/pc/gfx
+	RENDERING_API_ROOT_DIR := $(GFX_ROOT_DIR)/rendering_apis
+	WINDOWING_API_ROOT_DIR := $(GFX_ROOT_DIR)/windowing_apis
+  SRC_DIRS := $(SRC_DIRS) src/pc $(GFX_ROOT_DIR) $(GFX_ROOT_DIR)/multi_viewport $(GFX_ROOT_DIR)/shader_programs src/pc/audio src/pc/controller src/pc/n3ds $(foreach rendering_api,$(RENDERING_APIS),$(RENDERING_API_ROOT_DIR)/$(rendering_api)) $(foreach windowing_api,$(WINDOWING_APIS),$(WINDOWING_API_ROOT_DIR)/$(windowing_api))
   # If this is enabled, you can do ASM debugging on these files.
   # SRC_DIRS := $(SRC_DIRS) src/pc/mixer_implementations
   ASM_DIRS :=
@@ -960,8 +965,8 @@ define bin2o
 endef
 
 # TODO: simplify dependency chain
-$(BUILD_DIR)/src/pc/gfx/gfx_citro3d.o: $(BUILD_DIR)/src/pc/gfx/gfx_3ds.o
-$(BUILD_DIR)/src/pc/gfx/gfx_3ds.o: $(BUILD_DIR)/src/pc/gfx/gfx_3ds_menu.o
+$(BUILD_DIR)/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.o: $(BUILD_DIR)/src/pc/gfx/windowing_apis/3ds/gfx_3ds.o
+$(BUILD_DIR)/src/pc/gfx/windowing_apis/3ds/gfx_3ds.o: $(BUILD_DIR)/src/pc/gfx/gfx_3ds_menu.o
 $(BUILD_DIR)/src/pc/gfx/gfx_3ds_menu.o: $(MINIMAP_T3X_HEADERS)
 
 %.t3x.o $(BUILD_DIR)/%_t3x.h: %.t3x

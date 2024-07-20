@@ -5,8 +5,9 @@
 #include "macros.h"
 
 #include "gfx_3ds.h"
-#include "gfx_3ds_menu.h"
-#include "gfx_citro3d.h"
+#include "src/pc/gfx/gfx_3ds_menu.h"
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
+#include "src/pc/gfx/gfx_rendering_api.h"
 
 #include "src/pc/n3ds/n3ds_system_info.h"
 #include "src/pc/n3ds/n3ds_threading_common.h"
@@ -137,7 +138,7 @@ static void initialise_screens()
     else // (useAA && useWide)
         gGfx3DSMode = GFX_3DS_MODE_WIDE_AA_12; // 800px + AA
 
-    // TODO: refactor; this is (also) set in gfx_citro3d_init,
+    // TODO: refactor; this is (also) set in gfx_rapi_init,
     C3D_CullFace(GPU_CULL_NONE);
     C3D_DepthMap(true, -1.0f, 0);
     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
@@ -148,7 +149,7 @@ static void initialise_screens()
         DISPLAY_TRANSFER_FLAGS | GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
 
     // Required for cake screen
-    gfx_citro3d_set_viewport_clear_buffer_mode(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
+    gfx_rapi_enable_viewport_clear_buffer_flag(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 
     // consoleInit(GFX_BOTTOM, NULL);
 }
@@ -365,7 +366,7 @@ static void gfx_3ds_handle_events(void)
     }
 
     if (gBottomScreenNeedsRender)
-        gfx_citro3d_set_viewport_clear_buffer_mode(VIEW_BOTTOM_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
+        gfx_rapi_enable_viewport_clear_buffer_flag(VIEW_BOTTOM_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 }
 
 float cpu_time, gpu_time;

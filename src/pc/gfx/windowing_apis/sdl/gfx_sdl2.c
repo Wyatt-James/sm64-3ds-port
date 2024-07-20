@@ -1,4 +1,4 @@
-#include "../compat.h"
+#include "src/pc/compat.h"
 
 #if !defined(__linux__) && !defined(__BSD__) && defined(ENABLE_OPENGL)
 
@@ -19,8 +19,8 @@
 #include <SDL2/SDL_opengles2.h>
 #endif
 
-#include "gfx_window_manager_api.h"
-#include "gfx_screen_config.h"
+#include "src/pc/gfx/gfx_window_manager_api.h"
+#include "src/pc/gfx/gfx_screen_config.h"
 
 #define GFX_API_NAME "SDL2 - OpenGL"
 

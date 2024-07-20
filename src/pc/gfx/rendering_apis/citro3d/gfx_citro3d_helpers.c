@@ -2,8 +2,8 @@
 #include <stdio.h>
 
 #include "gfx_citro3d_helpers.h"
-#include "gfx_cc.h"
-#include "shader_programs/gfx_n3ds_shprog_emu64.h"
+#include "src/pc/gfx/gfx_cc.h"
+#include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -61,7 +61,7 @@ static const int texture_tile_order[4][4] =
     {10, 11, 14, 15}
 };
 
-uint8_t gfx_citro3d_calculate_shader_code(bool has_texture,
+uint8_t citro3d_helpers_calculate_shader_code(bool has_texture,
                                           UNUSED bool has_fog,
                                           bool has_alpha,
                                           bool has_color1,
@@ -88,7 +88,7 @@ uint8_t gfx_citro3d_calculate_shader_code(bool has_texture,
     return shader_code;
 }
 
-const struct n3ds_shader_info* get_shader_info_from_shader_code(uint8_t shader_code)
+const struct n3ds_shader_info* citro3d_helpers_get_shader_info_from_shader_code(uint8_t shader_code)
 {
     const struct n3ds_shader_info* shader = NULL;
 
@@ -143,7 +143,7 @@ const struct n3ds_shader_info* get_shader_info_from_shader_code(uint8_t shader_c
     return shader;
 }
 
-struct TextureSize gfx_citro3d_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size)
+struct TextureSize citro3d_helpers_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size)
 {
     struct TextureSize result = input_size; // Struct copy
     result.success = true;
@@ -177,7 +177,7 @@ struct TextureSize gfx_citro3d_adjust_texture_dimensions(struct TextureSize inpu
     return result;
 }
 
-void gfx_citro3d_pad_and_tile_texture_u32(uint32_t* src,
+void citro3d_helpers_pad_and_tile_texture_u32(uint32_t* src,
                                           uint32_t* dest,
                                           struct TextureSize src_size,
                                           struct TextureSize new_size)
@@ -208,7 +208,7 @@ void gfx_citro3d_pad_and_tile_texture_u32(uint32_t* src,
     }
 }
 
-void gfx_citro3d_pad_and_tile_texture_u16(uint16_t* src,
+void citro3d_helpers_pad_and_tile_texture_u16(uint16_t* src,
                                           uint16_t* dest,
                                           struct TextureSize src_size,
                                           struct TextureSize new_size)
@@ -238,7 +238,7 @@ void gfx_citro3d_pad_and_tile_texture_u16(uint16_t* src,
     }
 }
 
-void gfx_citro3d_pad_and_tile_texture_u8(uint8_t* src,
+void citro3d_helpers_pad_and_tile_texture_u8(uint8_t* src,
                                          uint8_t* dest,
                                          struct TextureSize src_size,
                                          struct TextureSize new_size)
@@ -268,7 +268,7 @@ void gfx_citro3d_pad_and_tile_texture_u8(uint8_t* src,
     }
 }
 
-union RGBA32 gfx_citro3d_get_env_color_from_vbo(float buf_vbo[], struct CCFeatures* cc_features)
+union RGBA32 citro3d_helpers_get_env_color_from_vbo(float buf_vbo[], struct CCFeatures* cc_features)
 {
     const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
     const bool hasAlpha = cc_features->opt_alpha;
@@ -286,7 +286,7 @@ union RGBA32 gfx_citro3d_get_env_color_from_vbo(float buf_vbo[], struct CCFeatur
     return env_color;
 }
 
-GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input)
+GPU_TEVSRC citro3d_helpers_cc_input_to_tev_src(int cc_input, bool swap_input)
 {
     switch (cc_input)
     {
@@ -310,7 +310,7 @@ GPU_TEVSRC gfx_citro3d_cc_input_to_tev_src(int cc_input, bool swap_input)
     }
 }
 
-void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_TexEnv* texenv)
+void citro3d_helpers_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_TexEnv* texenv)
 {
     const bool swap_input = (cc_features->num_inputs == 2) ? true : false;
 
@@ -322,7 +322,7 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         if (cc_features->do_single[0])
         {
             C3D_TexEnvFunc(texenv, C3D_RGB, GPU_REPLACE);
-            C3D_TexEnvSrc(texenv, C3D_RGB, gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][3], swap_input), 0, 0);
+            C3D_TexEnvSrc(texenv, C3D_RGB, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][3], swap_input), 0, 0);
             if (cc_features->c[0][3] == SHADER_TEXEL0A)
                 C3D_TexEnvOpRgb(texenv, GPU_TEVOP_RGB_SRC_ALPHA, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
             else
@@ -331,8 +331,8 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         else if (cc_features->do_multiply[0])
         {
             C3D_TexEnvFunc(texenv, C3D_RGB, GPU_MODULATE);
-            C3D_TexEnvSrc(texenv, C3D_RGB, gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
-                                        gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][2], swap_input), 0);
+            C3D_TexEnvSrc(texenv, C3D_RGB, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
+                                        citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][2], swap_input), 0);
             C3D_TexEnvOpRgb(texenv,
                 cc_features->c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 cc_features->c[0][2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -341,9 +341,9 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         else if (cc_features->do_mix[0])
         {
             C3D_TexEnvFunc(texenv, C3D_RGB, GPU_INTERPOLATE);
-            C3D_TexEnvSrc(texenv, C3D_RGB, gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
-                                        gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][1], swap_input),
-                                        gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][2], swap_input));
+            C3D_TexEnvSrc(texenv, C3D_RGB, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
+                                        citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][1], swap_input),
+                                        citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][2], swap_input));
             C3D_TexEnvOpRgb(texenv,
                 cc_features->c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 cc_features->c[0][1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -354,20 +354,20 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         if (cc_features->do_single[1])
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_REPLACE);
-            C3D_TexEnvSrc(texenv, C3D_Alpha, gfx_citro3d_cc_input_to_tev_src(cc_features->c[1][3], swap_input), 0, 0);
+            C3D_TexEnvSrc(texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][3], swap_input), 0, 0);
         }
         else if (cc_features->do_multiply[1])
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_MODULATE);
-            C3D_TexEnvSrc(texenv, C3D_Alpha, gfx_citro3d_cc_input_to_tev_src(cc_features->c[1][0], swap_input),
-                                          gfx_citro3d_cc_input_to_tev_src(cc_features->c[1][2], swap_input), 0);
+            C3D_TexEnvSrc(texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][0], swap_input),
+                                          citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][2], swap_input), 0);
         }
         else if (cc_features->do_mix[1])
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_INTERPOLATE);
-            C3D_TexEnvSrc(texenv, C3D_Alpha, gfx_citro3d_cc_input_to_tev_src(cc_features->c[1][0], swap_input),
-                                          gfx_citro3d_cc_input_to_tev_src(cc_features->c[1][1], swap_input),
-                                          gfx_citro3d_cc_input_to_tev_src(cc_features->c[1][2], swap_input));
+            C3D_TexEnvSrc(texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][0], swap_input),
+                                          citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][1], swap_input),
+                                          citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][2], swap_input));
         }
     }
     else
@@ -377,7 +377,7 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         if (cc_features->do_single[0])
         {
             C3D_TexEnvFunc(texenv, C3D_Both, GPU_REPLACE);
-            C3D_TexEnvSrc(texenv, C3D_Both, gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][3], swap_input), 0, 0);
+            C3D_TexEnvSrc(texenv, C3D_Both, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][3], swap_input), 0, 0);
             if (cc_features->c[0][3] == SHADER_TEXEL0A)
                 C3D_TexEnvOpRgb(texenv, GPU_TEVOP_RGB_SRC_ALPHA, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
             else
@@ -386,8 +386,8 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         else if (cc_features->do_multiply[0])
         {
             C3D_TexEnvFunc(texenv, C3D_Both, GPU_MODULATE);
-            C3D_TexEnvSrc(texenv, C3D_Both, gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
-                                         gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][2], swap_input), 0);
+            C3D_TexEnvSrc(texenv, C3D_Both, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
+                                         citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][2], swap_input), 0);
             C3D_TexEnvOpRgb(texenv,
                 cc_features->c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 cc_features->c[0][2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -396,9 +396,9 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
         else if (cc_features->do_mix[0])
         {
             C3D_TexEnvFunc(texenv, C3D_Both, GPU_INTERPOLATE);
-            C3D_TexEnvSrc(texenv, C3D_Both, gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
-                                         gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][1], swap_input),
-                                         gfx_citro3d_cc_input_to_tev_src(cc_features->c[0][2], swap_input));
+            C3D_TexEnvSrc(texenv, C3D_Both, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
+                                         citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][1], swap_input),
+                                         citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][2], swap_input));
             C3D_TexEnvOpRgb(texenv,
                 cc_features->c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
                 cc_features->c[0][1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
@@ -413,7 +413,7 @@ void gfx_citro3d_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_Te
     }
 }
 
-void gfx_citro3d_configure_tex_env_slot_1(C3D_TexEnv* texenv)
+void citro3d_helpers_configure_tex_env_slot_1(C3D_TexEnv* texenv)
 {
     C3D_TexEnvInit(texenv);
     C3D_TexEnvColor(texenv, 0);
@@ -423,7 +423,7 @@ void gfx_citro3d_configure_tex_env_slot_1(C3D_TexEnv* texenv)
     C3D_TexEnvOpAlpha(texenv, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA);
 }
 
-GPU_TEXTURE_WRAP_PARAM gfx_citro3d_convert_texture_clamp_mode(uint32_t val)
+GPU_TEXTURE_WRAP_PARAM citro3d_helpers_convert_texture_clamp_mode(uint32_t val)
 {
     if (val & G_TX_CLAMP)
         return GPU_CLAMP_TO_EDGE;
@@ -433,7 +433,7 @@ GPU_TEXTURE_WRAP_PARAM gfx_citro3d_convert_texture_clamp_mode(uint32_t val)
         return GPU_REPEAT;
 }
 
-GPU_CULLMODE gfx_citro3d_convert_cull_mode(uint32_t culling_mode)
+GPU_CULLMODE citro3d_helpers_convert_cull_mode(uint32_t culling_mode)
 {
     switch (culling_mode & G_CULL_BOTH) {
         case 0:
@@ -445,7 +445,7 @@ GPU_CULLMODE gfx_citro3d_convert_cull_mode(uint32_t culling_mode)
     }
 }
 
-void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
+void citro3d_helpers_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
 { 
     c3d_mtx->r[0].x = sm64_mtx[0][0]; c3d_mtx->r[0].y = sm64_mtx[1][0]; c3d_mtx->r[0].z = sm64_mtx[2][0]; c3d_mtx->r[0].w = sm64_mtx[3][0];
     c3d_mtx->r[1].x = sm64_mtx[0][1]; c3d_mtx->r[1].y = sm64_mtx[1][1]; c3d_mtx->r[1].z = sm64_mtx[2][1]; c3d_mtx->r[1].w = sm64_mtx[3][1];
@@ -453,7 +453,7 @@ void gfx_citro3d_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
     c3d_mtx->r[3].x = sm64_mtx[0][3]; c3d_mtx->r[3].y = sm64_mtx[1][3]; c3d_mtx->r[3].z = sm64_mtx[2][3]; c3d_mtx->r[3].w = sm64_mtx[3][3];
 }
 
-void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength)
+void citro3d_helpers_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength)
 {
     /** ********************** Default L/R stereo perspective function with x/y tilt removed **********************
 
@@ -503,7 +503,7 @@ void gfx_citro3d_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3d
         memcpy(dst, src, sizeof(C3D_Mtx));
 }
 
-void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx)
+void citro3d_helpers_apply_projection_mtx_preset(C3D_Mtx* mtx)
 {
     // 3DS screen is rotated 90 degrees
     Mtx_RotateZ(mtx, 0.75f*M_TAU, false);
@@ -516,7 +516,7 @@ void gfx_citro3d_apply_projection_mtx_preset(C3D_Mtx* mtx)
     Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
 }
 
-void gfx_citro3d_convert_viewport_settings(struct ViewportConfig* viewport_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
+void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
 {
     if (gfx_mode == GFX_3DS_MODE_AA_22 || gfx_mode == GFX_3DS_MODE_WIDE_AA_12)
     {
@@ -541,7 +541,7 @@ void gfx_citro3d_convert_viewport_settings(struct ViewportConfig* viewport_confi
     }
 }
 
-void gfx_citro3d_convert_scissor_settings(struct ScissorConfig* scissor_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
+void citro3d_helpers_convert_scissor_settings(struct ScissorConfig* scissor_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
 {
     scissor_config->enable = true;
     if (gfx_mode == GFX_3DS_MODE_AA_22 || gfx_mode == GFX_3DS_MODE_WIDE_AA_12)
@@ -567,26 +567,16 @@ void gfx_citro3d_convert_scissor_settings(struct ScissorConfig* scissor_config, 
     }
 }
 
-void gfx_citro3d_convert_iod_settings(struct IodConfig* iod_config, float z, float w)
+void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z, float w)
 {
     iod_config->z = z;
     iod_config->w = w;
 }
 
-enum Stereoscopic3dMode gfx_citro3d_convert_2d_mode(int mode_2d)
+enum Stereoscopic3dMode citro3d_helpers_convert_2d_mode(int mode_2d)
 {
     if (mode_2d < 0 || mode_2d > STEREO_MODE_COUNT)
         mode_2d = STEREO_MODE_3D;
 
     return (enum Stereoscopic3dMode) mode_2d;
-}
-
-void stub_void(void)
-{
-    
-}
-
-bool stub_return_true(void)
-{
-    return true;
 }

@@ -15,17 +15,19 @@
 #include <PR/gbi.h>
 
 #include "gfx_pc.h"
-#include "gfx_cc.h"
+
+#include "src/pc/gfx/gfx_rendering_api.h"
 #include "gfx_window_manager_api.h"
-#include "gfx_rendering_api.h"
+
+#include "gfx_cc.h"
 #include "gfx_screen_config.h"
-#include "gfx_citro3d.h"
 #include "color_formats.h"
 #include "texture_conversion.h"
 #include "src/pc/pc_metrics.h"
 
 #ifdef TARGET_N3DS
-#include "gfx_3ds.h"
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
+#include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/profiler_3ds.h"
 #else
 #define profiler_3ds_log_time(id) do {} while (0)
@@ -298,7 +300,6 @@ static size_t buf_vbo_len = 0;
 static size_t buf_vbo_num_verts = 0;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
-static struct GfxRenderingAPI gfx_rapi;
 
 #if ENABLE_SHADER_SWAP_COUNTER == 1
 int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_combine_mode = 0;
@@ -314,7 +315,7 @@ static void set_other_mode_l(uint32_t other_mode_l);
 #ifdef TARGET_N3DS
 static void gfx_set_2d(int mode_2d)
 {
-    gfx_rapi.set_2d(mode_2d);
+    gfx_rapi_set_2d_mode(mode_2d);
 }
 
 static void gfx_set_iod(unsigned int iod)
@@ -342,7 +343,7 @@ static void gfx_set_iod(unsigned int iod)
             w = -128.0f;
             break;
     }
-    gfx_rapi.set_iod(z, w);
+    gfx_rapi_set_iod(z, w);
 }
 #endif
 
@@ -352,29 +353,29 @@ static void gfx_apply_matrices()
 
     if (shader_state.matrix_set != rsp.matrix_set) {
         shader_state.matrix_set  = rsp.matrix_set;
-        gfx_citro3d_select_matrix_set(rsp.matrix_set);
+        gfx_rapi_select_matrix_set(rsp.matrix_set);
         apply_p_mtx = apply_mv_mtx = true;
     }
 
     if (rsp.matrix_set == MATRIX_SET_NORMAL) {
         if (shader_state.p_mtx_changed) {
             shader_state.p_mtx_changed = false;
-            gfx_citro3d_set_game_projection_matrix(rsp.P_matrix);
+            gfx_rapi_set_projection_matrix(rsp.P_matrix);
             apply_p_mtx = true;
         }
 
         if (shader_state.mv_mtx_changed) {
             shader_state.mv_mtx_changed = false;
-            gfx_citro3d_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+            gfx_rapi_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
             apply_mv_mtx = true;
         }
     }
 
     if (apply_p_mtx)
-        gfx_citro3d_apply_game_projection_matrix();
+        gfx_rapi_apply_projection_matrix();
 
     if (apply_mv_mtx)
-        gfx_citro3d_apply_model_view_matrix();
+        gfx_rapi_apply_model_view_matrix();
 }
 
 static void gfx_flush(void) {
@@ -384,7 +385,7 @@ static void gfx_flush(void) {
     if (UNLIKELY(buf_vbo_num_verts > 0)) {
         gfx_apply_matrices();
 
-        gfx_rapi.draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
+        gfx_rapi_draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;
     }
@@ -393,10 +394,10 @@ static void gfx_flush(void) {
 }
 
 static struct ShaderProgram *gfx_lookup_or_create_shader_program(uint32_t shader_id) {
-    struct ShaderProgram *prg = gfx_rapi.lookup_shader(shader_id);
+    struct ShaderProgram *prg = gfx_rapi_lookup_shader(shader_id);
     if (UNLIKELY(prg == NULL)) {
-        gfx_rapi.unload_shader(rendering_state.shader_program);
-        prg = gfx_rapi.create_and_load_new_shader(shader_id);
+        gfx_rapi_unload_shader(rendering_state.shader_program);
+        prg = gfx_rapi_create_and_load_new_shader(shader_id);
         rendering_state.shader_program = prg;
     }
     return prg;
@@ -468,7 +469,7 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     struct TextureHashmapNode **node = &gfx_texture_cache.hashmap[hash];
     while (*node != NULL && *node - gfx_texture_cache.pool < (int)gfx_texture_cache.pool_pos) {
         if ((*node)->texture_addr == orig_addr && (*node)->fmt == fmt && (*node)->siz == siz) {
-            gfx_rapi.select_texture(tile, (*node)->texture_id);
+            gfx_rapi_select_texture(tile, (*node)->texture_id);
             *n = *node;
             return true;
         }
@@ -482,10 +483,10 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     }
     *node = &gfx_texture_cache.pool[gfx_texture_cache.pool_pos++];
     if ((*node)->texture_addr == NULL) {
-        (*node)->texture_id = gfx_rapi.new_texture();
+        (*node)->texture_id = gfx_rapi_new_texture();
     }
-    gfx_rapi.select_texture(tile, (*node)->texture_id);
-    gfx_rapi.set_sampler_parameters(tile, false, 0, 0);
+    gfx_rapi_select_texture(tile, (*node)->texture_id);
+    gfx_rapi_set_sampler_parameters(tile, false, 0, 0);
     (*node)->cms = 0;
     (*node)->cmt = 0;
     (*node)->linear_filter = false;
@@ -536,31 +537,31 @@ static void import_texture(int tile) {
 
     switch (TEX_FORMAT(fmt, siz)) {
         case TEXFMT_RGBA32:
-            gfx_rapi.upload_texture_rgba32(data, width, height); // Unused by SM64
+            gfx_rapi_upload_texture_rgba32(data, width, height); // Unused by SM64
             break;
         case TEXFMT_RGBA16:
-            gfx_rapi.upload_texture_rgba16(data, width, height);
+            gfx_rapi_upload_texture_rgba16(data, width, height);
             break;
         case TEXFMT_IA4:
-            gfx_rapi.upload_texture_ia4(data, width, height); // Used by text only
+            gfx_rapi_upload_texture_ia4(data, width, height); // Used by text only
             break;
         case TEXFMT_IA8:
-            gfx_rapi.upload_texture_ia8(data, width, height);
+            gfx_rapi_upload_texture_ia8(data, width, height);
             break;
         case TEXFMT_IA16:
-            gfx_rapi.upload_texture_ia16(data, width, height);
+            gfx_rapi_upload_texture_ia16(data, width, height);
             break;
         case TEXFMT_I4:
-            gfx_rapi.upload_texture_i4(data, width, height); // Unused by SM64
+            gfx_rapi_upload_texture_i4(data, width, height); // Unused by SM64
             break;
         case TEXFMT_I8:
-            gfx_rapi.upload_texture_i8(data, width, height); // Unused by SM64
+            gfx_rapi_upload_texture_i8(data, width, height); // Unused by SM64
             break;
         case TEXFMT_CI4:
-            gfx_rapi.upload_texture_ci4(data, palette, width, height); // Unused by SM64
+            gfx_rapi_upload_texture_ci4(data, palette, width, height); // Unused by SM64
             break;
         case TEXFMT_CI8:
-            gfx_rapi.upload_texture_ci8(data, palette, width, height); // Unused by SM64
+            gfx_rapi_upload_texture_ci8(data, palette, width, height); // Unused by SM64
             break;
         default:
             abort();
@@ -825,10 +826,10 @@ static void gfx_sp_tri_update_state()
             profiler_3ds_log_time(10); // gfx_sp_tri_update_state
             gfx_flush(); // 2: 7, 20
             profiler_3ds_log_time(0);
-            gfx_rapi.unload_shader(rendering_state.shader_program);
-            gfx_rapi.load_shader(gpu_shader_program);
+            gfx_rapi_unload_shader(rendering_state.shader_program);
+            gfx_rapi_load_shader(gpu_shader_program);
             rendering_state.shader_program = gpu_shader_program;
-            gfx_rapi.shader_get_info(gpu_shader_program, &shader_state.num_inputs, shader_state.used_textures);
+            gfx_rapi_shader_get_info(gpu_shader_program, &shader_state.num_inputs, shader_state.used_textures);
         }
     } else
         SHADER_COUNT_DO(avoided_swaps_recalc++);
@@ -847,7 +848,7 @@ static void gfx_sp_tri_update_state()
                 profiler_3ds_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush(); // 4: 0, 0
                 profiler_3ds_log_time(0);
-                gfx_rapi.set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
+                gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 rendering_state.textures[i]->linear_filter = linear_filter;
                 rendering_state.textures[i]->cms = rdp.texture_tile.cms;
                 rendering_state.textures[i]->cmt = rdp.texture_tile.cmt;
@@ -861,7 +862,7 @@ static void gfx_sp_tri_update_state()
     if (rendering_state.culling_mode != culling_mode) {
         rendering_state.culling_mode = culling_mode;
         gfx_flush(); // 6: 26, 28
-        gfx_citro3d_set_backface_culling_mode(culling_mode);
+        gfx_rapi_set_backface_culling_mode(culling_mode);
     }
 
     // Nearly 100% savings with good numbers (potentially outdated metric)
@@ -870,14 +871,14 @@ static void gfx_sp_tri_update_state()
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
         gfx_flush(); // 7: 0, 2
-        gfx_rapi.set_depth_test(depth_test);
+        gfx_rapi_set_depth_test(depth_test);
     }
 
     // Handled here to optimize rectangle drawing
     if (!XYWH_EQUAL(rendering_state.viewport, rdp.viewport)) {
         rendering_state.viewport = rdp.viewport;
         gfx_flush(); // 8: 0, 0
-        gfx_rapi.set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
+        gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
 
     profiler_3ds_log_time(10); // gfx_sp_tri_update_state
@@ -1089,7 +1090,7 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
                 gfx_flush();
                 uint16_t fog_mul = (int16_t)(data >> 16),
                          fog_offset = (int16_t)data;
-                gfx_rapi.set_fog(fog_mul, fog_offset);
+                gfx_rapi_set_fog(fog_mul, fog_offset);
             }
 #else
             rsp.fog_mul = (int16_t)(data >> 16);
@@ -1114,7 +1115,7 @@ static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly,
     if (!XYWH_EQUAL(rendering_state.scissor, scissor)) {
         rendering_state.scissor = scissor;
         gfx_flush(); // 9: 0, 0
-        gfx_rapi.set_scissor(scissor.x, scissor.y, scissor.width, scissor.height);
+        gfx_rapi_set_scissor(scissor.x, scissor.y, scissor.width, scissor.height);
     }
 }
 
@@ -1314,7 +1315,7 @@ static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 #ifdef TARGET_N3DS
     gfx_flush();
-    gfx_rapi.set_fog_color(r, g, b, a);
+    gfx_rapi_set_fog_color(r, g, b, a);
 #else
     rdp.fog_color.r = r;
     rdp.fog_color.g = g;
@@ -1508,14 +1509,14 @@ static void set_other_mode_l(uint32_t other_mode_l)
         const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
         if (z_upd != rendering_state.depth_mask) {
             gfx_flush(); // 12: 0, 6
-            gfx_rapi.set_depth_mask(z_upd);
+            gfx_rapi_set_depth_mask(z_upd);
             rendering_state.depth_mask = z_upd;
         }
 
         const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
         if (zmode_decal != rendering_state.decal_mode) {
             gfx_flush(); // 13: 1, 1
-            gfx_rapi.set_zmode_decal(zmode_decal);
+            gfx_rapi_set_zmode_decal(zmode_decal);
             rendering_state.decal_mode = zmode_decal;
         }
 
@@ -1528,7 +1529,7 @@ static void set_other_mode_l(uint32_t other_mode_l)
         
         if (shader_state.use_alpha != rendering_state.alpha_blend) {
             gfx_flush(); // 14: 4, 10
-            gfx_rapi.set_use_alpha(shader_state.use_alpha);
+            gfx_rapi_set_use_alpha(shader_state.use_alpha);
             rendering_state.alpha_blend = shader_state.use_alpha;
         }
     }
@@ -1810,11 +1811,10 @@ static void gfx_sp_reset() {
     rsp.lights_changed = true;
 }
 
-void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, const char *game_name, bool start_in_fullscreen) {
+void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {
     gfx_wapi = wapi;
-    memcpy(&gfx_rapi, rapi, sizeof(gfx_rapi));
     gfx_wapi->init(game_name, start_in_fullscreen);
-    gfx_rapi.init();
+    gfx_rapi_init();
 
 #ifdef TARGET_N3DS
     // dimensions won't change on 3DS, so just do this once
@@ -1876,15 +1876,15 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, co
     }
 
     // Initialize constant matrices and set normal MTX mode
-    gfx_citro3d_select_matrix_set(MATRIX_SET_IDENTITY);
-    gfx_citro3d_set_model_view_matrix(MTX_IDENTITY);
-    gfx_citro3d_set_game_projection_matrix(MTX_IDENTITY);
+    gfx_rapi_select_matrix_set(MATRIX_SET_IDENTITY);
+    gfx_rapi_set_model_view_matrix(MTX_IDENTITY);
+    gfx_rapi_set_projection_matrix(MTX_IDENTITY);
     
-    gfx_citro3d_select_matrix_set(MATRIX_SET_SCALED_NDC);
-    gfx_citro3d_set_model_view_matrix(MTX_NDC_DOWNSCALE);
-    gfx_citro3d_set_game_projection_matrix(MTX_IDENTITY);
+    gfx_rapi_select_matrix_set(MATRIX_SET_SCALED_NDC);
+    gfx_rapi_set_model_view_matrix(MTX_NDC_DOWNSCALE);
+    gfx_rapi_set_projection_matrix(MTX_IDENTITY);
 
-    gfx_citro3d_select_matrix_set(MATRIX_SET_NORMAL);
+    gfx_rapi_select_matrix_set(MATRIX_SET_NORMAL);
     rsp.matrix_set = MATRIX_SET_NORMAL;
 }
 
@@ -1911,15 +1911,15 @@ void gfx_run(Gfx *commands) {
     dropped_frame = false;
 
     profiler_3ds_log_time(0);
-    gfx_rapi.start_frame();
+    gfx_rapi_start_frame();
     profiler_3ds_log_time(4); // GFX RAPI Start Frame
-    gfx_citro3d_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
+    gfx_rapi_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
     last_mv_mtx_addr = last_p_mtx_addr = NULL;
 
     gfx_run_dl(commands);
 
     gfx_flush(); // 16: 0, 1
-    gfx_rapi.end_frame();
+    gfx_rapi_end_frame();
     gfx_wapi->swap_buffers_begin();
 
 #if ENABLE_SHADER_SWAP_COUNTER == 1
@@ -1935,7 +1935,7 @@ void gfx_run(Gfx *commands) {
 
 void gfx_end_frame(void) {
     if (!dropped_frame) {
-        gfx_rapi.finish_render();
+        gfx_rapi_finish_render();
         gfx_wapi->swap_buffers_end();
     }
 }

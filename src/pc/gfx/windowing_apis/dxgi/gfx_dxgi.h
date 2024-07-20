@@ -1,7 +1,7 @@
 #ifndef GFX_DXGI_H
 #define GFX_DXGI_H
 
-#include "gfx_rendering_api.h"
+#include "src/pc/gfx/gfx_window_manager_api.h"
 
 #ifdef DECLARE_GFX_DXGI_FUNCTIONS
 void gfx_dxgi_create_factory_and_device(bool debug, int d3d_version, bool (*create_device_fn)(IDXGIAdapter1 *adapter, bool test_only));

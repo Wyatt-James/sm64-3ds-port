@@ -3,7 +3,7 @@
 #ifndef GFX_3DS_H
 #define GFX_3DS_H
 
-#include "gfx_window_manager_api.h"
+#include "src/pc/gfx/gfx_window_manager_api.h"
 
 #ifndef _LANGUAGE_C
 #define _LANGUAGE_C
@@ -62,7 +62,8 @@ typedef enum
     GFX_3DS_MODE_NORMAL,     // 400px no AA AND 400px 3D | !useAA && !useWide
     GFX_3DS_MODE_AA_22,      // 400px +  AA (unused)     |  useAA && !useWide
     GFX_3DS_MODE_WIDE,       // 800px no AA              | !useAA &&  useWide
-    GFX_3DS_MODE_WIDE_AA_12  // 800px +  AA              |  useAA &&  useWide
+    GFX_3DS_MODE_WIDE_AA_12, // 800px +  AA              |  useAA &&  useWide
+    GFX_3DS_MODE_INVALID     // Do not use! This is meant to help with initial conditions.
 } Gfx3DSMode;
 
 extern bool gShouldRun;
