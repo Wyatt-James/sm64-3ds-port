@@ -14,6 +14,12 @@
 #define EMU64_STRIDE_TEXTURE  2
 #define EMU64_STRIDE_FOG      EMU64_STRIDE_RGBA
 
+// Maximum possible stride
+#define EMU64_STRIDE_MAX      (EMU64_STRIDE_POSITION    \
+                            +  EMU64_STRIDE_TEXTURE     \
+                         /* +  EMU64_STRIDE_FOG */      \
+                            + (EMU64_STRIDE_RGBA * 2))
+
 struct n3ds_emu64_uniform_locations {
    int projection_mtx,
        model_view_mtx,

@@ -29,6 +29,7 @@
 #include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/profiler_3ds.h"
+#include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 #else
 #define profiler_3ds_log_time(id) do {} while (0)
 #endif
@@ -290,10 +291,10 @@ struct GfxDimensions gfx_current_dimensions;
 
 static bool dropped_frame;
 
-static union VBOBuffer {
-    float as_float[MAX_BUFFERED_VERTS * 26];
-    uint32_t as_u32[MAX_BUFFERED_VERTS * 26];
-    uint8_t as_u8[MAX_BUFFERED_VERTS * 26 * 4];
+static union VertexBuffer {
+    float as_float[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
+    uint32_t as_u32[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
+    uint8_t as_u8[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX * 4];
 } buf_vbo;
 
 static size_t buf_vbo_len = 0;
