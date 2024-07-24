@@ -167,11 +167,12 @@ union int16x4 {
     double f64;
 };
 
-// Total size: 20 bytes
+// Total size: 24 bytes
 struct LoadedVertex {
     union int16x4 position; // 8 bytes (w is unused, garbage value)
     float u, v;             // 8 bytes
     union RGBA32 color;     // 4 bytes
+    // 4 bytes padding, because position is 8-aligned
 };
 
 struct TextureHashmapNode {
