@@ -2,16 +2,26 @@
 
 ; Uniforms
 .fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
-.fvec tex_scale
+.fvec tex_settings_1 ; fvec4 { scale_s, scale_t, uv_offset, 1.0 }
+.fvec tex_settings_2 ; fvec4 { uls, ult, tex_width, tex_height }
 
 ; Constants
-.constf main_const_1(0.0, 1.0, -1.0, 0.00392156862)
+.constf main_const_1(0.0, 1.0, 0.0, 0.00392156862)
+.constf texture_const(4.0, -8.0, 0.03125, 0.0)
 
-.alias zeros       main_const_1.xxxx ; Vector full of zeros
-.alias ones        main_const_1.yyyy ; Vector full of ones
-.alias nones       main_const_1.zzzz ; Vector full of negative ones
-.alias color_scale main_const_1.wwww ; Vector full of 1/255
-.alias tcofs       main_const_1.xyxx ; Vector of [ tcof1, tcof2, 0, 0 ]
+.alias zeros          main_const_1.xxxx   ; Vector full of zeros
+.alias ones           main_const_1.yyyy   ; Vector full of ones
+.alias color_scale    main_const_1.wwww   ; Vector full of 1/255
+.alias tcofs          main_const_1.xyxx   ; Vector with { tcof1, tcof2, 0, 0 }
+
+.alias scale_4        texture_const.xxxx  ; Vector full of 4.0
+.alias scale_neg_8    texture_const.yyyy  ; Vector full of -8.0
+.alias scale_1_32     texture_const.zzzz  ; Vector full of 1/32
+
+.alias tex_scale      tex_settings_1.xyxy ; Vector with { scale_s, scale_t }
+.alias uv_offset      tex_settings_1.zzzz ; Vector full of 0.0 or 0.5. Used to offset filtered textures.
+.alias uls_ult        tex_settings_2.xyxy ; Vector with { uls, ult }
+.alias tex_wh         tex_settings_2.zwzw ; Vector with { tex_width, tex_height }
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
@@ -49,10 +59,21 @@ system_projection:
     dp4 outpos.z, projection_mtx[2], r0
     dp4 outpos.w, projection_mtx[3], r0
 texture:
-    ; outtex = intex
-    mul r2, tex_scale, intex
-    add outtc0, tcofs, r2
-    mov outtc1, outtc0
+    ; outtex = (((intex - (8 * uls_ult)) / 32) + uv_offset) * (4 / tex_wh) * tex_scale + tcofs
+    mov r3, uls_ult
+    mul r2, scale_neg_8, r3        ; r2 =            -8 * uls_ult
+    add r2, intex, r2              ; r2 =    intex - (8 * uls_ult)
+    mul r2, scale_1_32 , r2        ; r2 =   (intex - (8 * uls_ult)) / 32
+    add r2, uv_offset, r2          ; r2 =  ((intex - (8 * uls_ult)) / 32) + uv_offset
+
+    rcp r3.x, tex_wh.x             ; r3.x = 1 / tex_w
+    rcp r3.y, tex_wh.y             ; r3.y = 1 / tex_h
+    mul r3, scale_4, r3            ; r3 = 4 / tex_wh
+
+    mul r2, r2, r3                 ; r2    *= (4 / tex_wh)
+    mul r2, tex_scale, r2          ; r2    *= tex_scale
+    add outtc0, tcofs, r2          ; outtc0 = r2 + tcofs
+    mov outtc1, outtc0             ; outtc1 = outtc0
 color:
     ; copy color, scaling it by 1/255
     mul outclr, color_scale, inclr

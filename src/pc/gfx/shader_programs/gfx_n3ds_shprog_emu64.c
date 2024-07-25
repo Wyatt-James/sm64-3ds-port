@@ -70,7 +70,7 @@ enum n3ds_shader_emu64_dvle_index {
 };
 
 struct n3ds_emu64_uniform_locations
-   emu64_uniform_locations = { -1, -1, -1, -1 };
+   emu64_uniform_locations = { -1, -1, -1, -1, -1 };
 
 struct n3ds_shader_binary
     emu64_shader_binary = { emu64_shbin, 0, NULL, NULL };
@@ -112,6 +112,7 @@ void gfx_3ds_shprog_emu64_init()
     emu64_uniform_locations.projection_mtx      = DVLE_GetUniformRegister(dvle, "projection_mtx");
     emu64_uniform_locations.model_view_mtx      = DVLE_GetUniformRegister(dvle, "model_view_mtx");
     emu64_uniform_locations.game_projection_mtx = DVLE_GetUniformRegister(dvle, "game_projection_mtx");
-    emu64_uniform_locations.tex_scale           = DVLE_GetUniformRegister(dvle, "tex_scale");
-    // emu64_uniform_locations.draw_fog           = DVLE_GetUniformRegister(dvle, "draw_fog");
+    emu64_uniform_locations.tex_settings_1      = DVLE_GetUniformRegister(dvle, "tex_settings_1");
+    emu64_uniform_locations.tex_settings_2      = DVLE_GetUniformRegister(dvle, "tex_settings_2");
+    // emu64_uniform_locations.draw_fog         = DVLE_GetUniformRegister(dvle, "draw_fog");
 }

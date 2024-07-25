@@ -486,7 +486,7 @@ void gfx_rapi_upload_texture(const uint8_t *rgba32_buf, int width, int height) {
     ThrowIfFailed(d3d.device->CreateShaderResourceView(texture.Get(), &resource_view_desc, texture_data->resource_view.GetAddressOf()));
 }
 
-void gfx_rapi_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
+void gfx_rapi_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t) {
     D3D11_SAMPLER_DESC sampler_desc;
     ZeroMemory(&sampler_desc, sizeof(D3D11_SAMPLER_DESC));
 
@@ -495,13 +495,13 @@ void gfx_rapi_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms,
 #else
     sampler_desc.Filter = linear_filter ? D3D11_FILTER_MIN_MAG_MIP_LINEAR : D3D11_FILTER_MIN_MAG_MIP_POINT;
 #endif
-    sampler_desc.AddressU = gfx_cm_to_d3d11(cms);
-    sampler_desc.AddressV = gfx_cm_to_d3d11(cmt);
+    sampler_desc.AddressU = gfx_cm_to_d3d11(clamp_mode_s);
+    sampler_desc.AddressV = gfx_cm_to_d3d11(clamp_mode_t);
     sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     sampler_desc.MinLOD = 0;
     sampler_desc.MaxLOD = D3D11_FLOAT32_MAX;
 
-    TextureData *texture_data = &d3d.textures[d3d.current_texture_ids[tile]];
+    TextureData *texture_data = &d3d.textures[d3d.current_texture_ids[tex_slot]];
     texture_data->linear_filtering = linear_filter;
 
     // This function is called twice per texture, the first one only to set default values.

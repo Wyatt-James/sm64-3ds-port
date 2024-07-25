@@ -11,7 +11,7 @@
 #define EMU64_STRIDE_RGBA     1
 #define EMU64_STRIDE_RGB      1
 #define EMU64_STRIDE_POSITION 2
-#define EMU64_STRIDE_TEXTURE  2
+#define EMU64_STRIDE_TEXTURE  1
 #define EMU64_STRIDE_FOG      EMU64_STRIDE_RGBA
 
 // Maximum possible stride
@@ -24,7 +24,8 @@ struct n3ds_emu64_uniform_locations {
    int projection_mtx,
        model_view_mtx,
        game_projection_mtx,
-       tex_scale;
+       tex_settings_1,
+       tex_settings_2;
    // int draw_fog;
 };
 

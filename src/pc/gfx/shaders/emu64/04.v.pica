@@ -4,13 +4,11 @@
 .fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
 
 ; Constants
-.constf main_const_1(0.0, 1.0, -1.0, 0.00392156862)
+.constf main_const_1(0.0, 1.0, 0.0, 0.00392156862)
 
 .alias zeros       main_const_1.xxxx ; Vector full of zeros
 .alias ones        main_const_1.yyyy ; Vector full of ones
-.alias nones       main_const_1.zzzz ; Vector full of negative ones
 .alias color_scale main_const_1.wwww ; Vector full of 1/255
-.alias tcofs       main_const_1.xyxx ; Vector of [ tcof1, tcof2, 0, 0 ]
 
 ; Inputs
 .in inpos v0 ; xyz, plus garbage for w
@@ -47,7 +45,7 @@ system_projection:
     dp4 outpos.z, projection_mtx[2], r0
     dp4 outpos.w, projection_mtx[3], r0
 texture:
-    ; outtex = intex
+    ; outtex = 0
     mov outtc0, zeros
     mov outtc1, zeros
 color:

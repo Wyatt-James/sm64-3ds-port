@@ -9,6 +9,4 @@ enum ViewportId3DS {
     VIEW_BOTTOM_SCREEN = 1
 };
 
-extern struct UniformLocations uniform_locations;
-
 #endif

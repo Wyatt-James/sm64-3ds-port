@@ -26,39 +26,41 @@
 #define GFX_RAPI_FOG              GFX_ENABLE
 #define GFX_RAPI_MATRICES         GFX_ENABLE
 #define GFX_RAPI_MULTI_VIEWPORT   GFX_ENABLE
+#define GFX_RAPI_GPU_TEXCOORDS    GFX_ENABLE
 #else
 #define GFX_RAPI_TEXTURE_FORMATS  GFX_DISABLE
 #define GFX_RAPI_STEREOSCOPIC_3D  GFX_DISABLE
 #define GFX_RAPI_FOG              GFX_DISABLE
 #define GFX_RAPI_MATRICES         GFX_DISABLE
 #define GFX_RAPI_MULTI_VIEWPORT   GFX_DISABLE
+#define GFX_RAPI_GPU_TEXCOORDS    GFX_DISABLE
 #endif
 
 // Types to be defined by the implementation
 struct ShaderProgram; 
 
 // Mandatory functions
-bool                    gfx_rapi_z_is_from_0_to_1           ();                                                                         // Returns true if the API's depth range is from 0 to 1.
-void                    gfx_rapi_unload_shader              (struct ShaderProgram *old_prg);                                            // Unloads the given shader.
-void                    gfx_rapi_load_shader                (struct ShaderProgram *new_prg);                                            // Loads the given shader.
-struct ShaderProgram*   gfx_rapi_create_and_load_new_shader (uint32_t shader_id);                                                       // Creates and loads a new shader with the given ID. 
-struct ShaderProgram*   gfx_rapi_lookup_shader              (uint32_t shader_id);                                                       // Looks up an existing shader with the given ID.
-void                    gfx_rapi_shader_get_info            (struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]);    // Returns info about the currently loaded shader.
-uint32_t                gfx_rapi_new_texture                ();                                                                         // Returns the index for a new texture. If no textures are available, it will return a valid texture, but which texture it is is implementation-defined.
-void                    gfx_rapi_select_texture             (int tile, uint32_t texture_id);                                            // Selects a currently loaded texture.
-void                    gfx_rapi_set_sampler_parameters     (int texture_slot, bool linear_filter, uint32_t cms, uint32_t cmt);         // Sets the texture sampling parameters for the given texture slot.
-void                    gfx_rapi_set_depth_test             (bool depth_test);                                                          // Enables or disables GPU depth test.
-void                    gfx_rapi_set_depth_mask             (bool z_upd);                                                               // Enables or disables GPU depth upadtes.
-void                    gfx_rapi_set_zmode_decal            (bool zmode_decal);                                                         // Enables or disables decal mode.
-void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                      // Sets the GPU viewport settings.
-void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                      // Sets the GPU scissor settings.
-void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                           // Enables or disables alpha blending.
-void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);             // Draws the given triangles.
-void                    gfx_rapi_init                       ();                                                                         // Initializes the GFX Rendering API.
-void                    gfx_rapi_on_resize                  ();                                                                         // Called when the window is resized.
-void                    gfx_rapi_start_frame                ();                                                                         // Called at the start of a frame.
-void                    gfx_rapi_end_frame                  ();                                                                         // Called at the end of a frame.
-void                    gfx_rapi_finish_render              ();                                                                         // Called after end_frame, but only if the frame was not dropped.
+bool                    gfx_rapi_z_is_from_0_to_1           ();                                                                                   // Returns true if the API's depth range is from 0 to 1.
+void                    gfx_rapi_unload_shader              (struct ShaderProgram *old_prg);                                                      // Unloads the given shader.
+void                    gfx_rapi_load_shader                (struct ShaderProgram *new_prg);                                                      // Loads the given shader.
+struct ShaderProgram*   gfx_rapi_create_and_load_new_shader (uint32_t shader_id);                                                                 // Creates and loads a new shader with the given ID. 
+struct ShaderProgram*   gfx_rapi_lookup_shader              (uint32_t shader_id);                                                                 // Looks up an existing shader with the given ID.
+void                    gfx_rapi_shader_get_info            (struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]);              // Returns info about the currently loaded shader.
+uint32_t                gfx_rapi_new_texture                ();                                                                                   // Returns the index for a new texture. If no textures are available, it will return a valid texture, but which texture it is is implementation-defined.
+void                    gfx_rapi_select_texture             (int tile, uint32_t texture_id);                                                      // Selects a currently loaded texture.
+void                    gfx_rapi_set_sampler_parameters     (int texture_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t); // Sets the texture sampling parameters for the given texture slot.
+void                    gfx_rapi_set_depth_test             (bool depth_test);                                                                    // Enables or disables GPU depth test.
+void                    gfx_rapi_set_depth_mask             (bool z_upd);                                                                         // Enables or disables GPU depth upadtes.
+void                    gfx_rapi_set_zmode_decal            (bool zmode_decal);                                                                   // Enables or disables decal mode.
+void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                                // Sets the GPU viewport settings.
+void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                                // Sets the GPU scissor settings.
+void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                                     // Enables or disables alpha blending.
+void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);                       // Draws the given triangles.
+void                    gfx_rapi_init                       ();                                                                                   // Initializes the GFX Rendering API.
+void                    gfx_rapi_on_resize                  ();                                                                                   // Called when the window is resized.
+void                    gfx_rapi_start_frame                ();                                                                                   // Called at the start of a frame.
+void                    gfx_rapi_end_frame                  ();                                                                                   // Called at the end of a frame.
+void                    gfx_rapi_finish_render              ();                                                                                   // Called after end_frame, but only if the frame was not dropped.
 
 // Optional feature: GPU handles texture formats individually
 #if GFX_RAPI_TEXTURE_FORMATS == GFX_ENABLE
@@ -103,6 +105,12 @@ void                    gfx_rapi_set_backface_culling_mode  (uint32_t culling_mo
 void                    gfx_rapi_set_viewport_clear_color           (uint32_t viewport_id, uint8_t r, uint8_t g, uint8_t b, uint8_t a);     // Sets the clear color of the given viewport.
 void                    gfx_rapi_set_viewport_clear_color_u32       (uint32_t viewport_id, uint32_t color);                                 // Sets the clear color of the given viewport. Format RGBA8888.
 void                    gfx_rapi_enable_viewport_clear_buffer_flag  (uint32_t viewport_id, enum ViewportClearBuffer mode);                  // Enables a buffer clear flag for the specified viewport. Flags are reset at the start of the frame.
+#endif
+
+// Optional feature: GPU texture coordinate calculation
+#if GFX_RAPI_GPU_TEXCOORDS == GFX_ENABLE
+void                    gfx_rapi_set_uv_offset                      (float offset);
+void                    gfx_rapi_set_texture_settings               (int16_t uls, int16_t ult, int16_t width, int16_t height);
 #endif
 
 #endif

@@ -417,8 +417,8 @@ static int gfx_cm_to_index(uint32_t val) {
     return (val & G_TX_MIRROR) ? 1 : 0;
 }
 
-void gfx_rapi_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
-    d3d.textures[d3d.current_texture_ids[tile]].sampler_parameters = linear_filter * 9 + gfx_cm_to_index(cms) * 3 + gfx_cm_to_index(cmt);
+void gfx_rapi_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t) {
+    d3d.textures[d3d.current_texture_ids[tex_slot]].sampler_parameters = linear_filter * 9 + gfx_cm_to_index(clamp_mode_s) * 3 + gfx_cm_to_index(clamp_mode_t);
 }
 
 void gfx_rapi_set_depth_test(bool depth_test) {

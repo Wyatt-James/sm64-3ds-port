@@ -142,6 +142,10 @@ union int16x2 {
         int16_t s16_upper;
         int16_t s16_lower;
     };
+    struct {
+        int16_t u;
+        int16_t v;
+    };
     uint32_t u32;
 };
 
@@ -159,6 +163,12 @@ union int16x4 {
         int16_t w;
     };
     struct {
+        int16_t uls;
+        int16_t ult;
+        int16_t width;
+        int16_t height;
+    };
+    struct {
         uint32_t u32_upper;
         uint32_t u32_lower;
     };
@@ -167,12 +177,16 @@ union int16x4 {
     double f64;
 };
 
-// Total size: 24 bytes
+static union boolx2 {
+    bool bools[2];
+    int16_t either;
+};
+
+// Total size: 16 bytes
 struct LoadedVertex {
     union int16x4 position; // 8 bytes (w is unused, garbage value)
-    float u, v;             // 8 bytes
+    union int16x2 uv;       // 4 bytes
     union RGBA32 color;     // 4 bytes
-    // 4 bytes padding, because position is 8-aligned
 };
 
 struct TextureHashmapNode {
@@ -243,10 +257,9 @@ static struct RDP {
         uint8_t siz;
         uint8_t cms, cmt;
         uint32_t line_size_bytes;
-        float tex_width_recip, tex_height_recip; // Fantastic improvement
-        float uls8, ult8; // This is mostly a performance toss-up, but messing with cache alignment may help.
+        union int16x4 texture_settings;
     } texture_tile;
-    bool textures_changed[2];
+    union boolx2 textures_changed;
 
     uint32_t other_mode_l, other_mode_h;
     uint32_t combine_mode;
@@ -271,10 +284,11 @@ static struct ShaderState {
     bool use_noise;
     struct ColorCombiner *combiner;
     uint8_t num_inputs;
-    bool used_textures[2];
+    union boolx2 used_textures;
     uint32_t fog_settings;
     uint32_t matrix_set;
     bool p_mtx_changed, mv_mtx_changed;
+    union int16x4 texture_settings;
 } shader_state;
 
 static struct RenderingState {
@@ -791,8 +805,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
                  + vn->n[1] * rsp.current_lookat_coeffs[1][1]
                  + vn->n[2] * rsp.current_lookat_coeffs[1][2];
 
-            d->u = ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
-            d->v = ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
+            d->uv.u = (int16_t) ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
+            d->uv.v = (int16_t) ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
         }
         profiler_3ds_log_time(8); // Texgen Calculation
     } else {
@@ -800,8 +814,8 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             const Vtx_t *v = &vertices[vert].v;
             struct LoadedVertex *d = &rsp.loaded_vertices[dest];
 
-            d->u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
-            d->v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
+            d->uv.u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
+            d->uv.v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
         }
         profiler_3ds_log_time(9); // Texcoord Copy
     }
@@ -831,21 +845,40 @@ static void gfx_sp_tri_update_state()
             gfx_rapi_unload_shader(rendering_state.shader_program);
             gfx_rapi_load_shader(gpu_shader_program);
             rendering_state.shader_program = gpu_shader_program;
-            gfx_rapi_shader_get_info(gpu_shader_program, &shader_state.num_inputs, shader_state.used_textures);
+            gfx_rapi_shader_get_info(gpu_shader_program, &shader_state.num_inputs, shader_state.used_textures.bools);
         }
     } else
         SHADER_COUNT_DO(avoided_swaps_recalc++);
+        
+    const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
+    if (shader_state.used_textures.either) {
+        static bool linear_filter_old = false;
+        if (linear_filter_old != linear_filter) {
+            linear_filter_old  = linear_filter;
+            profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+            gfx_flush(); // 3: 54, 85
+            profiler_3ds_log_time(0);
+            gfx_rapi_set_uv_offset(linear_filter ? 0.5f : 0.0f);
+        }
+
+        if (shader_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
+            shader_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
+            profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+            gfx_flush(); // 3: 54, 85
+            profiler_3ds_log_time(0);
+            gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
+        }
+    }
 
     for (int i = 0; i < 2; i++) {
-        if (shader_state.used_textures[i]) {
-            if (rdp.textures_changed[i]) {
+        if (shader_state.used_textures.bools[i]) {
+            if (rdp.textures_changed.bools[i]) {
                 profiler_3ds_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush(); // 3: 54, 85
                 profiler_3ds_log_time(0);
                 import_texture(i);
-                rdp.textures_changed[i] = false;
+                rdp.textures_changed.bools[i] = false;
             }
-            bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
                 profiler_3ds_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush(); // 4: 0, 0
@@ -901,7 +934,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 
     const bool use_fog     = shader_state.use_fog;
     const bool use_alpha   = shader_state.use_alpha;
-    const bool use_texture = shader_state.used_textures[0] || shader_state.used_textures[1];
+    const bool use_texture = shader_state.used_textures.either;
 
     for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
 
@@ -909,17 +942,8 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         *((double*) (&buf_vbo.as_u32[buf_vbo_len])) = v_arr[vtx]->position.f64;
         buf_vbo_len += 2;
 
-        // The inner logic here takes ~600us in the BoB benchmark
-        if (use_texture) {
-            float u = (v_arr[vtx]->u - rdp.texture_tile.uls8); // These two lines are 100us
-            float v = (v_arr[vtx]->v - rdp.texture_tile.ult8);
-            if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
-                u += 16.0f; // Linear filter adds 0.5f to the coordinates. Fast on 3DS because of conditional execution.
-                v += 16.0f;
-            }
-            buf_vbo.as_float[buf_vbo_len++] = u * rdp.texture_tile.tex_width_recip;
-            buf_vbo.as_float[buf_vbo_len++] = v * rdp.texture_tile.tex_height_recip;
-        }
+        if (use_texture)
+            buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->uv.u32;
 
 #ifdef TARGET_N3DS
         // One u32 input per color, instead of <RGB> <A> floats per color.
@@ -1135,8 +1159,8 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         rdp.texture_tile.cms = cms;
         rdp.texture_tile.cmt = cmt;
         rdp.texture_tile.line_size_bytes = line * 8;
-        rdp.textures_changed[0] = true;
-        rdp.textures_changed[1] = true;
+        rdp.textures_changed.bools[0] = true;
+        rdp.textures_changed.bools[1] = true;
     }
 
     // Only valid data is ever sent.
@@ -1145,17 +1169,17 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
 }
 
 static void set_tile_size_internal(uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
-        rdp.texture_tile.tex_width_recip  = 1.0 / ((lrs - uls + 4) * 8);
-        rdp.texture_tile.tex_height_recip = 1.0 / ((lrt - ult + 4) * 8);
-        rdp.texture_tile.uls8 = (float) (uls * 8);
-        rdp.texture_tile.ult8 = (float) (ult * 8);
+    rdp.texture_tile.texture_settings.uls = uls;
+    rdp.texture_tile.texture_settings.ult = ult;
+    rdp.texture_tile.texture_settings.width  = lrs - uls + 4;
+    rdp.texture_tile.texture_settings.height = lrt - ult + 4;
 }
 
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
     if (tile == G_TX_RENDERTILE) {
         set_tile_size_internal(uls, ult, lrs, lrt);
-        rdp.textures_changed[0] = true;
-        rdp.textures_changed[1] = true;
+        rdp.textures_changed.bools[0] = true;
+        rdp.textures_changed.bools[1] = true;
     }
 }
 
@@ -1192,7 +1216,7 @@ static void gfx_dp_load_block(uint8_t tile, UNUSED uint32_t uls, UNUSED uint32_t
     SUPPORT_CHECK(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
 
-    rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
+    rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
 }
 
 static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t lrs, uint32_t lrt) {
@@ -1224,7 +1248,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
     
     set_tile_size_internal(uls, ult, lrs, lrt);
-    rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
+    rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
 }
 
 
@@ -1266,8 +1290,7 @@ static void shader_state_init(struct ShaderState* ss)
     ss->use_alpha = false;
     ss->use_fog = false;
     ss->use_noise = false;
-    ss->used_textures[0] = false;
-    ss->used_textures[1] = false;
+    ss->used_textures.either = 0;
     ss->matrix_set = MATRIX_SET_INVALID;
     ss->p_mtx_changed = true;
     ss->mv_mtx_changed = true;
@@ -1435,20 +1458,20 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
     static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
     
-    ul->u = uls;
-    ul->v = ult;
-    lr->u = lrs;
-    lr->v = lrt;
+    ul->uv.u = uls;
+    ul->uv.v = ult;
+    lr->uv.u = lrs;
+    lr->uv.v = lrt;
     if (!flip) {
-        ll->u = uls;
-        ll->v = lrt;
-        ur->u = lrs;
-        ur->v = ult;
+        ll->uv.u = uls;
+        ll->uv.v = lrt;
+        ur->uv.u = lrs;
+        ur->uv.v = ult;
     } else {
-        ll->u = lrs;
-        ll->v = ult;
-        ur->u = uls;
-        ur->v = lrt;
+        ll->uv.u = lrs;
+        ll->uv.v = ult;
+        ur->uv.u = uls;
+        ur->uv.v = lrt;
     }
 
     gfx_draw_rectangle(ulx, uly, lrx, lry);

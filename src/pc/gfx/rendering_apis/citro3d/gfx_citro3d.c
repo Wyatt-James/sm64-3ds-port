@@ -105,6 +105,12 @@ union ScreenClearConfigsN3ds {
     struct ScreenClearConfig array[2];
 };
 
+struct TextureSettings {
+    float uv_offset;
+    int16_t uls, ult;
+    int16_t width, height;
+};
+
 struct GameMtxSet {
     C3D_Mtx model_view, game_projection;
 };
@@ -121,7 +127,8 @@ struct OptimizationFlags {
     bool gpu_textures;
     bool consecutive_framebuf;
     bool viewport_and_scissor;
-    bool tex_scale;
+    bool texture_settings_1;
+    bool texture_settings_2;
 };
 
 struct RenderState {
@@ -131,7 +138,9 @@ struct RenderState {
     C3D_RenderTarget *cur_target;
     bool viewport_changed;
     bool scissor_changed;
-    union f32x2 tex_scale;
+    bool tex_settings_changed;   // Set explicitly by RDP commands.
+    float uv_offset;             // Depends on linear filter.
+    union f32x2 texture_scale;   // Varies per-texture.
     Gfx3DSMode current_gfx_mode;
     float prev_slider_level;
 };
@@ -144,6 +153,7 @@ static struct ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
 static struct ShaderProgram* current_shader_program = NULL;
 static uint8_t num_shader_programs = 0;
 static C3D_TexEnv texenv_slot_1;
+static struct TextureSettings texture_settings;
 
 static struct FogCache fog_cache;
 
@@ -193,7 +203,8 @@ static struct OptimizationFlags optimize = {
     .gpu_textures = true,
     .consecutive_framebuf = true,
     .viewport_and_scissor = true,
-    .tex_scale = true
+    .texture_settings_1 = true,
+    .texture_settings_2 = true
 };
 
 static struct RenderState render_state = {
@@ -203,7 +214,9 @@ static struct RenderState render_state = {
     .cur_target = NULL,
     .viewport_changed = true,
     .scissor_changed = true,
-    .tex_scale = {.f64 = INFINITY},
+    .texture_scale = {.f64 = INFINITY},
+    .uv_offset = INFINITY,
+    .tex_settings_changed = true,
     .current_gfx_mode = GFX_3DS_MODE_INVALID,
     .prev_slider_level = INFINITY
 };
@@ -269,7 +282,7 @@ static uint8_t internal_citro3d_setup_video_buffer(const struct n3ds_shader_info
     if (shader_info->vbo_info.has_texture)
     {
         attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_FLOAT, 2);
+        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_SHORT, 2);
     }
     // if (shader_info->vbo_info.has_fog)
     // {
@@ -419,8 +432,6 @@ void gfx_rapi_load_shader(struct ShaderProgram *prg)
         render_state.alpha_test  = alpha_test;
         C3D_AlphaTest(true, GPU_GREATER, alpha_test ? 77 : 0);
     }
-
-    render_state.tex_scale.f64 = INFINITY; // Forces a uniform set when loading a shader
 }
 
 struct ShaderProgram* gfx_rapi_create_and_load_new_shader(uint32_t shader_id)
@@ -487,11 +498,11 @@ void gfx_rapi_select_texture(int tex_slot, uint32_t texture_id)
 
 // Optimized in the emulation layer. This optimization is technically incomplete, as filter & cms/cmt can be updated
 // independently, but in practice this does not matter because this function is rarely called at all.
-void gfx_rapi_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t cms, uint32_t cmt)
+void gfx_rapi_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t)
 {
     C3D_Tex* tex = &gpu_textures[tex_slot]->c3d_tex;
     C3D_TexSetFilter(tex, linear_filter ? GPU_LINEAR : GPU_NEAREST, linear_filter ? GPU_LINEAR : GPU_NEAREST);
-    C3D_TexSetWrap(tex, citro3d_helpers_convert_texture_clamp_mode(cms), citro3d_helpers_convert_texture_clamp_mode(cmt));
+    C3D_TexSetWrap(tex, citro3d_helpers_convert_texture_clamp_mode(clamp_mode_s), citro3d_helpers_convert_texture_clamp_mode(clamp_mode_t));
 }
 
 // Optimized in the emulation layer
@@ -552,10 +563,18 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo
         C3D_TexEnvColor(C3D_GetTexEnv(0), citro3d_helpers_get_env_color_from_vbo(buf_vbo, cc_features).u32);
 
     // See the definition of `union f32x2` for an explanation of why we use U64 comparison instead of F64.
-    struct TexHandle* tex = current_texture;
-    if (hasTex && (render_state.tex_scale.u64 != tex->scale.u64 || OPT_DISABLED(optimize.tex_scale))) {
-            render_state.tex_scale.u64 = tex->scale.u64;
-            C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_scale, tex->scale.s, tex->scale.t, 1, 1);
+    if (hasTex) {
+        struct TexHandle* tex = current_texture;
+        if (render_state.texture_scale.u64 != tex->scale.u64 || *(uint32_t*) &render_state.uv_offset != *(uint32_t*) &texture_settings.uv_offset || OPT_DISABLED(optimize.texture_settings_1)) {
+            render_state.texture_scale.u64  = tex->scale.u64;
+            render_state.uv_offset      = texture_settings.uv_offset;
+            C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_1, tex->scale.s, tex->scale.t, texture_settings.uv_offset, 1);
+        }
+
+        if (render_state.tex_settings_changed || OPT_DISABLED(optimize.texture_settings_2)) {
+            render_state.tex_settings_changed = false;
+            C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_2, texture_settings.uls, texture_settings.ult, texture_settings.width, texture_settings.height);
+        }
     }
 
     // WYATT_TODO actually prevent buffer overruns.
@@ -625,7 +644,9 @@ void gfx_rapi_init()
     render_state.cur_target = NULL;
     render_state.viewport_changed = true;
     render_state.scissor_changed = true;
-    render_state.tex_scale.f64 = INFINITY;
+    render_state.texture_scale.f64 = INFINITY;
+    render_state.uv_offset = INFINITY;
+    render_state.tex_settings_changed = true;
     render_state.current_gfx_mode = GFX_3DS_MODE_INVALID;
     render_state.prev_slider_level = INFINITY;
 
@@ -635,7 +656,8 @@ void gfx_rapi_init()
     optimize.gpu_textures = true;
     optimize.consecutive_framebuf = true;
     optimize.viewport_and_scissor = true;
-    optimize.tex_scale = true;
+    optimize.texture_settings_1 = true;
+    optimize.texture_settings_2 = true;
 }
 
 void gfx_rapi_on_resize()
@@ -651,7 +673,7 @@ void gfx_rapi_start_frame()
     }
 
     // if (frames_touch_screen_held == 1)
-    //     BOOL_INVERT(optimize.tex_scale);
+    //     BOOL_INVERT(optimize.texture_settings_2);
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -688,7 +710,9 @@ void gfx_rapi_start_frame()
     render_state.cur_target = NULL;
     render_state.viewport_changed = true;
     render_state.scissor_changed = true;
-    render_state.tex_scale.f64 = INFINITY;
+    render_state.texture_scale.f64 = INFINITY;
+    render_state.uv_offset = INFINITY;
+    render_state.tex_settings_changed = true;
 }
 
 void gfx_rapi_end_frame()
@@ -696,14 +720,15 @@ void gfx_rapi_end_frame()
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx,      &IDENTITY_MTX);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.model_view_mtx,      &IDENTITY_MTX);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.game_projection_mtx, &IDENTITY_MTX);
-    C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_scale, 1, 1, 1, 1);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_1, 1, 1, 1, 1);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_2, 1, 1, 1, 1);
     C3D_CullFace(GPU_CULL_NONE);
 
     // TOOD: draw the minimap here
     gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
 
     // Requires <3ds/gpu/gpu.h>
-    // printf("%s C %d RSP %d\n", OPT_ENABLED(optimize.tex_scale) ? "Y" : "-", (int) gpuCmdBufOffset, num_rsp_commands_run);
+    // printf("%c C %d RSP %d\n", OPT_ENABLED(optimize.texture_settings_2) ? 'Y' : '-', (int) gpuCmdBufOffset, num_rsp_commands_run);
     // PC_METRIC_DO(num_rsp_commands_run = 0);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
@@ -860,6 +885,21 @@ void gfx_rapi_set_viewport_clear_depth(uint32_t viewport_id, uint32_t depth)
 void gfx_rapi_enable_viewport_clear_buffer_flag(uint32_t viewport_id, enum ViewportClearBuffer mode)
 {
     screen_clear_configs.array[viewport_id].bufs |= mode;
+}
+
+void gfx_rapi_set_uv_offset(float offset)
+{
+    texture_settings.uv_offset = offset;
+}
+
+// Optimized in the emulation layer
+void gfx_rapi_set_texture_settings(int16_t uls, int16_t ult, int16_t width, int16_t height)
+{
+    texture_settings.uls = uls;
+    texture_settings.ult = ult;
+    texture_settings.width = width;
+    texture_settings.height = height;
+    render_state.tex_settings_changed = true;
 }
 
 #endif
