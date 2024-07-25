@@ -941,7 +941,6 @@ $(BUILD_DIR)/%.shbin: %.shprog $(PICA_DEPENDENCY_HACK)
 	$(eval $@loaded_shprog   := $(shell cat ${$@shprog_file_path}))
 	$(eval $@extended_shprog := $(foreach file,$($@loaded_shprog),$(PICA_ROOT_DIR)/$(file)))
 
-	@echo "$(DEVKITPRO)/tools/bin/picasso -o $@ $($@extended_shprog)"
 	$(DEVKITPRO)/tools/bin/picasso -o $@ $($@extended_shprog)
 
 SMDH_TITLE ?= Super Mario 64
