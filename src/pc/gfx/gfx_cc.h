@@ -39,10 +39,10 @@ struct CCFeatures {
     bool opt_noise;         // True if noise is enabled.
     bool used_textures[2];  // If both are true, use 2-cycle.
     int num_inputs;         // Number of CC inputs. Max 4.
-    bool do_single[2];      // Trtue if there is only an additive component.
+    bool do_single[2];      // True if there is only an additive component.
     bool do_multiply[2];    // True if there are no subtractive or additive components.
-    bool do_mix[2];         // true if Subtractive and additive components are equal.
-    bool color_alpha_same;  // True if Color and alpha use identical mixing setups.
+    bool do_mix[2];         // true if subtractive and additive components are equal.
+    bool color_alpha_same;  // True if color and alpha use identical mixing setups.
 };
 
 #ifdef __cplusplus
