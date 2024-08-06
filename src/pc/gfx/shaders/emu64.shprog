@@ -1,7 +1,6 @@
-emu64/01.v.pica
-emu64/04.v.pica
+emu64/03.v.pica
 emu64/05.v.pica
-emu64/08.v.pica
-emu64/09.v.pica
-emu64/20.v.pica
-emu64/41.v.pica
+emu64/07.v.pica
+emu64/texture.v.pica
+emu64/color_combiner.v.pica
+emu64/projection.v.pica

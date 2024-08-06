@@ -168,8 +168,7 @@ void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButto
 
     buffer_offset = vertex_offset;
 
-    // WYATT_TODO this should proooobably be re-enabled once the bottom screen is reworked.
-    C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_GREEN | GPU_WRITE_RED | GPU_WRITE_BLUE);
+    C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
     C3D_CullFace(GPU_CULL_NONE);
 
     if (configButtonsEnabled)

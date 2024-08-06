@@ -1,0 +1,56 @@
+.nodvle
+
+; Emu64 Texture coordinate calculation routine
+
+; ----- Uniforms -----
+.fvec tex_settings_1  ; { scale_s, scale_t, uv_offset, 1.0 }
+.fvec tex_settings_2  ; { uls, ult, tex_width, tex_height }
+.fvec texture_const_1 ; { 0,  1, 0,    0 }
+.fvec texture_const_2 ; { 4, -8, 1/32, 0 }
+
+; ----- Aliases -----
+.alias tex_scale      tex_settings_1.xyxy ; Vector with { scale_s, scale_t }
+.alias uv_offset      tex_settings_1.zzzz ; Vector full of 0.0 or 0.5. Used to offset filtered textures.
+.alias uls_ult        tex_settings_2.xyxy ; Vector with { uls, ult }
+.alias tex_wh         tex_settings_2.zwzw ; Vector with { tex_width, tex_height }
+
+.alias tcofs          texture_const_1.xyzz  ; Vector with { tcof1, tcof2, 0, 0 }
+.alias scale_4        texture_const_2.xxxx  ; Vector full of 4.0
+.alias scale_neg_8    texture_const_2.yyyy  ; Vector full of -8.0
+.alias scale_1_32     texture_const_2.zzzz  ; Vector full of 1/32
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+.alias tex_input sub_param_1
+
+; Subroutine
+; Inputs:
+;   sub_param_1: texture input
+; Outputs:
+;   sub_return_1: texture output
+; Also Uses:
+;   sub_scratch_1
+;   sub_scratch_2
+.proc calculate_texcoords
+    ; outtex = (((intex - (8 * uls_ult)) / 32) + uv_offset) * (4 / tex_wh) * tex_scale + tcofs
+    mov sub_scratch_2, uls_ult
+    mul sub_scratch_1, scale_neg_8, sub_scratch_2    ; sub_scratch_1 =            -8 * uls_ult
+    add sub_scratch_1, tex_input,   sub_scratch_1    ; sub_scratch_1 =    intex - (8 * uls_ult)
+    mul sub_scratch_1, scale_1_32,  sub_scratch_1    ; sub_scratch_1 =   (intex - (8 * uls_ult)) / 32
+    add sub_scratch_1, uv_offset,   sub_scratch_1    ; sub_scratch_1 =  ((intex - (8 * uls_ult)) / 32) + uv_offset
+
+    rcp sub_scratch_2.x, tex_wh.x                    ; sub_scratch_2.x  = 1 / tex_w
+    rcp sub_scratch_2.y, tex_wh.y                    ; sub_scratch_2.y  = 1 / tex_h
+    mul sub_scratch_2, scale_4, sub_scratch_2        ; sub_scratch_2    = 4 / tex_wh
+
+    mul sub_scratch_1, sub_scratch_1, sub_scratch_2  ; sub_scratch_1  *= (4 / tex_wh)
+    mul sub_scratch_1, tex_scale, sub_scratch_1      ; sub_scratch_1  *= tex_scale
+    add sub_return_1,  tcofs, sub_scratch_1          ; sub_return_1    = sub_scratch_1 + tcofs
+.end

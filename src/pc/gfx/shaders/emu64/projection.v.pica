@@ -1,0 +1,52 @@
+.nodvle
+
+; Emu64 vertex projection routine
+
+; ----- Uniforms -----
+.fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
+
+; ----- Aliases -----
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+; Subroutine
+; Inputs:
+;   sub_param_1: input position
+; Outputs:
+;   sub_return_1: output position
+;   sub_return_2: (inpos * model_view_mtx) * game_projection_mtx
+; Also Uses:
+;   sub_scratch_1
+;   sub_scratch_2
+.proc matrix_projection
+
+model_view:
+    ; sub_scratch_1 = model_view_mtx * inpos
+    ; Needs to be DPHI because 1.0 is appended to src1 (left input arg).
+    dphi sub_scratch_1.x, sub_param_1, model_view_mtx[0]
+    dphi sub_scratch_1.y, sub_param_1, model_view_mtx[1]
+    dphi sub_scratch_1.z, sub_param_1, model_view_mtx[2]
+    dphi sub_scratch_1.w, sub_param_1, model_view_mtx[3]
+game_projection:
+    ; sub_scratch_2 = game_projection_mtx * inpos
+    dp4 sub_scratch_2.x, game_projection_mtx[0], sub_scratch_1
+    dp4 sub_scratch_2.y, game_projection_mtx[1], sub_scratch_1
+    dp4 sub_scratch_2.z, game_projection_mtx[2], sub_scratch_1
+    dp4 sub_scratch_2.w, game_projection_mtx[3], sub_scratch_1
+    mov sub_return_2, sub_scratch_2
+system_projection:
+    ; sub_return_1 = projection_mtx * inpos
+    dp4 sub_return_1.x, projection_mtx[0], sub_scratch_2
+    dp4 sub_return_1.y, projection_mtx[1], sub_scratch_2
+    dp4 sub_return_1.z, projection_mtx[2], sub_scratch_2
+    dp4 sub_return_1.w, projection_mtx[3], sub_scratch_2
+
+.end

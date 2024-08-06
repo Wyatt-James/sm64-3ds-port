@@ -1,4 +1,5 @@
-; position, color
+; position, texture, color
+; Example usage: text on file select screen, textured screen transitions
 
 ; ----- Uniforms -----
 .fvec rsp_color_selection ; Enum { col1_rgb, col1_alpha, col2_rgb, col2_alpha }
@@ -8,9 +9,8 @@
 .constf dummy_const (0.0, 0.0, 0.0, 0.0)
 
 ; ----- Aliases -----
-.alias zeros       emu64_const_1.xxxx ; Vector full of zeros
-.alias ones        emu64_const_1.yyyy ; Vector full of ones
-.alias color_scale emu64_const_1.wwww ; Vector full of 1/255
+.alias ones           emu64_const_1.yyyy   ; Vector full of ones
+.alias color_scale    emu64_const_1.wwww   ; Vector full of 1/255
 
 ; ----- Subroutine Registers -----
 ; These are intended purposes, but they may vary betwen subroutines.
@@ -24,7 +24,8 @@
 
 ; ----- Inputs -----
 .in inpos v0 ; xyz, plus garbage for w
-.in inclr v1
+.in intex v1 ; uv
+.in inclr v2
 
 ; ----- Outputs -----
 .out outpos position  ; xyzw
@@ -32,20 +33,19 @@
 .out outtc1 texcoord1 ; texture unit 1
 .out outclr color     ; rgba
 
-.entry main_04
-.proc main_04
+.entry main_05
+.proc main_05
 
-setup:
-    mov r0, inpos
 projection:
     mov sub_param_1, inpos
     call matrix_projection
     mov outpos, sub_return_1
-    mov r0, sub_return_2     ; Pre-system projected vertex
+    mov r0, sub_return_2
 texture:
-    ; outtex = 0
-    mov outtc0, zeros
-    mov outtc1, zeros
+    mov sub_param_1, intex
+    call calculate_texcoords
+    mov outtc0, sub_return_1
+    mov outtc1, sub_return_1
 color:
 
     ; Resolve color

@@ -18,3 +18,5 @@ src/pc/gfx/shaders
 - `.shprog` file paths can be separated either by spaces or by newlines.
 - The distinction between vertex and geometry shader file extensions is not enforced.
 - Shaders are passed to Picasso in the order that they are listed in the file. This means that their DVLEs also follow this order.
+- Despite the fact that all linked shaders share uniform space, since uniform locations are stored per-DVLE, it's a good idea to declare ALL uniforms in at least one file; generally, use the first in the linking order.
+- Due to a bug in LibCTRU, each shader must contain at least one `.constf` directive.

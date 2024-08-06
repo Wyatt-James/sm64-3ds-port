@@ -4,10 +4,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
-
-#ifdef TARGET_N3DS
 #include <arm_acle.h>
-#endif
 
 #ifndef _LANGUAGE_C
 #define _LANGUAGE_C
@@ -25,13 +22,19 @@
 #include "texture_conversion.h"
 #include "src/pc/pc_metrics.h"
 
-#ifdef TARGET_N3DS
 #include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/profiler_3ds.h"
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
+
+#define GRANULAR_PROFILING 0
+
+#if GRANULAR_PROFILING == 1
+#define granular_log_time(v_)     do { profiler_3ds_log_time(v_); } while (0)
+#define non_granular_log_time(v_) do { } while (0)
 #else
-#define profiler_3ds_log_time(id) do {} while (0)
+#define granular_log_time(v_)     do { } while (0)
+#define non_granular_log_time(v_) do { profiler_3ds_log_time(v_); } while (0)
 #endif
 
 /*
@@ -103,11 +106,7 @@
 #define TEXFMT_CI4    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_4b)  // Unused by SM64
 #define TEXFMT_CI8    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_8b)  // Unused by SM64
 
-#ifdef TARGET_N3DS
 #define UCLAMP8(v) ((uint8_t) __usat(v, 8))
-#else
-#define UCLAMP8(v) ((uint8_t) (r > 255 ? 255 : r))
-#endif
 #define U32_AS_FLOAT(v) (*(float*) &v)
 #define COMBINE_MODE(rgb, alpha) (((uint32_t) rgb) | (((uint32_t) alpha) << 12))
 
@@ -177,7 +176,7 @@ union int16x4 {
     double f64;
 };
 
-static union boolx2 {
+union boolx2 {
     bool bools[2];
     int16_t either;
 };
@@ -205,15 +204,6 @@ static struct {
     uint32_t pool_pos;
 } gfx_texture_cache;
 
-struct ColorCombiner {
-    uint32_t cc_id;
-    struct ShaderProgram *prg;
-    uint8_t shader_input_mapping[2][4];
-};
-
-static struct ColorCombiner color_combiner_pool[64];
-static uint8_t color_combiner_pool_size;
-
 static struct RSP {
     uint32_t matrix_set;
     float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
@@ -227,10 +217,6 @@ static struct RSP {
     bool lights_changed;
 
     uint32_t geometry_mode;
-
-#ifndef TARGET_N3DS
-    int16_t fog_mul, fog_offset;
-#endif
 
     struct {
         // U0.16
@@ -264,12 +250,7 @@ static struct RDP {
     uint32_t other_mode_l, other_mode_h;
     uint32_t combine_mode;
 
-// 3DS handles fog natively, so we don't need this.
-#ifdef TARGET_N3DS
     union RGBA32 env_color, prim_color, fill_color;
-#else
-    union RGBA32 env_color, prim_color, fog_color, fill_color;
-#endif
     struct XYWidthHeight viewport;
     void *z_buf_address;
     void *color_image_address;
@@ -282,13 +263,14 @@ static struct ShaderState {
     bool use_fog;
     bool texture_edge;
     bool use_noise;
-    struct ColorCombiner *combiner;
     uint8_t num_inputs;
     union boolx2 used_textures;
     uint32_t fog_settings;
     uint32_t matrix_set;
     bool p_mtx_changed, mv_mtx_changed;
     union int16x4 texture_settings;
+    union RGBA32 prim_color;
+    union RGBA32 env_color;
 } shader_state;
 
 static struct RenderingState {
@@ -298,7 +280,6 @@ static struct RenderingState {
     bool alpha_blend;
     uint32_t culling_mode;
     struct XYWidthHeight viewport, scissor;
-    struct ShaderProgram *shader_program;
     struct TextureHashmapNode *textures[2];
 } rendering_state;
 
@@ -328,7 +309,6 @@ static int om_h_sets = 0, om_l_sets = 0, om_h_skips = 0, om_l_skips = 0;
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
 
-#ifdef TARGET_N3DS
 static void gfx_set_2d(int mode_2d)
 {
     gfx_rapi_set_2d_mode(mode_2d);
@@ -361,7 +341,6 @@ static void gfx_set_iod(unsigned int iod)
     }
     gfx_rapi_set_iod(z, w);
 }
-#endif
 
 static void gfx_apply_matrices()
 {
@@ -395,7 +374,7 @@ static void gfx_apply_matrices()
 }
 
 static void gfx_flush(void) {
-    profiler_3ds_log_time(0);
+    granular_log_time(0);
 
     // Over 50% of calls are pointless
     if (UNLIKELY(buf_vbo_num_verts > 0)) {
@@ -406,77 +385,7 @@ static void gfx_flush(void) {
         buf_vbo_num_verts = 0;
     }
 
-    profiler_3ds_log_time(12); // gfx_flush
-}
-
-static struct ShaderProgram *gfx_lookup_or_create_shader_program(uint32_t shader_id) {
-    struct ShaderProgram *prg = gfx_rapi_lookup_shader(shader_id);
-    if (UNLIKELY(prg == NULL)) {
-        gfx_rapi_unload_shader(rendering_state.shader_program);
-        prg = gfx_rapi_create_and_load_new_shader(shader_id);
-        rendering_state.shader_program = prg;
-    }
-    return prg;
-}
-
-static void gfx_generate_cc(struct ColorCombiner *comb, uint32_t cc_id) {
-    uint8_t c[2][4];
-    uint32_t shader_id = (cc_id >> 24) << 24;
-    uint8_t shader_input_mapping[2][4] = {{0}};
-    for (int i = 0; i < 4; i++) {
-        c[0][i] = (cc_id >> (i * 3)) & 7;
-        c[1][i] = (cc_id >> (12 + i * 3)) & 7;
-    }
-    for (int i = 0; i < 2; i++) {
-        if (c[i][0] == c[i][1] || c[i][2] == CC_0) {
-            c[i][0] = c[i][1] = c[i][2] = 0;
-        }
-        uint8_t input_number[8] = {0};
-        int next_input_number = SHADER_INPUT_1;
-        for (int j = 0; j < 4; j++) {
-            int val = 0;
-            switch (c[i][j]) {
-                case CC_0:
-                    break;
-                case CC_TEXEL0:
-                    val = SHADER_TEXEL0;
-                    break;
-                case CC_TEXEL1:
-                    val = SHADER_TEXEL1;
-                    break;
-                case CC_TEXEL0A:
-                    val = SHADER_TEXEL0A;
-                    break;
-                case CC_PRIM:
-                case CC_SHADE:
-                case CC_ENV:
-                case CC_LOD:
-                    if (input_number[c[i][j]] == 0) {
-                        shader_input_mapping[i][next_input_number - 1] = c[i][j];
-                        input_number[c[i][j]] = next_input_number++;
-                    }
-                    val = input_number[c[i][j]];
-                    break;
-            }
-            shader_id |= val << (i * 12 + j * 3);
-        }
-    }
-    comb->cc_id = cc_id;
-    comb->prg = gfx_lookup_or_create_shader_program(shader_id);
-    memcpy(comb->shader_input_mapping, shader_input_mapping, sizeof(shader_input_mapping));
-}
-
-// This function now requires you to externally track the previous combiner,
-// else it may search unnecessarily.
-static struct ColorCombiner *gfx_lookup_or_create_color_combiner(uint32_t cc_id) {
-    for (size_t i = 0; i < color_combiner_pool_size; i++) {
-        if (UNLIKELY(color_combiner_pool[i].cc_id == cc_id)) {
-            return &color_combiner_pool[i];
-        }
-    }
-    struct ColorCombiner *comb = &color_combiner_pool[color_combiner_pool_size++];
-    gfx_generate_cc(comb, cc_id);
-    return comb;
+    granular_log_time(12); // gfx_flush
 }
 
 static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, const uint8_t *orig_addr, uint32_t fmt, uint32_t siz) {
@@ -722,7 +631,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
 }
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
-    profiler_3ds_log_time(0);
+    granular_log_time(0);
 
     // Load each vert
     for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
@@ -732,7 +641,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         d->position.u64 = *((uint64_t*) (&v->ob[0])); // W is set to garbage
         d->color.u32 = *((uint32_t*) v->cn);
     }
-    profiler_3ds_log_time(5); // Vertex Copy
+    granular_log_time(5); // Vertex Copy
 
     // Calculate lighting
     if (LIKELY(rsp.geometry_mode & G_LIGHTING)) {
@@ -743,7 +652,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 
             calculate_lookat_x(rsp.current_lookat_coeffs[0], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
             calculate_lookat_y(rsp.current_lookat_coeffs[1], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-            profiler_3ds_log_time(6); // Light Recalculation
+            granular_log_time(6); // Light Recalculation
         }
 
         /* Required uniforms:
@@ -787,7 +696,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->color.b = b > 255 ? 255 : b;
         }
         
-        profiler_3ds_log_time(7); // Vertex Light Calculation
+        granular_log_time(7); // Vertex Light Calculation
     }
     
     // Calculate texcoords
@@ -808,7 +717,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->uv.u = (int16_t) ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
             d->uv.v = (int16_t) ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
         }
-        profiler_3ds_log_time(8); // Texgen Calculation
+        granular_log_time(8); // Texgen Calculation
     } else {
         for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
             const Vtx_t *v = &vertices[vert].v;
@@ -817,55 +726,67 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
             d->uv.u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
             d->uv.v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
         }
-        profiler_3ds_log_time(9); // Texcoord Copy
+        granular_log_time(9); // Texcoord Copy
     }
 }
 
 static void gfx_sp_tri_update_state()
 {
-    profiler_3ds_log_time(0);
+    granular_log_time(0);
     uint32_t cc_id = shader_state.cc_id;
 
     static uint32_t prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
-    // Unfortunately, we have to leave this here, because the variables that determine CCID
-    // are not updated atomically, i.e. in the same display list command, causing invalid GPU shaders
-    // if we update it elsewhere.
     if (prev_cc_id != cc_id) {
         prev_cc_id  = cc_id;
         SHADER_COUNT_DO(num_shader_swaps++);
-        shader_state.combiner = gfx_lookup_or_create_color_combiner(cc_id);
-        struct ShaderProgram *gpu_shader_program = shader_state.combiner->prg;
 
-        // Multiple CCs can share the same GPU shader program
-        if (LIKELY(gpu_shader_program != rendering_state.shader_program)) {
-            profiler_3ds_log_time(10); // gfx_sp_tri_update_state
-            gfx_flush(); // 2: 7, 20
-            profiler_3ds_log_time(0);
-            gfx_rapi_unload_shader(rendering_state.shader_program);
-            gfx_rapi_load_shader(gpu_shader_program);
-            rendering_state.shader_program = gpu_shader_program;
-            gfx_rapi_shader_get_info(gpu_shader_program, &shader_state.num_inputs, shader_state.used_textures.bools);
-        }
+        granular_log_time(10); // gfx_sp_tri_update_state
+        gfx_flush(); // 2: 7, 20
+        granular_log_time(0);
+
+        size_t cc_index = gfx_rapi_lookup_or_create_color_combiner(cc_id);
+        gfx_rapi_color_combiner_get_info(cc_index, &shader_state.num_inputs, shader_state.used_textures.bools);
+        gfx_rapi_select_color_combiner(cc_index);
     } else
         SHADER_COUNT_DO(avoided_swaps_recalc++);
+
+    if (UNLIKELY(shader_state.prim_color.u32 != rdp.prim_color.u32)) {
+        shader_state.prim_color.u32  = rdp.prim_color.u32;
+
+        granular_log_time(10); // gfx_sp_tri_update_state
+        gfx_flush(); // 2: 7, 20
+        granular_log_time(0);
+
+        gfx_rapi_set_cc_prim_color(rdp.prim_color.u32);
+    }
+
+    if (UNLIKELY(shader_state.env_color.u32 != rdp.env_color.u32)) {
+        shader_state.env_color.u32  = rdp.env_color.u32;
+
+        granular_log_time(10); // gfx_sp_tri_update_state
+        gfx_flush(); // 2: 7, 20
+        granular_log_time(0);
+
+        gfx_rapi_set_cc_env_color(rdp.env_color.u32);
+    }
         
     const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
     if (shader_state.used_textures.either) {
         static bool linear_filter_old = false;
         if (linear_filter_old != linear_filter) {
             linear_filter_old  = linear_filter;
-            profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+            granular_log_time(10); // gfx_sp_tri_update_state
             gfx_flush(); // 3: 54, 85
-            profiler_3ds_log_time(0);
+            granular_log_time(0);
             gfx_rapi_set_uv_offset(linear_filter ? 0.5f : 0.0f);
         }
 
         if (shader_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
             shader_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
-            profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+            granular_log_time(10); // gfx_sp_tri_update_state
             gfx_flush(); // 3: 54, 85
-            profiler_3ds_log_time(0);
+            granular_log_time(0);
             gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
         }
     }
@@ -873,16 +794,16 @@ static void gfx_sp_tri_update_state()
     for (int i = 0; i < 2; i++) {
         if (shader_state.used_textures.bools[i]) {
             if (rdp.textures_changed.bools[i]) {
-                profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+                granular_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush(); // 3: 54, 85
-                profiler_3ds_log_time(0);
+                granular_log_time(0);
                 import_texture(i);
                 rdp.textures_changed.bools[i] = false;
             }
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
-                profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+                granular_log_time(10); // gfx_sp_tri_update_state
                 gfx_flush(); // 4: 0, 0
-                profiler_3ds_log_time(0);
+                granular_log_time(0);
                 gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 rendering_state.textures[i]->linear_filter = linear_filter;
                 rendering_state.textures[i]->cms = rdp.texture_tile.cms;
@@ -916,25 +837,24 @@ static void gfx_sp_tri_update_state()
         gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
 
-    profiler_3ds_log_time(10); // gfx_sp_tri_update_state
+    granular_log_time(10); // gfx_sp_tri_update_state
 }
 
 static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
 {
-    profiler_3ds_log_time(0);
+    granular_log_time(0);
 
     // WYATT_TODO fix this for very large batches. Fine for vanilla.
     const uint32_t numVerts = numTris * 3;
     if (buf_vbo_num_verts + numVerts >= MAX_BUFFERED_VERTS) {
-        profiler_3ds_log_time(11); // gfx_tri_create_vbo
+        granular_log_time(11); // gfx_tri_create_vbo
         gfx_flush(); // 5: 0, 0
-        profiler_3ds_log_time(0);
+        granular_log_time(0);
     }
     buf_vbo_num_verts += numVerts;
 
-    const bool use_fog     = shader_state.use_fog;
-    const bool use_alpha   = shader_state.use_alpha;
     const bool use_texture = shader_state.used_textures.either;
+    const bool use_color   = shader_state.num_inputs > 0;
 
     for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
 
@@ -945,89 +865,12 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         if (use_texture)
             buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->uv.u32;
 
-#ifdef TARGET_N3DS
-        // One u32 input per color, instead of <RGB> <A> floats per color.
-        ASSUME(shader_state.num_inputs >= 0 && shader_state.num_inputs <= 2);
-#endif
-
-        // These switch statements take ~400us, excluding vtxcol read and final write,
-        // and the BoB benchmark is 100% CC_SHADE
-        for (int sh_input = 0; sh_input < shader_state.num_inputs; sh_input++) {
-            union RGBA32 color;
-
-            // Most to least likely: SHADE, ENV, PRI, DEF
-            const uint8_t mapping_0 = shader_state.combiner->shader_input_mapping[0][sh_input];
-            switch (EXPECT(mapping_0, CC_SHADE)) {
-                case CC_PRIM:
-                    color = rdp.prim_color;
-                    break;
-                case CC_SHADE:
-                    color = v_arr[vtx]->color;
-                    break;
-                case CC_ENV:
-                    color = rdp.env_color;
-                    break;
-                // case CC_LOD:
-                    // WYATT_TODO LoD does not work in world-space
-                default:
-                    color.u32 = 0;
-                    break;
-            }
-
-            // Most to least likely: SHADE, ENV, PRI, DEF
-            if (use_alpha) {
-                const uint8_t mapping_1 = shader_state.combiner->shader_input_mapping[1][sh_input];
-                switch (EXPECT(mapping_1, CC_SHADE)) {
-                    case CC_PRIM:
-                        color.a = rdp.prim_color.a;
-                        break;
-                    case CC_SHADE:
-                        if (LIKELY(use_fog)) // Most alpha tris in my benchmark use fog
-                            color.a = 255;
-                        else
-                            color.a = v_arr[vtx]->color.a;
-                        break;
-                    case CC_ENV:
-                        color.a = rdp.env_color.a;
-                        break;
-                    // case CC_LOD:
-                        // WYATT_TODO LoD does not work in world-space
-                    default:
-                        color.a = 0;
-                        break;
-                }
-            }
-
-            buf_vbo.as_u32[buf_vbo_len++] = color.u32;
-        }
+        if (use_color)
+            buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->color.u32;
     }
     
-    profiler_3ds_log_time(11); // gfx_tri_create_vbo
+    granular_log_time(11); // gfx_tri_create_vbo
 }
-
-// static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
-//     struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
-//     struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
-//     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
-//     struct LoadedVertex *v_arr[3] = {v1, v2, v3};
-
-//     gfx_sp_tri_update_state();
-//     gfx_tri_create_vbo(v_arr, 1);
-// }
-
-// static void gfx_sp_tri2(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx,
-//                         uint8_t vtx4_idx, uint8_t vtx5_idx, uint8_t vtx6_idx) {
-//     struct LoadedVertex *v1 = &rsp.loaded_vertices[vtx1_idx];
-//     struct LoadedVertex *v2 = &rsp.loaded_vertices[vtx2_idx];
-//     struct LoadedVertex *v3 = &rsp.loaded_vertices[vtx3_idx];
-//     struct LoadedVertex *v4 = &rsp.loaded_vertices[vtx4_idx];
-//     struct LoadedVertex *v5 = &rsp.loaded_vertices[vtx5_idx];
-//     struct LoadedVertex *v6 = &rsp.loaded_vertices[vtx6_idx];
-//     struct LoadedVertex *v_arr[6] = {v1, v2, v3, v4, v5, v6};
-
-//     gfx_sp_tri_update_state();
-//     gfx_tri_create_vbo(v_arr, 2);
-// }
 
 static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_tris) {
     gfx_sp_tri_update_state();
@@ -1110,7 +953,6 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
             rsp.lights_changed = 1;
             break;
         case G_MW_FOG:
-#ifdef TARGET_N3DS
             if (shader_state.fog_settings != data) {
                 shader_state.fog_settings  = data;
                 gfx_flush();
@@ -1118,10 +960,6 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
                          fog_offset = (int16_t)data;
                 gfx_rapi_set_fog(fog_mul, fog_offset);
             }
-#else
-            rsp.fog_mul = (int16_t)(data >> 16);
-            rsp.fog_offset = (int16_t)data;
-#endif
             break;
     }
 }
@@ -1283,7 +1121,6 @@ static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d
 static void shader_state_init(struct ShaderState* ss)
 {
     ss->cc_id = DELIBERATELY_INVALID_CC_ID;
-    ss->combiner = NULL;
     ss->num_inputs = 0;
     ss->other_flags = 0;
     ss->texture_edge = false;
@@ -1294,6 +1131,9 @@ static void shader_state_init(struct ShaderState* ss)
     ss->matrix_set = MATRIX_SET_INVALID;
     ss->p_mtx_changed = true;
     ss->mv_mtx_changed = true;
+    ss->texture_settings.u64 = ~0;
+    ss->prim_color.u32 = ~rdp.prim_color.u32;
+    ss->env_color.u32  = ~rdp.env_color.u32;
 }
 
 static void calculate_cc_id()
@@ -1338,15 +1178,8 @@ static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 }
 
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-#ifdef TARGET_N3DS
     gfx_flush();
     gfx_rapi_set_fog_color(r, g, b, a);
-#else
-    rdp.fog_color.r = r;
-    rdp.fog_color.g = g;
-    rdp.fog_color.b = b;
-    rdp.fog_color.a = a;
-#endif
 }
 
 static void gfx_dp_set_fill_color(uint32_t packed_color) {
@@ -1813,18 +1646,17 @@ static void gfx_run_dl(Gfx* cmd) {
             case G_SETCIMG:
                 gfx_dp_set_color_image(C0(21, 3), C0(19, 2), C0(0, 11), seg_addr(cmd->words.w1));
                 break;
-#ifdef TARGET_N3DS
+
+            // Stereoscopic 3D commands (N3DS only)
             case G_SPECIAL_1:
                 gfx_set_2d(cmd->words.w1);
                 break;
             case G_SPECIAL_2:
                 gfx_flush(); // 15: 5, 0
                 break;
-
             case G_SPECIAL_4:
                 gfx_set_iod(cmd->words.w1);
                 break;
-#endif
         }
         ++cmd;
     }
@@ -1841,7 +1673,6 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
     gfx_wapi->init(game_name, start_in_fullscreen);
     gfx_rapi_init();
 
-#ifdef TARGET_N3DS
     // dimensions won't change on 3DS, so just do this once
     gfx_wapi->get_dimensions(&gfx_current_dimensions.width, &gfx_current_dimensions.height);
     if (gfx_current_dimensions.height == 0) {
@@ -1850,7 +1681,6 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
     }
     gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
     gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
-#endif
 
     shader_state_init(&shader_state);
 
@@ -1865,40 +1695,6 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
         memcpy(rsp.modelview_matrix_stack[i], MTX_IDENTITY, sizeof(MTX_IDENTITY));
     
     memcpy(rsp.P_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
-
-    // Used in the 120 star TAS
-    static uint32_t precomp_shaders[] = {
-        0x01200200,
-        0x00000045,
-        0x00000200,
-        0x01200a00,
-        0x00000a00,
-        0x01a00045,
-        0x00000551,
-        0x01045045,
-        0x05a00a00,
-        0x01200045,
-        0x05045045,
-        0x01045a00,
-        0x01a00a00,
-        0x0000038d,
-        0x01081081,
-        0x0120038d,
-        0x03200045,
-        0x03200a00,
-        0x01a00a6f,
-        0x01141045,
-        0x07a00a00,
-        0x05200200,
-        0x03200200,
-        0x09200200,
-        0x0920038d,
-        0x09200045,
-        0x09200a00 // thanks aboood!
-    };
-    for (size_t i = 0; i < sizeof(precomp_shaders) / sizeof(uint32_t); i++) {
-        gfx_lookup_or_create_shader_program(precomp_shaders[i]);
-    }
 
     // Initialize constant matrices and set normal MTX mode
     gfx_rapi_select_matrix_set(MATRIX_SET_IDENTITY);
@@ -1915,15 +1711,6 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
 
 void gfx_start_frame(void) {
     gfx_wapi->handle_events();
-#ifndef TARGET_N3DS
-    gfx_wapi->get_dimensions(&gfx_current_dimensions.width, &gfx_current_dimensions.height);
-    if (gfx_current_dimensions.height == 0) {
-        // Avoid division by zero
-        gfx_current_dimensions.height = 1;
-    }
-    gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
-    gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
-#endif
 }
 
 void gfx_run(Gfx *commands) {
@@ -1937,11 +1724,13 @@ void gfx_run(Gfx *commands) {
 
     profiler_3ds_log_time(0);
     gfx_rapi_start_frame();
-    profiler_3ds_log_time(4); // GFX RAPI Start Frame
+    profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
     gfx_rapi_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
     last_mv_mtx_addr = last_p_mtx_addr = NULL;
 
+    non_granular_log_time(0);
     gfx_run_dl(commands);
+    non_granular_log_time(5); // GFX Run DL
 
     gfx_flush(); // 16: 0, 1
     gfx_rapi_end_frame();

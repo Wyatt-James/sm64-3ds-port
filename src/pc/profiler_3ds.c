@@ -390,7 +390,10 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 1:  Run Level Script
     // 2:  Synchronous Audio Synthesis
     // 3:  Render Game
-    // 4:  GFX RAPI Start Frame
+    // 4:  GFX Rendering API Start Frame (VSync)
+    // 5:  GFX Run DL
+
+    // Detailed IDs (replaces GFX Run DL):
     // 5:  Vertex Copy
     // 6:  Light Recalculation
     // 7:  Vertex Light Calculation
@@ -418,7 +421,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 12);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 5);
                     
                     i += 5; // Place a breakpoint here
                     break;

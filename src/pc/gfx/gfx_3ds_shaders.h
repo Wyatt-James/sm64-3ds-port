@@ -6,9 +6,7 @@
 struct n3ds_shader_vbo_info {
    bool has_position,
         has_texture,
-        has_fog,
-        has_color1,
-        has_color2;
+        has_color;
    uint8_t stride;
 }; 
 
@@ -16,8 +14,6 @@ struct n3ds_shader_binary {
    const uint8_t* data;
    uint32_t size;
    DVLB_s* dvlb;
-   size_t uniform_locations_size; // sizeof(*uniform_locations)
-   void* uniform_locations;
 };
 
 struct n3ds_shader_info {

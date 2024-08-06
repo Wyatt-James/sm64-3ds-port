@@ -303,7 +303,7 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
         C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
         
     // Initialize Shader Data
-    gfx_3ds_shprog_emu64_init();
+    shprog_emu64_init();
 }
 
 static void gfx_set_keyboard_callbacks(UNUSED bool (*on_key_down)(int scancode), UNUSED bool (*on_key_up)(int scancode), UNUSED void (*on_all_keys_up)(void))

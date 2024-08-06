@@ -75,10 +75,10 @@ struct TextureSize {
 extern const C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
 // Calculates a GFX_Citro3D shader code based on the provided RSP flags
-uint8_t citro3d_helpers_calculate_shader_code(bool has_texture, UNUSED bool has_fog, bool has_alpha, bool has_color1, bool has_color2);
+uint8_t citro3d_helpers_calculate_shader_code(bool has_texture, bool has_color);
 
 // Looks up an n3ds_shader_info struct from the given GFX_Citro3D shader code
-const struct n3ds_shader_info* citro3d_helpers_get_shader_info_from_shader_code(uint8_t shader_code);
+const struct n3ds_shader_info* citro3d_helpers_get_shader_info(uint8_t shader_code);
 
 // Adjusts a texture's dimensions to fit within the 3DS' limitations (8 pixels minimum, power-of-2 for each dimension)
 struct TextureSize citro3d_helpers_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size);
@@ -91,10 +91,6 @@ void citro3d_helpers_pad_and_tile_texture_u16(uint16_t* src, uint16_t* dest, str
 
 // Pads a texture with u8 units from w * h to new_w * new_h by repeating data while converting it to the 3DS' tiling layout. Handles endianness.
 void citro3d_helpers_pad_and_tile_texture_u8(uint8_t* src, uint8_t* dest, struct TextureSize src_size, struct TextureSize new_size);
-
-// Fetches the ENV color from a given 2-color-tri VBO. VBO provided must already be offset.
-// WYATT_TODO remove this hack, either by simplifying the VBO or by handling two-color tris in the vshader.
-union RGBA32 citro3d_helpers_get_env_color_from_vbo(float buf_vbo[], struct CCFeatures* cc_features);
 
 // LUT: Returns a GPU_TEVSRC based on which color combiner input is provided.
 GPU_TEVSRC citro3d_helpers_cc_input_to_tev_src(int cc_input, bool swap_input);
@@ -131,5 +127,19 @@ void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z,
 
 // Converts an RSP 2D mode to its GFX_Citro3D counterpart.
 enum Stereoscopic3dMode citro3d_helpers_convert_2d_mode(int mode_2d);
+
+// Sets a C3D float uniform from a vector of floats.
+void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[4]);
+
+// Sets a C3D float uniform from an RGBA32 union. Scales by 1/255.
+void citro3d_helpers_set_fv_unif_rgba32(GPU_SHADER_TYPE type, int id, union RGBA32 color);
+
+// Converts a Color Combiner source to its Emu64 version.
+// Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
+enum Emu64ColorCombinerSource citro3d_helpers_convert_cc_mapping_to_emu64(uint8_t cc_mapping, bool fog_enabled);
+
+// Converts a Color Combiner source to its Emu64 version, pre-cast to a float.
+// Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
+float citro3d_helpers_convert_cc_mapping_to_emu64_float(uint8_t cc_mapping, bool fog_enabled);
 
 #endif

@@ -1,0 +1,127 @@
+.nodvle
+
+; Emu64 color combiner source selection routine
+
+; ----- Uniforms -----
+.fvec rsp_colors[4]   ; See enum below
+.fvec cc_constants    ; { -1, 3000, 1, 0 }
+
+; Color Selection Enum:
+; -2 : EMU64_CC_LOD            LoD calculation
+; -1 : EMU64_CC_SHADE          vertex color passthrough
+;  0 : EMU64_CC_PRIME          RDP PRIMITIVE color
+;  1 : EMU64_CC_ENV            RDP ENV color
+;  2 : EMU64_CC_0              { 0, 0, 0, 0 }
+;  3 : EMU64_CC_1              { 1, 1, 1, 1 }
+; anything else is undefined.
+
+; ----- Aliases -----
+.alias nones          cc_constants.xxxx ; Vector full of negative ones
+.alias three_thousand cc_constants.yyyy ; Vector full of 3000
+.alias ones           cc_constants.zzzz ; Vector full of ones
+.alias zeros          cc_constants.wwww ; Vector full of zeros
+
+.alias color_prime    rsp_colors[0]   ; Vector with CC_PRIME
+.alias color_env      rsp_colors[1]   ; Vector with CC_ENV
+.alias color_black    rsp_colors[2]   ; Vector with { 0, 0, 0, 0 }
+.alias color_white    rsp_colors[3]   ; Vector with { 1, 1, 1, 1 }
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+.alias in_enum        sub_param_1 ; input enum parameter for { RGB, alpha }
+.alias in_vtx_color   sub_param_2 ; input vertex color
+.alias vtx_pos        sub_param_3 ; projected vertex position
+
+; Subroutine
+; Inputs:
+;   sub_param_1: input enum parameter for { RGB, alpha }
+;   sub_param_2: input vertex color
+;   sub_param_3: projected vertex position
+; Outputs:
+;   sub_return_1: output vertex color (either RGB or Alpha)
+; Also Uses:
+;   sub_scratch_1
+;   sub_scratch_2
+;   cmp
+;   a0
+.proc cc_color_select
+
+
+    ; ----- RGB -----
+    
+    mov sub_scratch_1, nones
+    mov sub_scratch_2, in_enum.x
+    cmp sub_scratch_2, lt, eq, sub_scratch_1 ; Sets cmp.x if sub_scratch_1 < -1, and sets cmp.y if sub_scratch_1 == -1;
+
+    ; if selection is LoD or SHADE...
+    ifc cmp.x || cmp.y
+
+        ; if selection <= LoD:
+        ifc cmp.x
+
+            ; Get distance_frac
+            mov sub_scratch_2, three_thousand
+            mul sub_scratch_2, nones, sub_scratch_2          ; sub_scratch_2 = -3000
+            add sub_scratch_1, sub_scratch_2, vtx_pos.w      ; sub_scratch_1 =  w - 3000
+            rcp sub_scratch_2, three_thousand                ; sub_scratch_2 = 1 / 3000
+            mul sub_scratch_1, sub_scratch_1, sub_scratch_2  ; sub_scratch_1 = (w - 3000) / 3000
+
+            ; Clamp distance_frac between 0 and 1
+            min sub_scratch_1, ones, sub_scratch_1           ; if distance_frac > 1, distance_frac = 1
+            max sub_scratch_1, zeros, sub_scratch_1          ; if distance_frac < 0, distance_frac = 0
+            mov sub_return_1.rgb, sub_scratch_1.x            ; Return distance_frac in RGB
+
+        ; if selection == SHADE:
+        .else
+            mov sub_return_1.rgb, in_vtx_color.rgb ; Write vertex color
+        .end
+
+    ; else: index the uniforms
+    .else
+        mova a0, sub_scratch_2.x
+        mov sub_return_1.rgb, rsp_colors[a0.x] ; Write indexed color
+    .end
+
+    ; ----- ALPHA -----
+    
+    mov sub_scratch_1, nones
+    mov sub_scratch_2, in_enum.y
+    cmp sub_scratch_2, lt, eq, sub_scratch_1 ; Sets cmp.x if sub_scratch_1 < -1, and sets cmp.y if sub_scratch_1 == -1;
+
+    ; if selection is LoD or SHADE...
+    ifc cmp.x || cmp.y
+
+        ; if selection <= LoD:
+        ifc cmp.x
+
+            ; Get distance_frac
+            mov sub_scratch_2, three_thousand
+            mul sub_scratch_2, nones, sub_scratch_2          ; sub_scratch_2 = -3000
+            add sub_scratch_1, sub_scratch_2, vtx_pos.w      ; sub_scratch_1 =  w - 3000
+            rcp sub_scratch_2, three_thousand                ; sub_scratch_2 = 1 / 3000
+            mul sub_scratch_1, sub_scratch_1, sub_scratch_2  ; sub_scratch_1 = (w - 3000) / 3000
+
+            ; Clamp distance_frac between 0 and 1
+            min sub_scratch_1, ones, sub_scratch_1           ; if distance_frac > 1, distance_frac = 1
+            max sub_scratch_1, zeros, sub_scratch_1          ; if distance_frac < 0, distance_frac = 0
+            mov sub_return_1.a, sub_scratch_1.x              ; Return distance_frac in Alpha
+
+        ; if selection == SHADE:
+        .else
+            mov sub_return_1.a, in_vtx_color.a ; Write vertex alpha
+        .end
+
+    ; else: index the uniforms
+    .else
+        mova a0, sub_scratch_2.x
+        mov sub_return_1.a, rsp_colors[a0.x].a ; Write indexed alpha
+    .end
+.end

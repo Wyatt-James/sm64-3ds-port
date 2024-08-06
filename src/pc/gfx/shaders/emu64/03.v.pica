@@ -1,0 +1,62 @@
+; position, texture
+
+; ----- Uniforms -----
+; Due to LibCTRU weirdness, declare ALL uniforms in this first file.
+.fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
+.fvec rsp_color_selection      ; { col1_rgb, col1_alpha, col2_rgb, col2_alpha }
+.fvec tex_settings_1           ; { scale_s, scale_t, uv_offset, 1.0 }
+.fvec tex_settings_2           ; { uls, ult, tex_width, tex_height }
+.fvec rsp_colors[4]            ; See enum in color_combiner.v.pica. Keep this at the end of normal unifs because last 2 elems aren't changed.
+
+; ----- Constant Uniforms -----
+.fvec texture_const_1          ; {  0.0,  1.0,   0.0,    0.0 }
+.fvec texture_const_2          ; {  4.0, -8.0,   1/32,   0.0 }
+.fvec cc_constants             ; { -1.0, 3000,   1.0,    0.0 }
+.fvec emu64_const_1            ; { 0.0,   1.0,  -1.0,  1/255 }
+
+; At least one const must be present in each DVLE thanks to a libctru (or c3d?) bug.
+.constf dummy_const (0.0, 0.0, 0.0, 0.0)
+
+; ----- Aliases -----
+.alias ones           emu64_const_1.yyyy   ; Vector full of ones
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+; ----- Inputs -----
+.in inpos v0 ; xyz, plus garbage for w
+.in intex v1 ; uv
+
+; ----- Outputs -----
+.out outpos position  ; xyzw
+.out outtc0 texcoord0 ; texture unit 0
+.out outtc1 texcoord1 ; texture unit 1
+.out outclr color     ; rgba
+
+.entry main_01
+.proc main_01
+
+projection:
+    mov sub_param_1, inpos
+    call matrix_projection
+    mov outpos, sub_return_1
+    mov r0, sub_return_1
+texture:
+    mov sub_param_1, intex
+    call calculate_texcoords
+    mov outtc0, sub_return_1
+    mov outtc1, sub_return_1
+color:
+    ; this shader has no color, so send white
+    mov outclr, ones
+
+    ; We're finished
+    end
+.end
