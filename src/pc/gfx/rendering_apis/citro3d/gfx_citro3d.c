@@ -24,6 +24,7 @@
 #include "src/pc/gfx/texture_conversion.h"
 #include "src/pc/pc_metrics.h"
 
+#define VIDEO_BUFFER_SIZE (256 * 1024 * sizeof(float)) // 1MB
 #define TEXTURE_POOL_SIZE 4096
 #define MAX_VIDEO_BUFFERS 3      // One per-DVLE
 #define MAX_SHADER_PROGRAMS 32
@@ -329,7 +330,7 @@ static struct VideoBuffer* internal_citro3d_setup_video_buffer(const struct n3ds
     }
 
     // Create the VBO (vertex buffer object)
-    vb->ptr = linearAlloc(256 * 1024); // sizeof(float) * 10000 vertexes * 10 floats per vertex?
+    vb->ptr = linearAlloc(VIDEO_BUFFER_SIZE);
     vb->offset = 0;
 
     // Configure buffers
@@ -586,7 +587,7 @@ void gfx_rapi_set_use_alpha(bool use_alpha)
 
 void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > 256 * 1024 / sizeof(float))
+    if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > VIDEO_BUFFER_SIZE / sizeof(float))
     {
         printf("vertex buffer full!\n");
         return;
@@ -607,7 +608,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo
         struct TexHandle* tex = current_texture;
         if (render_state.texture_scale.u64 != tex->scale.u64 || *(uint32_t*) &render_state.uv_offset != *(uint32_t*) &texture_settings.uv_offset || OPT_DISABLED(optimize.texture_settings_1)) {
             render_state.texture_scale.u64  = tex->scale.u64;
-            render_state.uv_offset      = texture_settings.uv_offset;
+            render_state.uv_offset = texture_settings.uv_offset;
             C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_1, tex->scale.s, tex->scale.t, texture_settings.uv_offset, 1);
         }
 
