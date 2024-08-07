@@ -276,12 +276,12 @@ void gfx_direct3d_common_build_shader(char buf[4096], size_t& len, size_t& num_f
     append_str(buf, &len, cc_features.opt_alpha ? "    float4 texel = " : "    float3 texel = ");
     if (!cc_features.color_alpha_same && cc_features.opt_alpha) {
         append_str(buf, &len, "float4(");
-        append_formula(buf, &len, cc_features.c, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], false, false, true);
+        append_formula(buf, &len, cc_features.c.arr, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], false, false, true);
         append_str(buf, &len, ", ");
-        append_formula(buf, &len, cc_features.c, cc_features.do_single[1], cc_features.do_multiply[1], cc_features.do_mix[1], true, true, true);
+        append_formula(buf, &len, cc_features.c.arr, cc_features.do_single[1], cc_features.do_multiply[1], cc_features.do_mix[1], true, true, true);
         append_str(buf, &len, ")");
     } else {
-        append_formula(buf, &len, cc_features.c, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], cc_features.opt_alpha, false, cc_features.opt_alpha);
+        append_formula(buf, &len, cc_features.c.arr, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], cc_features.opt_alpha, false, cc_features.opt_alpha);
     }
     append_line(buf, &len, ";");
 

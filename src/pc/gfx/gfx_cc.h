@@ -31,18 +31,38 @@ enum {
 #define SHADER_OPT_TEXTURE_EDGE (1 << 26)
 #define SHADER_OPT_NOISE        (1 << 27)
 
+// (a - b) * c + d
+union CCInputMapping {
+    struct {
+        uint8_t rgb_a,
+                rgb_b,
+                rgb_c,
+                rgb_d,
+                alpha_a,
+                alpha_b,
+                alpha_c,
+                alpha_d;
+    };
+
+    struct {
+        uint8_t rgb[4], alpha[4]; // a, b, c, d
+    };
+
+    uint8_t arr[2][4]; // Uses format [RGB | A][input].
+};
+
 struct CCFeatures {
-    uint8_t c[2][4];        // CC inputs. Uses format [RGB | A][input].
-    bool opt_alpha;         // True if alpha is enabled.
-    bool opt_fog;           // True if fog is enabled.
-    bool opt_texture_edge;  // True if alpha rejection is enabled.
-    bool opt_noise;         // True if noise is enabled.
-    bool used_textures[2];  // If both are true, use 2-cycle.
-    int num_inputs;         // Number of CC inputs. Max 4.
-    bool do_single[2];      // True if there is only an additive component.
-    bool do_multiply[2];    // True if there are no subtractive or additive components.
-    bool do_mix[2];         // true if subtractive and additive components are equal.
-    bool color_alpha_same;  // True if color and alpha use identical mixing setups.
+    union CCInputMapping cc;  // CC input mapping.
+    bool opt_alpha;           // True if alpha is enabled.
+    bool opt_fog;             // True if fog is enabled.
+    bool opt_texture_edge;    // True if alpha rejection is enabled.
+    bool opt_noise;           // True if noise is enabled.
+    bool used_textures[2];    // If both are true, 2-cycle must be enabled.
+    int num_inputs;           // Number of CC inputs. Max 4.
+    bool do_single[2];        // True if there is only an additive component.
+    bool do_multiply[2];      // True if there are no subtractive or additive components.
+    bool do_mix[2];           // True if subtractive and additive components are equal.
+    bool color_alpha_same;    // True if color and alpha use identical mixing setups.
 };
 
 #ifdef __cplusplus
@@ -54,7 +74,7 @@ void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features);
 
 // Generates a set of CC shader-input mappings and a shader ID from a CC ID.
 // Unused mappings are set to CC_0.
-void gfx_cc_generate_cc(uint32_t cc_id, uint8_t out_shader_input_mappings[4][2], uint32_t* out_shader_id);
+void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, uint32_t* out_shader_id);
 
 #ifdef __cplusplus
 }

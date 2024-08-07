@@ -257,33 +257,33 @@ static void configure_tev_internal(struct CCFeatures* cc_features, C3D_TexEnv* t
     if (cc_features->do_single[0])
     {
         C3D_TexEnvFunc(texenv, mode, GPU_REPLACE);
-        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][3], swap_input), 0, 0);
+        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[3], swap_input), 0, 0);
 
         C3D_TexEnvOpRgb(texenv,
-            cc_features->c[0][3] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.rgb[3] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
             GPU_TEVOP_RGB_SRC_COLOR,
             GPU_TEVOP_RGB_SRC_COLOR);
     }
     else if (cc_features->do_multiply[0])
     {
         C3D_TexEnvFunc(texenv, mode, GPU_MODULATE);
-        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
-                                     citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][2], swap_input), 0);
+        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[0], swap_input),
+                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[2], swap_input), 0);
         C3D_TexEnvOpRgb(texenv,
-            cc_features->c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
-            cc_features->c[0][2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.rgb[0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.rgb[2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
             GPU_TEVOP_RGB_SRC_COLOR);
     }
     else if (cc_features->do_mix[0])
     {
         C3D_TexEnvFunc(texenv, mode, GPU_INTERPOLATE);
-        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][0], swap_input),
-                                     citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][1], swap_input),
-                                     citro3d_helpers_cc_input_to_tev_src(cc_features->c[0][2], swap_input));
+        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[0], swap_input),
+                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[1], swap_input),
+                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[2], swap_input));
         C3D_TexEnvOpRgb(texenv,
-            cc_features->c[0][0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
-            cc_features->c[0][1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
-            cc_features->c[0][2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR);
+            cc_features->cc.rgb[0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.rgb[1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.rgb[2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR);
     }
 }
 
@@ -304,20 +304,20 @@ void citro3d_helpers_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3
         if (cc_features->do_single[1])
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_REPLACE);
-            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][3], swap_input), 0, 0);
+            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[3], swap_input), 0, 0);
         }
         else if (cc_features->do_multiply[1])
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_MODULATE);
-            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][0], swap_input),
-                                              citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][2], swap_input), 0);
+            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[0], swap_input),
+                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[2], swap_input), 0);
         }
         else if (cc_features->do_mix[1])
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_INTERPOLATE);
-            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][0], swap_input),
-                                              citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][1], swap_input),
-                                              citro3d_helpers_cc_input_to_tev_src(cc_features->c[1][2], swap_input));
+            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[0], swap_input),
+                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[1], swap_input),
+                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[2], swap_input));
         }
     }
 

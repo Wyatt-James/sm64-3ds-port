@@ -7,8 +7,8 @@
 
 void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features) {
     for (int i = 0; i < 4; i++) {
-        cc_features->c[0][i] = (shader_id >> (i * 3)) & 7;
-        cc_features->c[1][i] = (shader_id >> (12 + i * 3)) & 7;
+        cc_features->cc.arr[0][i] = (shader_id >> (i * 3)) & 7;
+        cc_features->cc.arr[1][i] = (shader_id >> (12 + i * 3)) & 7;
     }
 
     cc_features->opt_alpha        = (shader_id & SHADER_OPT_ALPHA)        != 0;
@@ -22,7 +22,7 @@ void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features) {
 
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < 4; j++) {
-            uint8_t cc_source = cc_features->c[i][j];
+            uint8_t cc_source = cc_features->cc.arr[i][j];
             switch (cc_source) {
                 case SHADER_INPUT_1:
                 case SHADER_INPUT_2:
@@ -42,22 +42,22 @@ void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features) {
     }
 
     for (int i = 0; i < 2; i++) {
-        cc_features->do_single[i] = cc_features->c[i][2] == 0;
-        cc_features->do_multiply[i] = cc_features->c[i][1] == 0 && cc_features->c[i][3] == 0;
-        cc_features->do_mix[i] = cc_features->c[i][1] == cc_features->c[i][3];
+        cc_features->do_single[i]   = cc_features->cc.arr[i][2] == 0;                                   // only an additive component.
+        cc_features->do_multiply[i] = cc_features->cc.arr[i][1] == 0 && cc_features->cc.arr[i][3] == 0; // no subtractive or additive components.
+        cc_features->do_mix[i]      = cc_features->cc.arr[i][1] == cc_features->cc.arr[i][3];           // subtractive and additive components are equal.
     }
     cc_features->color_alpha_same = (shader_id & 0xfff) == ((shader_id >> 12) & 0xfff);
 }
 
-void gfx_cc_generate_cc(uint32_t cc_id, uint8_t out_shader_input_mappings[4][2], uint32_t* out_shader_id) {
+void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, uint32_t* out_shader_id) {
     uint32_t shader_id = (cc_id >> 24) << 24;
-    uint8_t c[4][2] = {{0}};
+    union CCInputMapping c = {{0}};
 
-    bzero(out_shader_input_mappings, sizeof(uint8_t) * 4 * 2);
+    bzero(out_shader_input_mappings, sizeof(*out_shader_input_mappings));
 
     for (int i = 0; i < 4; i++) {
-        c[i][0] = (cc_id >> (i * 3)) & 7;
-        c[i][1] = (cc_id >> (12 + i * 3)) & 7;
+        c.arr[0][i] = (cc_id >> (i * 3)) & 7;
+        c.arr[1][i] = (cc_id >> (12 + i * 3)) & 7;
     }
 
     for (int i = 0; i < 2; i++) {
@@ -65,7 +65,7 @@ void gfx_cc_generate_cc(uint32_t cc_id, uint8_t out_shader_input_mappings[4][2],
         int next_input_number = SHADER_INPUT_1;
         for (int j = 0; j < 4; j++) {
             int shader_input = 0;
-            uint8_t cc_input = c[j][i];
+            uint8_t cc_input = c.arr[i][j];
 
             switch (cc_input) {
                 case CC_0:
@@ -85,7 +85,7 @@ void gfx_cc_generate_cc(uint32_t cc_id, uint8_t out_shader_input_mappings[4][2],
                 case CC_ENV:
                 case CC_LOD:
                     if (input_number[cc_input] == 0) {
-                        out_shader_input_mappings[next_input_number - 1][i] = cc_input;
+                        out_shader_input_mappings->arr[i][next_input_number - 1] = cc_input;
                         input_number[cc_input] = next_input_number++;
                     }
                     shader_input = input_number[cc_input];

@@ -246,12 +246,12 @@ static struct ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader
     append_str(fs_buf, &fs_len, cc_features.opt_alpha ? "vec4 texel = " : "vec3 texel = ");
     if (!cc_features.color_alpha_same && cc_features.opt_alpha) {
         append_str(fs_buf, &fs_len, "vec4(");
-        append_formula(fs_buf, &fs_len, cc_features.c, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], false, false, true);
+        append_formula(fs_buf, &fs_len, cc_features.c.arr, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], false, false, true);
         append_str(fs_buf, &fs_len, ", ");
-        append_formula(fs_buf, &fs_len, cc_features.c, cc_features.do_single[1], cc_features.do_multiply[1], cc_features.do_mix[1], true, true, true);
+        append_formula(fs_buf, &fs_len, cc_features.c.arr, cc_features.do_single[1], cc_features.do_multiply[1], cc_features.do_mix[1], true, true, true);
         append_str(fs_buf, &fs_len, ")");
     } else {
-        append_formula(fs_buf, &fs_len, cc_features.c, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], cc_features.opt_alpha, false, cc_features.opt_alpha);
+        append_formula(fs_buf, &fs_len, cc_features.c.arr, cc_features.do_single[0], cc_features.do_multiply[0], cc_features.do_mix[0], cc_features.opt_alpha, false, cc_features.opt_alpha);
     }
     append_line(fs_buf, &fs_len, ";");
 

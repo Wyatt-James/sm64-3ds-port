@@ -979,21 +979,21 @@ size_t gfx_rapi_lookup_or_create_color_combiner(uint32_t cc_id)
     num_color_combiners = (num_color_combiners + 1) % MAX_COLOR_COMBINERS;
 
     uint32_t shader_id;
-    uint8_t mapping[4][2];
-    gfx_cc_generate_cc(cc_id, mapping, &shader_id);
+    union CCInputMapping mapping;
+    gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
     
     struct ShaderProgram* shader_prog = internal_citro3d_lookup_or_create_shader(shader_id);
 
-    // If num inputs >= 2, we need to reverse mapping[0] and mapping[1] (hack for goddard)
-    // WYATT_TODO remove me. This also breaks the pause menu tint.
+    // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)
+    // WYATT_TODO remove me.
     if (shader_prog->cc_features.num_inputs >= 2) {
-        uint8_t mapping_temp[2][2];
+        union CCInputMapping mapping_temp;
         for (int i = 0; i <= 1; i++) {
-            mapping_temp[0][i] = mapping[1][i];
-            mapping_temp[1][i] = mapping[0][i];
+            mapping_temp.arr[i][0] = mapping.arr[i][1];
+            mapping_temp.arr[i][1] = mapping.arr[i][0];
 
-            mapping[0][i] = mapping_temp[0][i];
-            mapping[1][i] = mapping_temp[1][i];
+            mapping.arr[i][0] = mapping_temp.arr[i][0];
+            mapping.arr[i][1] = mapping_temp.arr[i][1];
         }
     }
 
@@ -1002,22 +1002,22 @@ size_t gfx_rapi_lookup_or_create_color_combiner(uint32_t cc_id)
     cc->shader_id = shader_id;
     cc->shader_program = shader_prog;
 
-    cc->c3d_shader_input_mapping.c1_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping[0][0], false);
-    cc->c3d_shader_input_mapping.c2_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping[1][0], false);
+    cc->c3d_shader_input_mapping.c1_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[0], false);
+    cc->c3d_shader_input_mapping.c2_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[1], false);
 
-    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping[0][1], shader_prog->cc_features.opt_fog);
-    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping[1][1], shader_prog->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[0], shader_prog->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[1], shader_prog->cc_features.opt_fog);
 
     // WYATT_TODO this is probably incorrect, but it works for now. Fixes the pause tint being too light.
-    cc->use_env_color = mapping[1][0] == CC_ENV;
+    cc->use_env_color = mapping.rgb[1] == CC_ENV;
 
     // N3DS only cares about the first two mappings, so we want to make an identifier for specifically this to enhance performance
     // RGBA32 works fine since it's four u8s
     union RGBA32 mapping_id = {
-        .r = mapping[0][0],
-        .g = mapping[0][1],
-        .b = mapping[1][0],
-        .a = mapping[1][1],
+        .r = mapping.rgb[0],
+        .g = mapping.rgb[1],
+        .b = mapping.alpha[0],
+        .a = mapping.alpha[1],
     };
 
     cc->cc_mapping_identifier = mapping_id.u32;
