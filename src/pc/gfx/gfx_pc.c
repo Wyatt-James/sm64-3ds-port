@@ -69,6 +69,7 @@
 
 #define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
+#define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 
 #define MAX_BUFFERED_TRIS 256
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
@@ -534,17 +535,23 @@ static void calculate_lookat_y(float res[3], const float b[4][4])
     gfx_normalize_vector(res);
 }
 
-// Multiplies the whole matrix.
-static void gfx_matrix_mul_unsafe(float res[4][4], const float a[4][4], const float b[4][4]) {
+// Multiplies the whole matrix. When both funcs are inline, saves ~200us.
+static inline void gfx_matrix_mul_unsafe(float res[4][4], const float* restrict a, const float* restrict  b) {
+    #define MTA(r_, c_) a[ARR_INDEX_2D(c_, r_, 4)]
+    #define MTB(r_, c_) b[ARR_INDEX_2D(c_, r_, 4)]
+
     for (int r = 0; r < 4; r++) {
         for (int c = 0; c < 4; c++) {
-            res[r][c] = a[r][0] * b[0][c] + a[r][1] * b[1][c] + a[r][2] * b[2][c] + a[r][3] * b[3][c];
+            res[r][c] = MTA(r, 0) * MTB(0, c) + MTA(r, 1) * MTB(1, c) + MTA(r, 2) * MTB(2, c) + MTA(r, 3) * MTB(3, c);
         }
     }
+
+    #undef MTA
+    #undef MTB
 }
 
 // Multiplies the whole matrix, using a temporary variable. Use only when a == res || b == res.
-static void gfx_matrix_mul_safe(float res[4][4], const float a[4][4], const float b[4][4]) {
+static inline void gfx_matrix_mul_safe(float res[4][4], const float* a, const float* b) {
     float tmp[4][4];
     gfx_matrix_mul_unsafe(tmp, a, b);
     memcpy(res, tmp, sizeof(tmp));
@@ -587,12 +594,12 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
             }
         }
         else {
-            gfx_matrix_mul_safe(rsp.P_matrix, matrix, rsp.P_matrix);
+            gfx_matrix_mul_safe(rsp.P_matrix, matrix, (float*) rsp.P_matrix);
             shader_state.p_mtx_changed = true;
         }
 
     } else { // G_MTX_MODELVIEW
-        const float* src = rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
+        float* src = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
         
         bool matrix_updated = !(last_mv_mtx_addr == matrix && is_load);
 
