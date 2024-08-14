@@ -864,9 +864,8 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     const bool use_color   = shader_state.num_inputs > 0;
 
     for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
-
-        // Why is f64 one instruction shorter than u64? Keep as doubles for now, I guess.
-        *((double*) (&buf_vbo.as_u32[buf_vbo_len])) = v_arr[vtx]->position.f64;
+        // Struct copy
+        *((union int16x4*) (&buf_vbo.as_u32[buf_vbo_len])) = v_arr[vtx]->position;
         buf_vbo_len += 2;
 
         if (use_texture)
