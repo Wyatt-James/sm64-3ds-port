@@ -1,6 +1,7 @@
 #ifndef GFX_3DS_SHADERS_H
 #define GFX_3DS_SHADERS_H
 
+#include <stdint.h>
 #include <stdbool.h>
 
 struct n3ds_shader_vbo_info {
