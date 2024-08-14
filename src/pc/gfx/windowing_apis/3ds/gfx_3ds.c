@@ -53,7 +53,7 @@ bool gBottomScreenNeedsRender;
 float gSliderLevel;
 
 Gfx3DSMode gGfx3DSMode;
-bool gGfx3DEnabled;
+bool gGfx3DEnabled = false;
 
 bool gShowConfigMenu = false;
 bool gShouldRun = true;
@@ -119,9 +119,12 @@ static void initialise_screens()
     if (!useWide)
     {
         gfxSetWide(false); // Set mode to 2D
-        gTargetRight = C3D_RenderTargetCreate(height, width, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
-        C3D_RenderTargetSetOutput(gTargetRight, GFX_TOP, GFX_RIGHT, transferFlags);
-        gfxSet3D(true); // ...then set mode to 3D?
+
+        if (gGfx3DEnabled) {
+            gTargetRight = C3D_RenderTargetCreate(height, width, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
+            C3D_RenderTargetSetOutput(gTargetRight, GFX_TOP, GFX_RIGHT, transferFlags);
+            gfxSet3D(true); // ...then set mode to 3D?
+        }
     }
     else
     {
@@ -301,7 +304,7 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
     // Clear all framebuffers. Right-hand screen crashes if cleared in an invalid mode.
     C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
     C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-    if (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22)
+    if (gTargetRight != NULL)
         C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
         
     // Initialize Shader Data

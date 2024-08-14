@@ -279,7 +279,7 @@ static void internal_citro3d_clear_buffers()
         
     // Clear right-eye view
     // We check gGfx3DSMode because clearing in 800px modes causes a crash.
-    if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
+    if (clear_top && gTargetRight != NULL)
         C3D_RenderTargetClear(gTargetRight, clear_top, color_top, depth_top);
 
     // Clear bottom screen only if it needs re-rendering.
