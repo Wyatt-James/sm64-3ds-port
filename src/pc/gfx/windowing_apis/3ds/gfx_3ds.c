@@ -288,7 +288,9 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
     if (checkN3DS())
         osSetSpeedupEnable(true);
 
-    gfxInitDefault();
+    // Allocating to VRAM instead of Linear Memory is faster.
+    // WYATT_TODO fix the garbage displayed on boot caused by this change.
+    gfxInit(GSP_BGR8_OES, GSP_BGR8_OES, true);
 
     gfx_3ds_menu_init();
 
