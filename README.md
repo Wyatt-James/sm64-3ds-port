@@ -67,11 +67,12 @@ cd sm64-port
 cp /path/to/your/baserom.us.z64 ./ # change 'us' to 'eu', 'jp' or 'sh' as appropriate
 ```
 
-**Build with pre-baked image:**
+**Build your own Docker image:**
 
-Change `VERSION=us` if applicable.
+This is a development repository, so no pre-made image is supplied. You must build a new image whenever the [Dockerfile](Dockerfile) is updated. Build a locally-stored image with the following command, replacing `yourname` and `yourversion` as applicable, then build the game with the second command. Change `VERSION=us` if applicable. WYATT_TODO remove this for release.
 ```sh
-docker run --rm -v $(pwd):/sm64 markstreet/sm64:3ds make --jobs 4 VERSION=us cia 
+docker build -t "yourname/sm643ds:yourversion" - < ./Dockerfile
+docker run --rm -v $(pwd):/sm64 yourname/sm643ds:yourversion make --jobs 4 VERSION=us
 ```
 
 ### Linux / WSL (Ubuntu)
