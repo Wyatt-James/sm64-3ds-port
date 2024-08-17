@@ -4818,7 +4818,7 @@ typedef union {
 { \
 	Gfx *_g = (Gfx *)(pkt);	\
 									\
-	_g->words.w0 = _SHIFTL(G_SPECIAL_4, 24, 8); \
+	_g->words.w0 = _SHIFTL(G_SPECIAL_2, 24, 8); \
 	_g->words.w1 = (unsigned int)(iod); \
 }
 

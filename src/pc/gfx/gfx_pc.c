@@ -1673,9 +1673,6 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_set_2d(cmd->words.w1);
                 break;
             case G_SPECIAL_2:
-                gfx_flush(); // 15: 5, 0
-                break;
-            case G_SPECIAL_4:
                 gfx_set_iod(cmd->words.w1);
                 break;
         }
