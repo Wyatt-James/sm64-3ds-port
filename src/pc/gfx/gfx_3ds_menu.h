@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "src/minimap/textures/mode_400_t3x.h"
 #include "src/minimap/textures/mode_800_t3x.h"
@@ -31,7 +32,7 @@ typedef enum {
 } menu_action;
 
 void gfx_3ds_menu_init();
-void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool enabled);
+void gfx_3ds_menu_draw(float *vertex_buffer, size_t vertex_offset, bool enabled);
 menu_action gfx_3ds_menu_on_touch(int x, int y);
 
 typedef struct {

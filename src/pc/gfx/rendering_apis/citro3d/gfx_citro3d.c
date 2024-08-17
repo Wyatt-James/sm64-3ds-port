@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "gfx_citro3d.h"
 #include "gfx_citro3d_helpers.h"
@@ -120,7 +121,7 @@ struct VideoBuffer {
     const struct n3ds_shader_info* shader_info;
     shaderProgram_s shader_program; // pica vertex shader
     float *ptr;
-    uint32_t offset;
+    size_t offset;
     C3D_AttrInfo attr_info;
     C3D_BufInfo buf_info;
 };

@@ -7,7 +7,7 @@
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
 static C3D_Mtx model_view_mtx, projection_mtx;
-static int buffer_offset;
+static size_t buffer_offset;
 
 static C3D_Tex mode_400_tex, mode_800_tex;
 static C3D_Tex aa_off_tex, aa_on_tex;
@@ -155,7 +155,7 @@ void gfx_3ds_menu_init()
     gBottomScreenNeedsRender = true;
 }
 
-void gfx_3ds_menu_draw(float *vertex_buffer, int vertex_offset, bool configButtonsEnabled)
+void gfx_3ds_menu_draw(float *vertex_buffer, size_t vertex_offset, bool configButtonsEnabled)
 {
     if (!gBottomScreenNeedsRender)
         return;
