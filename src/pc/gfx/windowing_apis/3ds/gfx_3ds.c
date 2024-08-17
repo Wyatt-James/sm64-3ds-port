@@ -303,7 +303,7 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
     gSliderLevel = osGet3DSliderState();
     gfx_3ds_update_stereoscopy();
     
-    // Clear all framebuffers. Right-hand screen crashes if cleared in an invalid mode.
+    // Clear all framebuffers.
     C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
     C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
     if (gTargetRight != NULL)
