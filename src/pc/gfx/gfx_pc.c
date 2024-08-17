@@ -28,7 +28,9 @@
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
 
-#define GRANULAR_PROFILING 0
+#define GRANULAR_PROFILING 0 // Enables fine-grained performance profiling of various things.
+#define GRANULAR_FLUSHES   0 // Enables fine-grained profiling of flush hit/avoid rate.
+#define FLUSH_COUNTERS    25 // Number of gfx_flush calls to log.
 
 #if GRANULAR_PROFILING == 1
 #define granular_log_time(v_)     do { profiler_3ds_log_time(v_); } while (0)
@@ -38,18 +40,29 @@
 #define non_granular_log_time(v_) do { profiler_3ds_log_time(v_); } while (0)
 #endif
 
+#if GRANULAR_FLUSHES == 1
+#define GRANULAR_FLUSH(v_) v_
+#define GRANULAR_FLUSH_DO(v_) do { v_; } while (0)
+#define gfx_flush(id_) gfx_flush_impl(id_)
+static int flushes[FLUSH_COUNTERS], flush_avoids[FLUSH_COUNTERS]; // Read with debugger
+#else
+#define GRANULAR_FLUSH(v_)
+#define GRANULAR_FLUSH_DO(v_) do {} while (0)
+#define gfx_flush(id_) gfx_flush_impl()
+#endif
+
 /*
- *   Flush Totals
- *   Measured 1 frame after BoB benchmark
+ *   Flush Totals, updated for commmit 634be2132a77c3c3fc04f66b87a2badd4d41e2ca
+ *   Measured 1 frame after BoB benchmark, goomba was visible
  *   
- *   Grand Total:   393
- *   Total Success: 177
- *   Total Fail:    216
+ *   Total Flushes: 182
+ *   Total Avoids:  195
+ *   Grand Total:   377
  * 
- *   ID:         0  1   2    3  4  5   6  7  8  9  10  11  12  13  14  15  16
- *   Success: { 73, 0,  7,  54, 0, 0, 26, 0, 0, 0,  0, 12,  0,  1,  4,  0,  0}
- *   Fail:    { 46, 0, 20,  85, 0, 0, 28, 2, 0, 0, 12,  0,  6,  1, 10,  5,  1}
- *   Subotal: {119, 0, 27, 139, 0, 0, 54, 2, 0, 0, 12, 12,  6,  2, 14,  5,  1}
+ *   id:          0  1   2    3  4   5  6  7  8   9   10 11 12 13 14 15 16 17 18  19  20 21 22  23 24
+ *   flushes:   { 1, 0,  1,  96, 0,  7, 0, 0, 0,  4,  54, 0, 0, 0, 0, 0, 0, 0, 0,  0, 12, 1, 1,  5, 0 }
+ *   avoids:    { 3, 0,  9,  11, 0, 22, 0, 3, 2, 14,  88, 0, 8, 2, 0, 0, 0, 0, 5, 12,  0, 5, 1,  9, 1 }
+ *   subtotals: { 4, 0, 10, 107, 0, 29, 0, 3, 2, 18, 142, 0, 8, 2, 0, 0, 0, 0, 5, 12, 12, 6, 2, 14, 1 }
  */
 
 // If enabled, shader swaps will be counter and printed each frame.
@@ -312,6 +325,7 @@ static int om_h_sets = 0, om_l_sets = 0, om_h_skips = 0, om_l_skips = 0;
 
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
+static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id));
 
 static void gfx_apply_matrices()
 {
@@ -344,17 +358,19 @@ static void gfx_apply_matrices()
         gfx_rapi_apply_model_view_matrix();
 }
 
-static void gfx_flush(void) {
+static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
     granular_log_time(0);
 
     // Over 50% of calls are pointless
     if (UNLIKELY(buf_vbo_num_verts > 0)) {
+        GRANULAR_FLUSH_DO(flushes[flush_id]++);
         gfx_apply_matrices();
 
         gfx_rapi_draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
         buf_vbo_num_verts = 0;
-    }
+    } else 
+        GRANULAR_FLUSH_DO(flush_avoids[flush_id]++);
 
     granular_log_time(12); // gfx_flush
 }
@@ -363,7 +379,7 @@ static void gfx_set_2d(int mode_2d)
 {
     if (shader_state.stereo_3d_mode != mode_2d) {
         shader_state.stereo_3d_mode  = mode_2d;
-        gfx_flush();
+        gfx_flush(0);
         
         gfx_rapi_set_2d_mode(mode_2d);
     }
@@ -373,7 +389,7 @@ static void gfx_set_iod(uint32_t iod)
 {
     if (shader_state.iod_mode != iod) {
         shader_state.iod_mode  = iod;
-        gfx_flush();
+        gfx_flush(1);
 
         float z, w;
         switch(iod) {
@@ -596,7 +612,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         bool matrix_updated = !(last_p_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
-            gfx_flush(); // 0: 73, 46 for both mtx types
+            gfx_flush(2);
             last_p_mtx_addr = matrix;
         }
 
@@ -617,7 +633,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         bool matrix_updated = !(last_mv_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
-            gfx_flush(); // 0: 73, 46 for both mtx types
+            gfx_flush(3);
             last_mv_mtx_addr = matrix;
             rsp.lights_changed = true;
         }
@@ -642,7 +658,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
 static void gfx_sp_pop_matrix(uint32_t count) {
-    gfx_flush(); // 1: 0, 0
+    gfx_flush(4);
 
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
@@ -762,7 +778,7 @@ static void gfx_sp_tri_update_state()
         SHADER_COUNT_DO(num_shader_swaps++);
 
         granular_log_time(10); // gfx_sp_tri_update_state
-        gfx_flush(); // 2: 7, 20
+        gfx_flush(5);
         granular_log_time(0);
 
         size_t cc_index = gfx_rapi_lookup_or_create_color_combiner(cc_id);
@@ -775,7 +791,7 @@ static void gfx_sp_tri_update_state()
         shader_state.prim_color.u32  = rdp.prim_color.u32;
 
         granular_log_time(10); // gfx_sp_tri_update_state
-        gfx_flush(); // 2: 7, 20
+        gfx_flush(6);
         granular_log_time(0);
 
         gfx_rapi_set_cc_prim_color(rdp.prim_color.u32);
@@ -785,7 +801,7 @@ static void gfx_sp_tri_update_state()
         shader_state.env_color.u32  = rdp.env_color.u32;
 
         granular_log_time(10); // gfx_sp_tri_update_state
-        gfx_flush(); // 2: 7, 20
+        gfx_flush(7);
         granular_log_time(0);
 
         gfx_rapi_set_cc_env_color(rdp.env_color.u32);
@@ -797,7 +813,7 @@ static void gfx_sp_tri_update_state()
         if (linear_filter_old != linear_filter) {
             linear_filter_old  = linear_filter;
             granular_log_time(10); // gfx_sp_tri_update_state
-            gfx_flush(); // 3: 54, 85
+            gfx_flush(8);
             granular_log_time(0);
             gfx_rapi_set_uv_offset(linear_filter ? 0.5f : 0.0f);
         }
@@ -805,7 +821,7 @@ static void gfx_sp_tri_update_state()
         if (shader_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
             shader_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
             granular_log_time(10); // gfx_sp_tri_update_state
-            gfx_flush(); // 3: 54, 85
+            gfx_flush(9);
             granular_log_time(0);
             gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
         }
@@ -815,14 +831,14 @@ static void gfx_sp_tri_update_state()
         if (shader_state.used_textures.bools[i]) {
             if (rdp.textures_changed.bools[i]) {
                 granular_log_time(10); // gfx_sp_tri_update_state
-                gfx_flush(); // 3: 54, 85
+                gfx_flush(10);
                 granular_log_time(0);
                 import_texture(i);
                 rdp.textures_changed.bools[i] = false;
             }
             if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
                 granular_log_time(10); // gfx_sp_tri_update_state
-                gfx_flush(); // 4: 0, 0
+                gfx_flush(11);
                 granular_log_time(0);
                 gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 rendering_state.textures[i]->linear_filter = linear_filter;
@@ -837,7 +853,7 @@ static void gfx_sp_tri_update_state()
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
     if (rendering_state.culling_mode != culling_mode) {
         rendering_state.culling_mode = culling_mode;
-        gfx_flush(); // 6: 26, 28
+        gfx_flush(12);
         gfx_rapi_set_backface_culling_mode(culling_mode);
     }
 
@@ -846,14 +862,14 @@ static void gfx_sp_tri_update_state()
     const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
-        gfx_flush(); // 7: 0, 2
+        gfx_flush(13);
         gfx_rapi_set_depth_test(depth_test);
     }
 
     // Handled here to optimize rectangle drawing
     if (!XYWH_EQUAL(rendering_state.viewport, rdp.viewport)) {
         rendering_state.viewport = rdp.viewport;
-        gfx_flush(); // 8: 0, 0
+        gfx_flush(14);
         gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
 
@@ -868,7 +884,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     const uint32_t numVerts = numTris * 3;
     if (buf_vbo_num_verts + numVerts >= MAX_BUFFERED_VERTS) {
         granular_log_time(11); // gfx_tri_create_vbo
-        gfx_flush(); // 5: 0, 0
+        gfx_flush(15);
         granular_log_time(0);
     }
     buf_vbo_num_verts += numVerts;
@@ -974,7 +990,7 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
         case G_MW_FOG:
             if (shader_state.fog_settings != data) {
                 shader_state.fog_settings  = data;
-                gfx_flush();
+                gfx_flush(16);
                 uint16_t fog_mul = (int16_t)(data >> 16),
                          fog_offset = (int16_t)data;
                 gfx_rapi_set_fog(fog_mul, fog_offset);
@@ -997,7 +1013,7 @@ static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly,
     struct XYWidthHeight scissor = {x, y, width, height};
     if (!XYWH_EQUAL(rendering_state.scissor, scissor)) {
         rendering_state.scissor = scissor;
-        gfx_flush(); // 9: 0, 0
+        gfx_flush(17);
         gfx_rapi_set_scissor(scissor.x, scissor.y, scissor.width, scissor.height);
     }
 }
@@ -1199,7 +1215,7 @@ static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 }
 
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    gfx_flush();
+    gfx_flush(18);
     gfx_rapi_set_fog_color(r, g, b, a);
 }
 
@@ -1216,7 +1232,7 @@ static void gfx_dp_set_fill_color(uint32_t packed_color) {
 }
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
-    gfx_flush(); // 10: 0, 12
+    gfx_flush(19);
 
     uint32_t saved_other_mode_h = rdp.other_mode_h;
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
@@ -1267,7 +1283,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
         &rsp.rect_vertices[3]};
 
     gfx_sp_tri_batched(rect_triangles, 2);
-    gfx_flush(); // 11: 12, 0
+    gfx_flush(20);
 
     rsp.matrix_set = saved_matrix_set;
     
@@ -1387,14 +1403,14 @@ static void set_other_mode_l(uint32_t other_mode_l)
         
         const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
         if (z_upd != rendering_state.depth_mask) {
-            gfx_flush(); // 12: 0, 6
+            gfx_flush(21);
             gfx_rapi_set_depth_mask(z_upd);
             rendering_state.depth_mask = z_upd;
         }
 
         const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
         if (zmode_decal != rendering_state.decal_mode) {
-            gfx_flush(); // 13: 1, 1
+            gfx_flush(22);
             gfx_rapi_set_zmode_decal(zmode_decal);
             rendering_state.decal_mode = zmode_decal;
         }
@@ -1407,7 +1423,7 @@ static void set_other_mode_l(uint32_t other_mode_l)
         calculate_cc_id();
         
         if (shader_state.use_alpha != rendering_state.alpha_blend) {
-            gfx_flush(); // 14: 4, 10
+            gfx_flush(23);
             gfx_rapi_set_use_alpha(shader_state.use_alpha);
             rendering_state.alpha_blend = shader_state.use_alpha;
         }
@@ -1750,7 +1766,7 @@ void gfx_run(Gfx *commands) {
     gfx_run_dl(commands);
     non_granular_log_time(5); // GFX Run DL
 
-    gfx_flush(); // 16: 0, 1
+    gfx_flush(24);
     gfx_rapi_end_frame();
     gfx_wapi->swap_buffers_begin();
 
@@ -1763,6 +1779,9 @@ void gfx_run(Gfx *commands) {
     printf("OMH %d SK %d  OML %d SK %d\n", om_h_sets, om_h_skips, om_l_sets, om_l_skips);
     om_h_sets = om_l_sets = om_h_skips = om_l_skips = 0;
 #endif
+
+    GRANULAR_FLUSH_DO(bzero(flushes, sizeof(flushes)));
+    GRANULAR_FLUSH_DO(bzero(flush_avoids, sizeof(flush_avoids)));
 }
 
 void gfx_end_frame(void) {
