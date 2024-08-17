@@ -2330,7 +2330,7 @@ void start_view_dl(struct ObjView *view) {
     gDPSetScissor(next_gfx(), G_SC_NON_INTERLACE, ulx, uly, lrx, lry);
 #endif
 #ifdef TARGET_N3DS
-    gDPSetIod(next_gfx(), iodGoddard);
+    gDPSetIod(next_gfx(), IOD_GODDARD);
 #endif
     gSPClearGeometryMode(next_gfx(), 0xFFFFFFFF);
     gSPSetGeometryMode(next_gfx(), G_LIGHTING | G_CULL_BACK | G_SHADING_SMOOTH | G_SHADE);
@@ -3447,7 +3447,6 @@ void gd_put_sprite(u16 *sprite, s32 x, s32 y, s32 wx, s32 wy) {
     s32 r; // 58
 
 #ifdef TARGET_N3DS
-    gDPForceFlush(next_gfx());
     gDPSet2d(next_gfx(), STEREO_MODE_3D_GODDARD_HAND);
 #endif
     gSPDisplayList(next_gfx(), osVirtualToPhysical(gd_dl_sprite_start_tex_block));
@@ -3466,7 +3465,6 @@ void gd_put_sprite(u16 *sprite, s32 x, s32 y, s32 wx, s32 wy) {
     gSPTexture(next_gfx(), 0x8000, 0x8000, 0, G_TX_RENDERTILE, G_OFF);
 
 #ifdef TARGET_N3DS
-    gDPForceFlush(next_gfx());
     gDPSet2d(next_gfx(), STEREO_MODE_3D);
 #endif
 }

@@ -386,13 +386,11 @@ Gfx *geo_act_selector_strings(s16 callContext, UNUSED struct GraphNode *node) {
 #endif
     if (callContext == GEO_CONTEXT_RENDER) {
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++);
         gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
-        gDPSetIod(gDisplayListHead++, iodStarSelect);
+        gDPSetIod(gDisplayListHead++, IOD_STAR_SELECT);
 #endif
         print_act_selector_strings();
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++);
         gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     }

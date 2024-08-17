@@ -4813,12 +4813,6 @@ typedef union {
 	_g->words.w0 = _SHIFTL(G_SPECIAL_1, 24, 8); \
 	_g->words.w1 = (unsigned int)(mode); \
 }
-#define gDPForceFlush(pkt) \
-{ \
-	Gfx *_g = (Gfx *)(pkt);	\
-									\
-	_g->words.w0 = _SHIFTL(G_SPECIAL_2, 24, 8); \
-}
 
 #define gDPSetIod(pkt, iod) \
 { \
@@ -4827,14 +4821,6 @@ typedef union {
 	_g->words.w0 = _SHIFTL(G_SPECIAL_4, 24, 8); \
 	_g->words.w1 = (unsigned int)(iod); \
 }
-/*
- * G_SPECIAL_4: IOD parameter flags
- */
-#define iodNormal       0x00
-#define iodGoddard      0x01
-#define iodFileSelect   0x02
-#define iodStarSelect   0x03
-#define iodCannon       0x04
 
 #endif
 

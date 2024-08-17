@@ -33,6 +33,10 @@
     #include "src/pc/audio/audio_3ds_threading.h"
 #endif
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 #define PLAY_MODE_NORMAL 0
 #define PLAY_MODE_PAUSED 2
 #define PLAY_MODE_CHANGE_AREA 3
@@ -1169,7 +1173,7 @@ s32 update_level(void) {
 
 s32 init_level(void) {
 #ifdef TARGET_N3DS
-    gDPSetIod(gDisplayListHead++, iodNormal);
+    gDPSetIod(gDisplayListHead++, IOD_NORMAL);
 #endif
     s32 val4 = 0;
 

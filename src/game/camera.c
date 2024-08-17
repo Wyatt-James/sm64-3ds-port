@@ -29,6 +29,10 @@
 #include "engine/graph_node.h"
 #include "level_table.h"
 
+#ifdef TARGET_N3DS
+#include "src/pc/gfx/gfx_3ds_constants.h"
+#endif
+
 #define CBUTTON_MASK (U_CBUTTONS | D_CBUTTONS | L_CBUTTONS | R_CBUTTONS)
 
 /**
@@ -2786,7 +2790,7 @@ void mode_cannon_camera(struct Camera *c) {
     c->nextYaw = update_in_cannon(c, c->focus, c->pos);
     if (gPlayer1Controller->buttonPressed & A_BUTTON) {
 #ifdef TARGET_N3DS
-        gDPSetIod(gDisplayListHead++, iodNormal);
+        gDPSetIod(gDisplayListHead++, IOD_NORMAL);
 #endif
         set_camera_mode(c, CAMERA_MODE_BEHIND_MARIO, 1);
         sPanDistance = 0.f;

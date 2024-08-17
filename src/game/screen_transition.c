@@ -67,7 +67,6 @@ s32 dl_transition_color(s8 fadeTimer, u8 transTime, struct WarpTransitionData *t
     Vtx *verts = vertex_transition_color(transData, alpha);
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++);
         gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
 #endif
     if (verts != NULL) {
@@ -79,7 +78,6 @@ s32 dl_transition_color(s8 fadeTimer, u8 transTime, struct WarpTransitionData *t
         gSPDisplayList(gDisplayListHead++, dl_screen_transition_end);
     }
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++);
         gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     return set_and_reset_transition_fade_timer(fadeTimer, transTime);
@@ -187,7 +185,6 @@ s32 render_textured_transition(s8 fadeTimer, s8 transTime, struct WarpTransition
     Vtx *verts = alloc_display_list(8 * sizeof(*verts));
 
 #ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
     gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
 #endif
     if (verts != NULL) {
@@ -220,7 +217,6 @@ s32 render_textured_transition(s8 fadeTimer, s8 transTime, struct WarpTransition
     } else {
     }
 #ifdef TARGET_N3DS
-    gDPForceFlush(gDisplayListHead++);
     gDPSet2d(gDisplayListHead++, STEREO_MODE_3D);
 #endif
     return set_and_reset_transition_fade_timer(fadeTimer, transTime);
@@ -323,7 +319,7 @@ Gfx *geo_cannon_circle_base(s32 callContext, struct GraphNode *node, UNUSED Mat4
         && gCurrentArea->camera->mode == CAMERA_MODE_INSIDE_CANNON) {
         graphNode->fnNode.node.flags = (graphNode->fnNode.node.flags & 0xFF) | 0x500;
 #ifdef TARGET_N3DS
-        gDPSetIod(gDisplayListHead++, iodCannon);
+        gDPSetIod(gDisplayListHead++, IOD_CANNON);
 #endif
         dlist = render_cannon_circle_base();
     }

@@ -26,6 +26,7 @@
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/profiler_3ds.h"
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
+#include "src/pc/gfx/gfx_3ds_constants.h"
 
 #define GRANULAR_PROFILING 0
 
@@ -272,6 +273,8 @@ static struct ShaderState {
     union int16x4 texture_settings;
     union RGBA32 prim_color;
     union RGBA32 env_color;
+    enum Stereoscopic3dMode stereo_3d_mode;
+    enum IodMode iod_mode;
 } shader_state;
 
 static struct RenderingState {
@@ -309,39 +312,6 @@ static int om_h_sets = 0, om_l_sets = 0, om_h_skips = 0, om_l_skips = 0;
 
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
-
-static void gfx_set_2d(int mode_2d)
-{
-    gfx_rapi_set_2d_mode(mode_2d);
-}
-
-static void gfx_set_iod(unsigned int iod)
-{
-    float z, w;
-    switch(iod) {
-        case iodNormal :
-            z = 8.0f;
-            w = 16.0f;
-            break;
-        case iodGoddard :
-            z = 0.5f;
-            w = 0.5f;
-            break;
-        case iodFileSelect :
-            z = 96.0f;
-            w = 128.0f;
-            break;
-        case iodStarSelect :
-            z = 128.0f;
-            w = 76.0f;
-            break;
-        case iodCannon :
-            z = 0.0f;
-            w = -128.0f;
-            break;
-    }
-    gfx_rapi_set_iod(z, w);
-}
 
 static void gfx_apply_matrices()
 {
@@ -387,6 +357,49 @@ static void gfx_flush(void) {
     }
 
     granular_log_time(12); // gfx_flush
+}
+
+static void gfx_set_2d(int mode_2d)
+{
+    if (shader_state.stereo_3d_mode != mode_2d) {
+        shader_state.stereo_3d_mode  = mode_2d;
+        gfx_flush();
+        
+        gfx_rapi_set_2d_mode(mode_2d);
+    }
+}
+
+static void gfx_set_iod(uint32_t iod)
+{
+    if (shader_state.iod_mode != iod) {
+        shader_state.iod_mode  = iod;
+        gfx_flush();
+
+        float z, w;
+        switch(iod) {
+            case IOD_NORMAL :
+                z = 8.0f;
+                w = 16.0f;
+                break;
+            case IOD_GODDARD :
+                z = 0.5f;
+                w = 0.5f;
+                break;
+            case IOD_FILE_SELECT :
+                z = 96.0f;
+                w = 128.0f;
+                break;
+            case IOD_STAR_SELECT :
+                z = 128.0f;
+                w = 76.0f;
+                break;
+            case IOD_CANNON :
+                z = 0.0f;
+                w = -128.0f;
+                break;
+        }
+        gfx_rapi_set_iod(z, w);
+    }
 }
 
 static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, const uint8_t *orig_addr, uint32_t fmt, uint32_t siz) {
@@ -1140,6 +1153,8 @@ static void shader_state_init(struct ShaderState* ss)
     ss->texture_settings.u64 = ~0;
     ss->prim_color.u32 = ~rdp.prim_color.u32;
     ss->env_color.u32  = ~rdp.env_color.u32;
+    ss->stereo_3d_mode = STEREO_MODE_COUNT;
+    ss->iod_mode = IOD_COUNT;
 }
 
 static void calculate_cc_id()

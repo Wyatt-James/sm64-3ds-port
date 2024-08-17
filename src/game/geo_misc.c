@@ -208,7 +208,6 @@ Gfx *geo_exec_cake_end_screen(s32 callContext, struct GraphNode *node, UNUSED f3
         displayListHead = displayList;
 
         generatedNode->fnNode.node.flags = (generatedNode->fnNode.node.flags & 0xFF) | 0x100;
-        gDPForceFlush(displayListHead++);
         gDPSet2d(displayListHead++, STEREO_MODE_2D);
 #else
     if (callContext == GEO_CONTEXT_RENDER) {

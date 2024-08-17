@@ -9,4 +9,13 @@ enum Stereoscopic3dMode {
     STEREO_MODE_COUNT                 // Number of modes
 };
 
+enum IodMode {
+    IOD_NORMAL       =  0,
+    IOD_GODDARD,     // 1
+    IOD_FILE_SELECT, // 2
+    IOD_STAR_SELECT, // 3
+    IOD_CANNON,      // 4
+    IOD_COUNT        // Number of modes
+};
+
 #endif

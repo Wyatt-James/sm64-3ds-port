@@ -154,6 +154,7 @@ static void initialise_screens()
     // Required for cake screen
     gfx_rapi_enable_viewport_clear_buffer_flag(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 
+    // WYATT_TODO will crash if framebuffers are set to load in VRAM! See gfxInit in this file.
     // consoleInit(GFX_BOTTOM, NULL);
 }
 
@@ -293,6 +294,7 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
 
     // Allocating to VRAM instead of Linear Memory is faster.
     // WYATT_TODO fix the garbage displayed on boot caused by this change.
+    // WYATT_TODO Crashes on boot if console is enabled!
     gfxInit(GSP_BGR8_OES, GSP_BGR8_OES, true);
 
     gfx_3ds_menu_init();

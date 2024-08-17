@@ -379,7 +379,6 @@ void render_game(void) {
                       SCREEN_HEIGHT - BORDER_HEIGHT);
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush anything
         gDPSet2d(gDisplayListHead++, STEREO_MODE_2D); // HUD, text labels and cutscene text are 2D
 #endif
 
@@ -389,21 +388,18 @@ void render_game(void) {
         do_cutscene_handler();
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush HUD, text labels and cutscene text
         gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
 #endif
 
         render_press_start(); // "press start" handler
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush press start
         gDPSet2d(gDisplayListHead++, STEREO_MODE_3D_CREDITS); // credits are mode3
 #endif
 
         print_displaying_credits_entry();
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush credits
         gDPSet2d(gDisplayListHead++, STEREO_MODE_2D); // dialog/menus are 2D
 #endif
 
@@ -412,7 +408,6 @@ void render_game(void) {
         gPauseScreenMode = render_menus_and_dialogs();
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush dialog/menus
         gDPSet2d(gDisplayListHead++, STEREO_MODE_3D); // reset 2D mode
 #endif
 
@@ -444,14 +439,12 @@ void render_game(void) {
     } else {
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush anything
         gDPSet2d(gDisplayListHead++, STEREO_MODE_2D); // text labels are 2D
 #endif
 
         render_text_labels();
 
 #ifdef TARGET_N3DS
-        gDPForceFlush(gDisplayListHead++); // flush text labels
         gDPSet2d(gDisplayListHead++, STEREO_MODE_3D); // reset 2D mode
 #endif
 
