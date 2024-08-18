@@ -45,6 +45,7 @@
 #define GRANULAR_FLUSH_DO(v_) do { v_; } while (0)
 #define gfx_flush(id_) gfx_flush_impl(id_)
 static int flushes[FLUSH_COUNTERS], flush_avoids[FLUSH_COUNTERS]; // Read with debugger
+static int tris_per_flush[FLUSH_COUNTERS][255];
 #else
 #define GRANULAR_FLUSH(v_)
 #define GRANULAR_FLUSH_DO(v_) do {} while (0)
@@ -363,6 +364,7 @@ static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
 
     // Over 50% of calls are pointless
     if (UNLIKELY(buf_vbo_num_verts > 0)) {
+        GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += buf_vbo_num_verts / 3);
         GRANULAR_FLUSH_DO(flushes[flush_id]++);
         gfx_apply_matrices();
 
@@ -1780,8 +1782,13 @@ void gfx_run(Gfx *commands) {
     om_h_sets = om_l_sets = om_h_skips = om_l_skips = 0;
 #endif
 
+    // GDB print commands:
+    // set print repeats 0
+    // set print elements 10000
+    // set logging on
     GRANULAR_FLUSH_DO(bzero(flushes, sizeof(flushes)));
     GRANULAR_FLUSH_DO(bzero(flush_avoids, sizeof(flush_avoids)));
+    GRANULAR_FLUSH_DO(bzero(tris_per_flush, sizeof(tris_per_flush)));
 }
 
 void gfx_end_frame(void) {
