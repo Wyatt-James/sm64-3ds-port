@@ -117,18 +117,18 @@ void                    gfx_rapi_enable_viewport_clear_buffer_flag  (uint32_t vi
 
 // Optional feature: GPU texture coordinate calculation
 #if GFX_RAPI_GPU_TEXCOORDS == GFX_ENABLE
-void                    gfx_rapi_set_uv_offset                      (float offset);
-void                    gfx_rapi_set_texture_settings               (int16_t uls, int16_t ult, int16_t width, int16_t height);
+void                    gfx_rapi_set_uv_offset                    (float offset);                                                               // Sets the global offset for UV coordinates.
+void                    gfx_rapi_set_texture_settings             (int16_t upper_left_s, int16_t upper_left_t, int16_t width, int16_t height);  // Sets various texture settings.
 #endif
 
 // Optional feature: GPU color combiner
 #if GFX_RAPI_COLOR_COMBINER == GFX_ENABLE
-void                      gfx_rapi_select_color_combiner            (size_t cc_index);
-size_t                    gfx_rapi_lookup_or_create_color_combiner  (uint32_t cc_id);
-void                      gfx_rapi_color_combiner_get_info          (size_t cc_index, uint8_t *num_inputs, bool used_textures[2]);
+void                    gfx_rapi_select_color_combiner            (size_t cc_index);                                              // Selects a color combiner by index. Bounds checks are not enforced. If the current CC is already loaded, does nothing.
+size_t                  gfx_rapi_lookup_or_create_color_combiner  (uint32_t cc_id);                                               // Looks up or creates a color combiner from the given CCID.
+void                    gfx_rapi_color_combiner_get_info          (size_t cc_index, uint8_t *num_inputs, bool used_textures[2]);  // Returns some info about the current color combiner.
 
-void                      gfx_rapi_set_cc_prim_color                (uint32_t color);
-void                      gfx_rapi_set_cc_env_color                 (uint32_t color);
+void                    gfx_rapi_set_cc_prim_color                (uint32_t color);                                               // Sets the GPU prim color. This is global across color combiners.
+void                    gfx_rapi_set_cc_env_color                 (uint32_t color);                                               // Sets the GPU env color. This is global across color combiners.
 #endif
 
 #endif

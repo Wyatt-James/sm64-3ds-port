@@ -934,10 +934,10 @@ void gfx_rapi_set_uv_offset(float offset)
 }
 
 // Optimized in the emulation layer
-void gfx_rapi_set_texture_settings(int16_t uls, int16_t ult, int16_t width, int16_t height)
+void gfx_rapi_set_texture_settings(int16_t upper_left_s, int16_t upper_left_t, int16_t width, int16_t height)
 {
-    texture_settings.uls = uls;
-    texture_settings.ult = ult;
+    texture_settings.uls = upper_left_s;
+    texture_settings.ult = upper_left_t;
     texture_settings.width = width;
     texture_settings.height = height;
     FLAG_SET(render_state.flags, FLAG_TEX_SETTINGS_CHANGED);
