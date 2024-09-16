@@ -3,10 +3,10 @@
 ; Emu64 Texture coordinate calculation routine
 
 ; ----- Uniforms -----
-.fvec tex_settings_1  ; { scale_s, scale_t, uv_offset, 1.0 }
+.fvec tex_settings_1  ; { scale_s, scale_t, uv_offset, UNUSED }
 .fvec tex_settings_2  ; { uls, ult, tex_width, tex_height }
-.fvec texture_const_1 ; { 0,  1, 0,    0 }
-.fvec texture_const_2 ; { 4, -8, 1/32, 0 }
+.fvec texture_const_1 ; { 0,  1, 1/65536, 1/(127 * 4) }
+.fvec texture_const_2 ; { 4, -8, 1/32,    1/4         }
 
 ; ----- Aliases -----
 .alias tex_scale      tex_settings_1.xyxy ; Vector with { scale_s, scale_t }
@@ -14,7 +14,7 @@
 .alias uls_ult        tex_settings_2.xyxy ; Vector with { uls, ult }
 .alias tex_wh         tex_settings_2.zwzw ; Vector with { tex_width, tex_height }
 
-.alias tcofs          texture_const_1.xyzz  ; Vector with { tcof1, tcof2, 0, 0 }
+.alias tcofs          texture_const_1.xy    ; Vector with { tcof1, tcof2 }
 .alias scale_4        texture_const_2.xxxx  ; Vector full of 4.0
 .alias scale_neg_8    texture_const_2.yyyy  ; Vector full of -8.0
 .alias scale_1_32     texture_const_2.zzzz  ; Vector full of 1/32
@@ -23,6 +23,7 @@
 ; These are intended purposes, but they may vary betwen subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
 .alias sub_param_1    r12 ; Subroutine input register
 .alias sub_param_2    r13 ; Subroutine input register
 .alias sub_param_3    r14 ; Subroutine input register

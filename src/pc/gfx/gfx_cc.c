@@ -49,7 +49,7 @@ void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features) {
     cc_features->color_alpha_same = (shader_id & 0xfff) == ((shader_id >> 12) & 0xfff);
 }
 
-void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, uint32_t* out_shader_id) {
+void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id) {
     uint32_t shader_id = (cc_id >> 24) << 24;
     union CCInputMapping c = {{0}};
 

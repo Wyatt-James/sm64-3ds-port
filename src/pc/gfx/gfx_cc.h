@@ -26,6 +26,11 @@ enum {
     SHADER_TEXEL1
 };
 
+typedef uint32_t ColorCombinerId; // Contains the entire description of a color combiner, as per gfx_pc.c.
+typedef uint32_t CCShaderId;
+
+#define DELIBERATELY_INVALID_CC_ID ~0 // Represents an invalid color combiner, to be used for initial conditions.
+
 #define SHADER_OPT_ALPHA        (1 << 24)
 #define SHADER_OPT_FOG          (1 << 25)
 #define SHADER_OPT_TEXTURE_EDGE (1 << 26)
@@ -74,7 +79,7 @@ void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features);
 
 // Generates a set of CC shader-input mappings and a shader ID from a CC ID.
 // Unused mappings are set to CC_0.
-void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, uint32_t* out_shader_id);
+void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id);
 
 #ifdef __cplusplus
 }

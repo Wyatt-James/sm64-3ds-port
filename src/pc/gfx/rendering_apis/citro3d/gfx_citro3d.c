@@ -10,6 +10,7 @@
 #include "gfx_citro3d.h"
 #include "gfx_citro3d_helpers.h"
 #include "gfx_citro3d_fog_cache.h"
+#include "src/pc/gfx/gfx_3ds_types.h"
 
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/gfx/gfx_3ds_shaders.h"
@@ -25,9 +26,11 @@
 #include "src/pc/gfx/texture_conversion.h"
 #include "src/pc/pc_metrics.h"
 
-#define VIDEO_BUFFER_SIZE (256 * 1024 * sizeof(float)) // 1MB
-#define TEXTURE_POOL_SIZE 4096
-#define MAX_VIDEO_BUFFERS 3      // One per-DVLE
+#define VERTEX_BUFFER_UNIT_SIZE sizeof(float)
+#define VERTEX_BUFFER_NUM_UNITS (256 * 1024) // 1MB
+#define VERTEX_BUFFER_NUM_BYTES (VERTEX_BUFFER_NUM_UNITS * VERTEX_BUFFER_UNIT_SIZE) // 1MB
+#define TEXTURE_POOL_SIZE   4096
+#define MAX_VERTEX_BUFFERS  EMU64_NUM_VERTEX_FORMATS // Create as many as there are vertex formats.
 #define MAX_SHADER_PROGRAMS 32
 #define MAX_COLOR_COMBINERS 64
 
@@ -60,15 +63,20 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 #define FLAG_SCISSOR_CHANGED              BIT(3)
 #define FLAG_VIEWPORT_OR_SCISSOR_CHANGED (FLAG_VIEWPORT_CHANGED | FLAG_SCISSOR_CHANGED)
 #define FLAG_TEX_SETTINGS_CHANGED         BIT(4) // Set explicitly by RDP commands.
-#define FLAG_SHADER_UNINITIALIZED         BIT(5)
-#define FLAG_CC_MAPPING_CHANGED           BIT(6)
+#define FLAG_CC_MAPPING_CHANGED           BIT(5)
+#define FLAG_RECALCULATE_SHADER           BIT(6)
+#define FLAG_VERT_LOAD_FLAGS_CHANGED      BIT(7) // Excludes lighting_enable since it's handled by FLAG_RECALCULATE_SHADER
 
 #define FLAG_ALL ~0
-#define FLAG_SET_ON_FRAME_START (FLAG_VIEWPORT_OR_SCISSOR_CHANGED | FLAG_TEX_SETTINGS_CHANGED | FLAG_CC_MAPPING_CHANGED)
+#define FLAG_SET_ON_FRAME_START (FLAG_VIEWPORT_OR_SCISSOR_CHANGED | FLAG_TEX_SETTINGS_CHANGED | FLAG_CC_MAPPING_CHANGED | FLAG_RECALCULATE_SHADER | FLAG_VERT_LOAD_FLAGS_CHANGED)
 
 #define FLAG_ON(flags_, flag_)    ((flags_) &  (flag_))
 #define FLAG_SET(flags_, flag_)   ((flags_) |= (flag_))
 #define FLAG_CLEAR(flags_, flag_)  flags_ &= ~(flag_)
+
+#define RFLAG_ON(flag_)    FLAG_ON(render_state.flags,    flag_)
+#define RFLAG_SET(flag_)   FLAG_SET(render_state.flags,   flag_)
+#define RFLAG_CLEAR(flag_) FLAG_CLEAR(render_state.flags, flag_)
 
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 
@@ -99,31 +107,34 @@ struct ShaderInputMapping {
           c2_a;
 };
 
-struct ColorCombiner {
-    struct ShaderInputMapping c3d_shader_input_mapping;
-    struct ShaderProgram* shader_program;
-    bool use_env_color;
-    uint32_t cc_id;
-    uint32_t cc_mapping_identifier; // Used to improve performance
-    uint32_t shader_id;
-};
-
-// N64 shader program
-struct ShaderProgram {
-    uint32_t shader_id; // N64 shader_id
-    struct VideoBuffer* video_buffer;
-    struct CCFeatures cc_features;
-    C3D_TexEnv texenv_slot_0;
-};
-
-// 3DS shader's video buffer. May be shared by multiple ShaderPrograms.
-struct VideoBuffer {
-    const struct n3ds_shader_info* shader_info;
-    shaderProgram_s shader_program; // pica vertex shader
-    float *ptr;
-    size_t offset;
-    C3D_AttrInfo attr_info;
+// Represents a vertex buffer.
+// Any number of shaders can use a buffer, but their attribute count and stride must be identical.
+struct VertexBuffer {
+    const struct n3ds_shader_vbo_info* vbo_info;
     C3D_BufInfo buf_info;
+    C3D_AttrInfo* attr_info; // Only used to avoid duplicates.
+    float *ptr;
+    size_t num_verts;
+};
+
+/*
+ * Represents a 3DS shader program.
+ * Can use any video buffer with the correct stride and attribute count.
+ */ 
+struct ShaderProgram {
+    union ShaderProgramFeatureFlags shader_features;
+    shaderProgram_s pica_shader_program; // pica shader program
+    struct VertexBuffer* vertex_buffer;
+    C3D_AttrInfo attr_info;              // Describes VBO structure
+};
+
+struct ColorCombiner {
+    bool use_env_color;
+    ColorCombinerId cc_id;
+    struct ShaderInputMapping c3d_shader_input_mapping; // Sent to GPU
+    C3D_TexEnv texenv_slot_0; // Sent to GPU
+    uint32_t cc_mapping_identifier; // Used to improve performance
+    struct CCFeatures cc_features;
 };
 
 struct ScreenClearConfig {
@@ -147,7 +158,7 @@ struct TextureSettings {
 };
 
 struct GameMtxSet {
-    C3D_Mtx model_view, game_projection;
+    C3D_Mtx model_view, transposed_model_view, game_projection;
 };
 
 struct TexHandle {
@@ -164,6 +175,8 @@ struct OptimizationFlags {
     bool viewport_and_scissor;
     bool texture_settings_1;
     bool texture_settings_2;
+    bool change_shader_on_cc_change;
+    bool consecutive_vertex_load_flags;
 };
 
 struct RenderState {
@@ -178,12 +191,20 @@ struct RenderState {
     union f32x2 texture_scale;   // Varies per-texture.
     Gfx3DSMode current_gfx_mode;
     float prev_slider_level;
+    struct ShaderProgram* shader_program;
 };
 
-// One per-DVLE
-static struct VideoBuffer video_buffers[MAX_VIDEO_BUFFERS];
-static struct VideoBuffer* current_video_buffer = NULL;
-static uint8_t num_video_buffers = 0;
+struct VertexLoadFlags {
+    bool enable_lighting;
+    uint8_t num_lights;
+    bool enable_texgen;
+    uint32_t texture_scale_s, texture_scale_t;
+};
+
+static struct VertexBuffer vertex_buffers[MAX_VERTEX_BUFFERS];
+static struct VertexBuffer* current_vertex_buffer = NULL;
+static uint8_t num_vertex_buffers = 0;
+static int num_rejected_draw_calls = 0;
 
 static struct ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
 static struct ShaderProgram* current_shader_program = NULL;
@@ -226,11 +247,12 @@ static struct GameMtxSet game_matrix_sets[NUM_MATRIX_SETS];
 // Projection is the 3DS-specific P-matrix.
 // Model_view is the N64 MV-matrix.
 // Game_projection is the N64 P-matrix.
-static C3D_Mtx  projection_2d        = C3D_STATIC_IDENTITY_MTX,
-                projection_left      = C3D_STATIC_IDENTITY_MTX,
-                projection_right     = C3D_STATIC_IDENTITY_MTX,
-               *model_view      = &game_matrix_sets[DEFAULT_MATRIX_SET].model_view,
-               *game_projection = &game_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
+static C3D_Mtx  projection_2d         = C3D_STATIC_IDENTITY_MTX,
+                projection_left       = C3D_STATIC_IDENTITY_MTX,
+                projection_right      = C3D_STATIC_IDENTITY_MTX,
+               *model_view            = &game_matrix_sets[DEFAULT_MATRIX_SET].model_view,
+               *transposed_model_view = &game_matrix_sets[DEFAULT_MATRIX_SET].transposed_model_view,
+               *game_projection       = &game_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
 
 // Determines the clear config for each viewport.
 static union ScreenClearConfigsN3ds screen_clear_configs = {
@@ -246,7 +268,9 @@ static struct OptimizationFlags optimize = {
     .consecutive_framebuf = true,
     .viewport_and_scissor = true,
     .texture_settings_1 = true,
-    .texture_settings_2 = true
+    .texture_settings_2 = true,
+    .change_shader_on_cc_change = true,
+    .consecutive_vertex_load_flags = true
 };
 
 static struct RenderState render_state = {
@@ -258,7 +282,16 @@ static struct RenderState render_state = {
     .texture_scale = {.f64 = INFINITY},
     .uv_offset = INFINITY,
     .current_gfx_mode = GFX_3DS_MODE_INVALID,
-    .prev_slider_level = INFINITY
+    .prev_slider_level = INFINITY,
+    .shader_program = NULL
+};
+
+static struct VertexLoadFlags vertex_load_flags = {
+    .enable_lighting = false,
+    .num_lights = 0,
+    .enable_texgen = false,
+    .texture_scale_s = 1,
+    .texture_scale_t = 1
 };
 
 // --------------- Internal-use functions ---------------
@@ -266,8 +299,8 @@ static struct RenderState render_state = {
 // Handles 3DS screen clearing
 static void internal_citro3d_clear_buffers()
 {
-    C3D_ClearBits clear_top    = (C3D_ClearBits) screen_clear_configs.top.bufs,
-                  clear_bottom = (C3D_ClearBits) screen_clear_configs.bottom.bufs;
+    C3D_ClearBits clear_top    = (C3D_ClearBits) screen_clear_configs.top.bufs    | C3D_CLEAR_ALL,
+                  clear_bottom = (C3D_ClearBits) screen_clear_configs.bottom.bufs | C3D_CLEAR_ALL;
 
     uint32_t color_top    = BSWAP32(screen_clear_configs.top.color.u32),
              color_bottom = BSWAP32(screen_clear_configs.bottom.color.u32),
@@ -287,145 +320,98 @@ static void internal_citro3d_clear_buffers()
         C3D_RenderTargetClear(gTargetBottom, clear_bottom, color_bottom, depth_bottom);
 }
 
-static struct VideoBuffer* internal_citro3d_setup_video_buffer(const struct n3ds_shader_info* shader_info)
+static void internal_citro3d_select_vertex_buffer(struct VertexBuffer* vb)
 {
-    // Search for the existing shader to avoid loading it twice
-    for (int i = 0; i < num_video_buffers; i++)
-    {
-        struct VideoBuffer* vb = &video_buffers[i];
-        if (shader_info->identifier == vb->shader_info->identifier)
-            return vb;
+    current_vertex_buffer = vb;
+    C3D_SetBufInfo(&vb->buf_info);
+}
+
+static struct VertexBuffer* internal_citro3d_setup_vertex_buffer(const struct n3ds_shader_vbo_info* vbo_info, C3D_AttrInfo* attr_info)
+{
+    if (num_vertex_buffers == MAX_VERTEX_BUFFERS) {
+        printf("Error: too many vertex buffers! (%d)\n", num_vertex_buffers + 1);
+        return &vertex_buffers[0];
     }
 
-    // not found, create new
-    struct VideoBuffer *vb = &video_buffers[num_video_buffers++];
-    vb->shader_info = shader_info;
+    struct VertexBuffer* vb = &vertex_buffers[num_vertex_buffers++];
+    vb->vbo_info = vbo_info;
 
-    uint32_t dvle_index = vb->shader_info->dvle_index;
-    
-    shaderProgramInit(&vb->shader_program);
-    shaderProgramSetVsh(&vb->shader_program, &vb->shader_info->binary->dvlb->DVLE[dvle_index]);
-    shaderProgramSetGsh(&vb->shader_program, NULL, 0);
-
-    // Configure attributes for use with the vertex shader
-    int attr = 0;
-    uint32_t attr_mask = 0;
-
-    AttrInfo_Init(&vb->attr_info);
-
-    if (shader_info->vbo_info.has_position)
-    {
-        attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_SHORT, 4); // XYZ (W is set to 1.0f in the shader)
-    }
-    if (shader_info->vbo_info.has_texture)
-    {
-        attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_SHORT, 2); // ST
-    }
-    if (shader_info->vbo_info.has_color)
-    {
-        attr_mask += attr * (1 << 4 * attr);
-        AttrInfo_AddLoader(&vb->attr_info, attr++, GPU_UNSIGNED_BYTE, 4); // RGBA
-    }
-
-    // Create the VBO (vertex buffer object)
-    vb->ptr = linearAlloc(VIDEO_BUFFER_SIZE);
-    vb->offset = 0;
+    // Create the vertex buffer
+    vb->ptr = linearAlloc(VERTEX_BUFFER_NUM_BYTES);
+    vb->num_verts = 0;
 
     // Configure buffers
     BufInfo_Init(&vb->buf_info);
-    BufInfo_Add(&vb->buf_info, vb->ptr, shader_info->vbo_info.stride * sizeof(float), attr, attr_mask);
+    BufInfo_Add(&vb->buf_info, vb->ptr, vbo_info->stride * VERTEX_BUFFER_UNIT_SIZE, attr_info->attrCount, attr_info->permutation);
+    vb->attr_info = attr_info;
 
     return vb;
 }
 
-static void internal_citro3d_load_shader(struct ShaderProgram *prg)
+static struct VertexBuffer* internal_citro3d_lookup_or_create_vertex_buffer(const struct n3ds_shader_vbo_info* vbo_info, C3D_AttrInfo* attr_info)
 {
-    struct VideoBuffer* vb = prg->video_buffer;
-
-    current_shader_program = prg;
-    current_video_buffer = vb;
-
-    C3D_BindProgram(&vb->shader_program);
-
-    // Update buffer info
-    C3D_SetBufInfo(&current_video_buffer->buf_info);
-    C3D_SetAttrInfo(&current_video_buffer->attr_info);
-
-    // Configure TEV
-    if (prg->cc_features.num_inputs == 2)
+    // Avoid duplicates
+    for (size_t i = 0; i < num_vertex_buffers; i++)
     {
-        C3D_SetTexEnv(0, &texenv_slot_1);
-        C3D_SetTexEnv(1, &prg->texenv_slot_0);
-    } else {
-        C3D_SetTexEnv(0, &prg->texenv_slot_0);
-        C3D_TexEnvInit(C3D_GetTexEnv(1));
+        struct VertexBuffer* vb = &vertex_buffers[i];
+        if (memcmp(attr_info, vb->attr_info, sizeof(*attr_info)) == 0)
+            return vb;
     }
 
-    if (render_state.fog_enabled != prg->cc_features.opt_fog || OPT_DISABLED(optimize.consecutive_fog)) {
-        render_state.fog_enabled  = prg->cc_features.opt_fog;
-        GPU_FOGMODE mode = prg->cc_features.opt_fog ? GPU_FOG : GPU_NO_FOG;
-        C3D_FogGasMode(mode, GPU_PLAIN_DENSITY, true);
-    }
-
-    const uint8_t alpha_test = prg->cc_features.opt_texture_edge & prg->cc_features.opt_alpha;
-    if (render_state.alpha_test != alpha_test || OPT_DISABLED(optimize.alpha_test)) {
-        render_state.alpha_test  = alpha_test;
-        C3D_AlphaTest(true, GPU_GREATER, alpha_test ? 77 : 0);
-    }
-
-    // Initialize constant uniforms
-    if (FLAG_ON(render_state.flags, FLAG_SHADER_UNINITIALIZED)) {
-        FLAG_CLEAR(render_state.flags, FLAG_SHADER_UNINITIALIZED);
-        citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_1, (float*) &emu64_const_uniform_defaults.texture_const_1);
-        citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_2, (float*) &emu64_const_uniform_defaults.texture_const_2);
-        citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.cc_constants,    (float*) &emu64_const_uniform_defaults.cc_constants);
-        citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_1,   (float*) &emu64_const_uniform_defaults.emu64_const_1);
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_0], 0, 0, 0, 0);
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_1], 1, 1, 1, 1);
-    }
+    // not found, create new
+    return internal_citro3d_setup_vertex_buffer(vbo_info, attr_info);
 }
 
-static struct ShaderProgram* internal_citro3d_create_and_load_new_shader(uint32_t shader_id)
+static void internal_citro3d_load_shader(struct ShaderProgram *prg)
 {
+    current_shader_program = prg;
+
+    C3D_BindProgram(&prg->pica_shader_program);
+    C3D_SetAttrInfo(&prg->attr_info);
+    internal_citro3d_select_vertex_buffer(prg->vertex_buffer);
+}
+
+static struct ShaderProgram* internal_citro3d_create_new_shader(union ShaderProgramFeatureFlags shader_features)
+{
+    if (num_shader_programs == MAX_SHADER_PROGRAMS) {
+        printf("Error: too many shader programs! (%d)\n", num_shader_programs + 1);
+        return &shader_program_pool[0];
+    }
+
     struct ShaderProgram* prg = &shader_program_pool[num_shader_programs++];
 
-    prg->shader_id = shader_id;
-    gfx_cc_get_features(shader_id, &prg->cc_features);
+    prg->shader_features.u32 = shader_features.u32;
 
-    bool has_tex   = prg->cc_features.used_textures[0] || prg->cc_features.used_textures[1],
-         has_color = prg->cc_features.num_inputs > 0;
+    const struct n3ds_shader_info* shader_info = citro3d_helpers_get_shader_info_from_flags(prg->shader_features);
 
-    uint8_t shader_code = citro3d_helpers_calculate_shader_code(has_tex, has_color);
-    const struct n3ds_shader_info* shader_info = citro3d_helpers_get_shader_info(shader_code);
-    prg->video_buffer = internal_citro3d_setup_video_buffer(shader_info);
-
-    // Preconfigure TEV settings
-    citro3d_helpers_configure_tex_env_slot_0(&prg->cc_features, &prg->texenv_slot_0);
+    citro3d_helpers_init_attr_info(&shader_info->vbo_info.attributes, &prg->attr_info);
+    prg->vertex_buffer = internal_citro3d_lookup_or_create_vertex_buffer(&shader_info->vbo_info, &prg->attr_info);
     
-    internal_citro3d_load_shader(prg);
+    shaderProgramInit(&prg->pica_shader_program);
+    shaderProgramSetVsh(&prg->pica_shader_program, &shader_info->binary->dvlb->DVLE[shader_info->dvle_index]);
+    shaderProgramSetGsh(&prg->pica_shader_program, NULL, 0);
+
     return prg;
 }
 
-static struct ShaderProgram* internal_citro3d_lookup_shader(uint32_t shader_id)
+static struct ShaderProgram* internal_citro3d_lookup_shader(union ShaderProgramFeatureFlags shader_features)
 {
     for (size_t i = 0; i < num_shader_programs; i++)
     {
         struct ShaderProgram* prog = &shader_program_pool[i];
 
-        if (prog->shader_id == shader_id)
+        if (prog->shader_features.u32 == shader_features.u32)
             return prog;
     }
     return NULL;
 }
 
-static struct ShaderProgram* internal_citro3d_lookup_or_create_shader(uint32_t shader_id)
+static struct ShaderProgram* internal_citro3d_lookup_or_create_shader(union ShaderProgramFeatureFlags shader_features)
 {
-    struct ShaderProgram* shader_prog = internal_citro3d_lookup_shader(shader_id);
+    struct ShaderProgram* shader_prog = internal_citro3d_lookup_shader(shader_features);
     
     if (shader_prog == NULL)
-        shader_prog = internal_citro3d_create_and_load_new_shader(shader_id);
+        shader_prog = internal_citro3d_create_new_shader(shader_features);
     
     return shader_prog;
 }
@@ -457,16 +443,16 @@ void internal_citro3d_select_render_target(C3D_RenderTarget* target)
     // C3D_FrameDrawOn: overwrites framebuf settings, viewport, and disables scissor (through viewport)
     // C3D_SetViewport: overwrites viewport and disables scissor
     // C3D_SetScissor: overwrites scissor.
-    if (FLAG_ON(render_state.flags, FLAG_VIEWPORT_OR_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
-        FLAG_CLEAR(render_state.flags, FLAG_VIEWPORT_CHANGED);
-        FLAG_SET(render_state.flags,   FLAG_SCISSOR_CHANGED);
+    if (RFLAG_ON(FLAG_VIEWPORT_OR_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
+        RFLAG_CLEAR(FLAG_VIEWPORT_CHANGED);
+        RFLAG_SET(FLAG_SCISSOR_CHANGED);
         C3D_SetViewport(viewport_config.y, viewport_config.x, viewport_config.height, viewport_config.width);
     }
 
-    if (FLAG_ON(render_state.flags, FLAG_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
-        FLAG_CLEAR(render_state.flags, FLAG_SCISSOR_CHANGED);
+    if (RFLAG_ON(FLAG_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
+        RFLAG_CLEAR(FLAG_SCISSOR_CHANGED);
         if (scissor_config.enable)
-            C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2); // WYATT_TODO FIXME bug? should the last two params be reversed?
+            C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2);
     }
 }
 
@@ -565,14 +551,14 @@ void gfx_rapi_set_zmode_decal(bool zmode_decal)
 // Optimized in the emulation layer only for normal use; draw_rectangle is unoptomized.
 void gfx_rapi_set_viewport(int x, int y, int width, int height)
 {
-    FLAG_SET(render_state.flags, FLAG_VIEWPORT_CHANGED);
+    RFLAG_SET(FLAG_VIEWPORT_CHANGED);
     citro3d_helpers_convert_viewport_settings(&viewport_config, gGfx3DSMode, x, y, width, height);
 }
 
 // Optimized in the emulation layer
 void gfx_rapi_set_scissor(int x, int y, int width, int height)
 {
-    FLAG_SET(render_state.flags, FLAG_SCISSOR_CHANGED);
+    RFLAG_SET(FLAG_SCISSOR_CHANGED);
     citro3d_helpers_convert_scissor_settings(&scissor_config, gGfx3DSMode, x, y, width, height);
 }
 
@@ -585,19 +571,55 @@ void gfx_rapi_set_use_alpha(bool use_alpha)
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
 }
 
-void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
+void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t buf_vbo_num_tris)
 {
-    if (current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride > VIDEO_BUFFER_SIZE / sizeof(float))
-    {
-        printf("vertex buffer full!\n");
+    struct ColorCombiner* cc = current_color_combiner;
+    struct CCFeatures* cc_features = &cc->cc_features;
+    const bool hasTex  = cc_features->used_textures[0] || cc_features->used_textures[1],
+               hasCol  = cc_features->num_inputs > 0 && !vertex_load_flags.enable_lighting,
+               hasNorm = vertex_load_flags.enable_lighting;
+
+    // Select shader and vertex buffer. Must be done before using current_shader_program or current_vertex_buffer.
+    if (RFLAG_ON(FLAG_RECALCULATE_SHADER) || OPT_DISABLED(optimize.change_shader_on_cc_change)) {
+        RFLAG_CLEAR(FLAG_RECALCULATE_SHADER);
+
+        const union ShaderProgramFeatureFlags shader_features = {
+            .position = true,
+            .tex = hasTex,
+            .color = hasCol,
+            .normals = hasNorm
+        };
+
+        struct ShaderProgram* desired_shader = internal_citro3d_lookup_or_create_shader(shader_features);
+
+        if (render_state.shader_program != desired_shader) {
+            render_state.shader_program  = desired_shader;
+            internal_citro3d_load_shader(desired_shader);
+        }
+    }
+
+    // Update vertex loading flags
+    if (RFLAG_ON(FLAG_VERT_LOAD_FLAGS_CHANGED) || OPT_DISABLED(optimize.consecutive_vertex_load_flags)) {
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.vertex_load_flags, vertex_load_flags.num_lights, vertex_load_flags.enable_texgen, vertex_load_flags.texture_scale_s, vertex_load_flags.texture_scale_t);
+    }
+
+    float* const vb_ptr = current_vertex_buffer->ptr;
+    const size_t vb_num_verts = current_vertex_buffer->num_verts;
+    const uint8_t vb_stride = current_vertex_buffer->vbo_info->stride;
+    const size_t num_verts_this_drawcall = buf_vbo_num_tris * 3;
+    const size_t vb_num_verts_after = vb_num_verts + num_verts_this_drawcall;
+
+    // Prevent buffer overruns
+    if (vb_num_verts_after * vb_stride > VERTEX_BUFFER_NUM_UNITS) {
+        num_rejected_draw_calls++;
         return;
     }
 
-    struct CCFeatures* cc_features = &current_shader_program->cc_features;
-    const bool hasTex = cc_features->used_textures[0] || cc_features->used_textures[1];
+    float* const vb_head = &vb_ptr[vb_num_verts * vb_stride];
+    memcpy(vb_head, buf_vbo, buf_vbo_num_bytes * VERTEX_BUFFER_UNIT_SIZE);
 
     if (cc_features->num_inputs > 1) {
-        if (current_color_combiner->use_env_color)
+        if (cc->use_env_color)
             C3D_TexEnvColor(C3D_GetTexEnv(0), rdp_env_color.u32);
         else
             C3D_TexEnvColor(C3D_GetTexEnv(0), rdp_prim_color.u32);
@@ -612,15 +634,11 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo
             C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_1, tex->scale.s, tex->scale.t, texture_settings.uv_offset, 1);
         }
 
-        if (FLAG_ON(render_state.flags, FLAG_TEX_SETTINGS_CHANGED) || OPT_DISABLED(optimize.texture_settings_2)) {
-            FLAG_CLEAR(render_state.flags, FLAG_TEX_SETTINGS_CHANGED);
+        if (RFLAG_ON(FLAG_TEX_SETTINGS_CHANGED) || OPT_DISABLED(optimize.texture_settings_2)) {
+            RFLAG_CLEAR(FLAG_TEX_SETTINGS_CHANGED);
             C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_2, texture_settings.uls, texture_settings.ult, texture_settings.width, texture_settings.height);
         }
     }
-
-    // WYATT_TODO actually prevent buffer overruns.
-    float* const buf_vbo_head = current_video_buffer->ptr + current_video_buffer->offset * current_video_buffer->shader_info->vbo_info.stride;
-    memcpy(buf_vbo_head, buf_vbo, buf_vbo_len * sizeof(float));
 
     if (gGfx3DEnabled)
     {
@@ -637,20 +655,20 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo
             C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_left);
 
         internal_citro3d_select_render_target(gTarget);
-        C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
+        C3D_DrawArrays(GPU_TRIANGLES, current_vertex_buffer->num_verts, num_verts_this_drawcall);
 
         // right screen
         if (s2DMode != STEREO_MODE_2D)
             C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.projection_mtx, &projection_right);
 
         internal_citro3d_select_render_target(gTargetRight);
-        C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
+        C3D_DrawArrays(GPU_TRIANGLES, current_vertex_buffer->num_verts, num_verts_this_drawcall);
     } else {
         internal_citro3d_select_render_target(gTarget);
-        C3D_DrawArrays(GPU_TRIANGLES, current_video_buffer->offset, buf_vbo_num_tris * 3);
+        C3D_DrawArrays(GPU_TRIANGLES, current_vertex_buffer->num_verts, num_verts_this_drawcall);
     }
 
-    current_video_buffer->offset += buf_vbo_num_tris * 3;
+    current_vertex_buffer->num_verts = vb_num_verts_after;
 }
 
 void gfx_rapi_init()
@@ -679,7 +697,20 @@ void gfx_rapi_init()
 
     citro3d_helpers_configure_tex_env_slot_1(&texenv_slot_1);
 
-    FLAG_SET(render_state.flags, FLAG_ALL);
+    // Load a default shader. C3D requires this for many context-dependent operations.
+    union ShaderProgramFeatureFlags shader_features = {.position = true, .tex = false, .color = false, .normals = false };
+    internal_citro3d_load_shader(internal_citro3d_lookup_or_create_shader(shader_features));
+
+    // Initialize constant uniforms
+    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_1, (float*) &emu64_const_uniform_defaults.texture_const_1);
+    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_2, (float*) &emu64_const_uniform_defaults.texture_const_2);
+    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.cc_constants,    (float*) &emu64_const_uniform_defaults.cc_constants);
+    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_1,   (float*) &emu64_const_uniform_defaults.emu64_const_1);
+    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_2,   (float*) &emu64_const_uniform_defaults.emu64_const_2);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_0], 0, 0, 0, 0);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_1], 1, 1, 1, 1);
+
+    RFLAG_SET(FLAG_ALL);
     render_state.fog_enabled = 0xFF;
     render_state.fog_lut = NULL;
     render_state.alpha_test = 0xFF;
@@ -688,6 +719,13 @@ void gfx_rapi_init()
     render_state.uv_offset = INFINITY;
     render_state.current_gfx_mode = GFX_3DS_MODE_INVALID;
     render_state.prev_slider_level = INFINITY;
+    render_state.shader_program = NULL;
+    
+    vertex_load_flags.enable_lighting = false;
+    vertex_load_flags.num_lights = 0;
+    vertex_load_flags.enable_texgen = false;
+    vertex_load_flags.texture_scale_s = 1;
+    vertex_load_flags.texture_scale_t = 1;
 
     optimize.consecutive_fog = true;
     optimize.consecutive_stereo_p_mtx = true;
@@ -697,6 +735,8 @@ void gfx_rapi_init()
     optimize.viewport_and_scissor = true;
     optimize.texture_settings_1 = true;
     optimize.texture_settings_2 = true;
+    optimize.change_shader_on_cc_change = true;
+    optimize.consecutive_vertex_load_flags = true;
 }
 
 void gfx_rapi_on_resize()
@@ -706,13 +746,11 @@ void gfx_rapi_on_resize()
 
 void gfx_rapi_start_frame()
 {
-    for (int i = 0; i < num_video_buffers; i++)
-    {
-        video_buffers[i].offset = 0;
+    for (int i = 0; i < num_vertex_buffers; i++) {
+        vertex_buffers[i].num_verts = 0;
     }
 
     // if (frames_touch_screen_held == 1) {
-    //     // BOOL_INVERT(optimize.texture_settings_2);
     //     shprog_emu64_print_uniform_locations(stdout);
     // }
 
@@ -748,10 +786,11 @@ void gfx_rapi_start_frame()
 
     // Set each frame to ensure that target->used is set to true.
     // WYATT_TODO we can go further, but it would require hooking screen initialization.
-    FLAG_SET(render_state.flags, FLAG_SET_ON_FRAME_START);
     render_state.cur_target = NULL;
     render_state.texture_scale.f64 = INFINITY;
     render_state.uv_offset = INFINITY;
+    render_state.shader_program = NULL;
+    RFLAG_SET(FLAG_SET_ON_FRAME_START);
 }
 
 void gfx_rapi_end_frame()
@@ -764,11 +803,16 @@ void gfx_rapi_end_frame()
     C3D_CullFace(GPU_CULL_NONE);
 
     // TOOD: draw the minimap here
-    gfx_3ds_menu_draw(current_video_buffer->ptr, current_video_buffer->offset, gShowConfigMenu);
+    gfx_3ds_menu_draw(current_vertex_buffer->ptr, current_vertex_buffer->num_verts, gShowConfigMenu);
+    
+    if (num_rejected_draw_calls) {
+        printf("Drawcalls rejected b/c full VBO: %d\n", num_rejected_draw_calls);
+        num_rejected_draw_calls = 0;
+    }
 
     // Requires <3ds/gpu/gpu.h>
-    // printf("%c C %d RSP %d\n", OPT_ENABLED(optimize.texture_settings_2) ? 'Y' : '-', (int) gpuCmdBufOffset, num_rsp_commands_run);
-    PC_METRIC_DO(num_rsp_commands_run = 0);
+    // printf("%c C %d RSP %d\n", OPT_ENABLED(optimize.consecutive_vertex_load_flags) ? 'Y' : '-', (int) gpuCmdBufOffset, num_rsp_commands_run);
+    // PC_METRIC_DO(num_rsp_commands_run = 0);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
@@ -874,6 +918,8 @@ void gfx_rapi_set_iod(float z, float w)
 void gfx_rapi_set_model_view_matrix(float mtx[4][4])
 {
     citro3d_helpers_convert_mtx(mtx, model_view);
+    memcpy(transposed_model_view, model_view, sizeof(*transposed_model_view));
+    Mtx_Transpose(transposed_model_view);
 }
 
 void gfx_rapi_set_projection_matrix(float mtx[4][4])
@@ -885,6 +931,7 @@ void gfx_rapi_set_projection_matrix(float mtx[4][4])
 void gfx_rapi_apply_model_view_matrix()
 {
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.model_view_mtx, model_view);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, emu64_uniform_locations.transposed_model_view_mtx, transposed_model_view);
 }
 
 // Optimized in the emulation layer
@@ -895,14 +942,62 @@ void gfx_rapi_apply_projection_matrix()
 
 void gfx_rapi_select_matrix_set(uint32_t matrix_set_id)
 {
-    model_view      = &game_matrix_sets[matrix_set_id].model_view;
-    game_projection = &game_matrix_sets[matrix_set_id].game_projection;
+    model_view            = &game_matrix_sets[matrix_set_id].model_view;
+    transposed_model_view = &game_matrix_sets[matrix_set_id].transposed_model_view;
+    game_projection       = &game_matrix_sets[matrix_set_id].game_projection;
 }
 
 // Optimized in the emulation layer
 void gfx_rapi_set_backface_culling_mode(uint32_t culling_mode)
 {
     C3D_CullFace(citro3d_helpers_convert_cull_mode(culling_mode));
+}
+
+void gfx_rapi_enable_lighting(bool enable)
+{
+    if (vertex_load_flags.enable_lighting != enable) {
+        vertex_load_flags.enable_lighting  = enable;
+        RFLAG_SET(FLAG_RECALCULATE_SHADER);
+    }
+}
+
+void gfx_rapi_set_num_lights(int num_lights)
+{
+    RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    vertex_load_flags.num_lights = num_lights;
+}
+
+void gfx_rapi_configure_light(int light_id, Light_t* light)
+{
+    union RGBA32 color = {
+        .u32 = *(uint32_t*) &light->col // Alpha is ignored, so we can put garbage there.
+    };
+
+    // Ambient
+    if (light_id == 0)
+        citro3d_helpers_set_fv_unif_rgba32(GPU_VERTEX_SHADER, emu64_uniform_locations.ambient_light_color, color);
+
+    // Non-ambient
+    else {
+        light_id--;
+
+        // We don't need to scale the direction to [-1, 1] because it will be normalized
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.light_directions[light_id], light->dir[0], light->dir[1], light->dir[2], 0);
+        citro3d_helpers_set_fv_unif_rgba32(GPU_VERTEX_SHADER, emu64_uniform_locations.light_colors[light_id], color);
+    }
+}
+
+void gfx_rapi_enable_texgen(bool enable)
+{
+    RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    vertex_load_flags.enable_texgen = enable;
+}
+
+void gfx_rapi_set_texture_scaling_factor(uint32_t s, uint32_t t)
+{
+    RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    vertex_load_flags.texture_scale_s = s;
+    vertex_load_flags.texture_scale_t = t;
 }
 
 void gfx_rapi_set_viewport_clear_color(uint32_t viewport_id, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
@@ -940,7 +1035,7 @@ void gfx_rapi_set_texture_settings(int16_t upper_left_s, int16_t upper_left_t, i
     texture_settings.ult = upper_left_t;
     texture_settings.width = width;
     texture_settings.height = height;
-    FLAG_SET(render_state.flags, FLAG_TEX_SETTINGS_CHANGED);
+    RFLAG_SET(FLAG_TEX_SETTINGS_CHANGED);
 }
 
 // Redundant CCIDs are optimized in the emulation layer.
@@ -951,24 +1046,42 @@ void gfx_rapi_select_color_combiner(size_t cc_index)
     // Different CC: load the mappings
     if (current_color_combiner != cc) {
 
-        if (current_shader_program != cc->shader_program) {
-         // current_shader_program  = cc->shader_program; // Happens inside internal_citro3d_load_shader
-            internal_citro3d_load_shader(cc->shader_program);
-        }
-
         const bool cc_mappings_different = current_color_combiner == NULL || (cc->cc_mapping_identifier != current_color_combiner->cc_mapping_identifier);
-        const int shader_num_inputs = current_shader_program->cc_features.num_inputs;
+        const int shader_num_inputs = cc->cc_features.num_inputs;
 
         // Load the mappings only if different and they're enabled by the shader
         if (shader_num_inputs != 0 && cc_mappings_different)
             C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_color_selection, cc->c3d_shader_input_mapping.c1_rgb, cc->c3d_shader_input_mapping.c1_a, cc->c3d_shader_input_mapping.c2_rgb, cc->c3d_shader_input_mapping.c2_a);
+
+        // Configure TEV
+        if (cc->cc_features.num_inputs == 2)
+        {
+            C3D_SetTexEnv(0, &texenv_slot_1);
+            C3D_SetTexEnv(1, &cc->texenv_slot_0);
+        } else {
+            C3D_SetTexEnv(0, &cc->texenv_slot_0);
+            C3D_TexEnvInit(C3D_GetTexEnv(1));
+        }
+
+        if (render_state.fog_enabled != cc->cc_features.opt_fog || OPT_DISABLED(optimize.consecutive_fog)) {
+            render_state.fog_enabled  = cc->cc_features.opt_fog;
+            GPU_FOGMODE mode = cc->cc_features.opt_fog ? GPU_FOG : GPU_NO_FOG;
+            C3D_FogGasMode(mode, GPU_PLAIN_DENSITY, true);
+        }
+
+        const uint8_t alpha_test = cc->cc_features.opt_texture_edge & cc->cc_features.opt_alpha;
+        if (render_state.alpha_test != alpha_test || OPT_DISABLED(optimize.alpha_test)) {
+            render_state.alpha_test  = alpha_test;
+            C3D_AlphaTest(alpha_test, GPU_GREATER, 77);
+        }
         
-        current_color_combiner  = cc;
+        current_color_combiner = cc;
+        RFLAG_SET(FLAG_RECALCULATE_SHADER);
     }
 }
 
 // Redundant CCIDs are optimized in the emulation layer.
-size_t gfx_rapi_lookup_or_create_color_combiner(uint32_t cc_id)
+size_t gfx_rapi_lookup_or_create_color_combiner(ColorCombinerId cc_id)
 {
     // Find existing CC
     for (size_t i = 0; i < num_color_combiners; i++) {
@@ -981,15 +1094,17 @@ size_t gfx_rapi_lookup_or_create_color_combiner(uint32_t cc_id)
     struct ColorCombiner* cc = &color_combiner_pool[cc_index];
     num_color_combiners = (num_color_combiners + 1) % MAX_COLOR_COMBINERS;
 
-    uint32_t shader_id;
     union CCInputMapping mapping;
-    gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
-    
-    struct ShaderProgram* shader_prog = internal_citro3d_lookup_or_create_shader(shader_id);
+
+    {
+        CCShaderId shader_id;
+        gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
+        gfx_cc_get_features(shader_id, &cc->cc_features);
+    }
 
     // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)
-    // WYATT_TODO remove me.
-    if (shader_prog->cc_features.num_inputs >= 2) {
+    // WYATT_TODO put something better here
+    if (cc->cc_features.num_inputs >= 2) {
         union CCInputMapping mapping_temp;
         for (int i = 0; i <= 1; i++) {
             mapping_temp.arr[i][0] = mapping.arr[i][1];
@@ -1002,14 +1117,11 @@ size_t gfx_rapi_lookup_or_create_color_combiner(uint32_t cc_id)
 
     cc->cc_id = cc_id;
 
-    cc->shader_id = shader_id;
-    cc->shader_program = shader_prog;
-
     cc->c3d_shader_input_mapping.c1_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[0], false);
     cc->c3d_shader_input_mapping.c2_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[1], false);
 
-    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[0], shader_prog->cc_features.opt_fog);
-    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[1], shader_prog->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[0], cc->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[1], cc->cc_features.opt_fog);
 
     // WYATT_TODO this is probably incorrect, but it works for now. Fixes the pause tint being too light.
     cc->use_env_color = mapping.rgb[1] == CC_ENV;
@@ -1025,15 +1137,18 @@ size_t gfx_rapi_lookup_or_create_color_combiner(uint32_t cc_id)
 
     cc->cc_mapping_identifier = mapping_id.u32;
 
+    // Preconfigure TEV settings
+    citro3d_helpers_configure_tex_env_slot_0(&cc->cc_features, &cc->texenv_slot_0);
+
     return cc_index;
 }
 
 void gfx_rapi_color_combiner_get_info(size_t cc_index, uint8_t *num_inputs, bool used_textures[2])
 {
-    struct ShaderProgram* const prg = color_combiner_pool[cc_index].shader_program;
-    *num_inputs = prg->cc_features.num_inputs;
-    used_textures[0] = prg->cc_features.used_textures[0];
-    used_textures[1] = prg->cc_features.used_textures[1];
+    struct ColorCombiner* const cc = &color_combiner_pool[cc_index];
+    *num_inputs =      cc->cc_features.num_inputs;
+    used_textures[0] = cc->cc_features.used_textures[0];
+    used_textures[1] = cc->cc_features.used_textures[1];
 }
 
 // Optimized in the emulation layer

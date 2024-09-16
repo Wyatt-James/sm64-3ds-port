@@ -1,0 +1,39 @@
+.nodvle
+
+; Emu64 Vector Normalizing Routines
+; To use with a smaller vector, set other components to 0.
+; Does not handle vectors of length 0.
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+; Subroutine
+; Inputs:
+;   sub_param_1: vec4 to normalize
+; Outputs:
+;   sub_return_1: normalized vec4
+.proc normalize_vec4
+    dp3 sub_return_1, sub_param_1, sub_param_1   ; sub_return_1 = x² + y² + z² + w²
+    rsq sub_return_1, sub_return_1               ; sub_return_1 = 1 / sqrt(x² + y² + z² + w²)
+    mul sub_return_1, sub_return_1, sub_param_1  ; sub_return_1 = the normalized vector
+.end
+
+; Subroutine
+; Tested OK
+; Inputs:
+;   sub_param_1: vec3 to normalize {x, y, z, ignored}
+; Outputs:
+;   sub_return_1: normalized vec3 {x, y, z, garbage}
+.proc normalize_vec3
+    dp3 sub_return_1, sub_param_1, sub_param_1   ; sub_return_1 = x² + y² + z²
+    rsq sub_return_1, sub_return_1               ; sub_return_1 = 1 / sqrt(x² + y² + z²)
+    mul sub_return_1, sub_return_1, sub_param_1  ; sub_return_1 = the normalized vector
+.end

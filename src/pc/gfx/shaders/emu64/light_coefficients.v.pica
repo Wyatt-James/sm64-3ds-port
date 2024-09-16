@@ -1,0 +1,36 @@
+.nodvle
+
+; Emu64 Lighting Coefficient Calculation Routine
+
+; ----- Uniforms -----
+.fvec transposed_model_view_mtx[4]
+
+; ----- Constant Uniforms -----
+.fvec emu64_const_1       ; {   0,   1, 1/127,  1/255 }
+
+; ----- Aliases -----
+.alias zeros          emu64_const_1.xxxx     ; Vector full of zeros
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+; Subroutine
+; Inputs:
+;   sub_param_1: light direction vector
+; Outputs:
+;   sub_return_1: light coefficient vector, NOT normalized
+.proc calculate_light_coefficients
+    ; (direction * modelview_small)
+    dp3 sub_return_1.x, transposed_model_view_mtx[0], sub_param_1
+    dp3 sub_return_1.y, transposed_model_view_mtx[1], sub_param_1
+    dp3 sub_return_1.z, transposed_model_view_mtx[2], sub_param_1  ; return (direction * modelview)
+    mov sub_return_1.w, zeros
+.end

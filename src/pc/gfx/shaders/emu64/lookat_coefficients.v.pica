@@ -1,0 +1,43 @@
+.nodvle
+
+; Emu64 Lookat Coefficient grabbing routine
+
+; ----- Uniforms -----
+.fvec model_view_mtx[4]
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+; Subroutine
+; Inputs: none
+; Outputs:
+;   sub_return_1: lookat coefficients {x, y, z, 0}
+; Also uses:
+;   sub_param_1
+.proc get_lookat_coefficients_x
+    ; Grab lookat coeffs from MV-matrix
+    mov sub_param_1, model_view_mtx[0]
+    call normalize_vec3
+    ; sub_return_1 already contains the normalized lookat coefficients
+.end
+
+; Subroutine
+; Inputs: none
+; Outputs:
+;   sub_return_1: lookat coefficients {x, y, z, 0}
+; Also uses:
+;   sub_param_1
+.proc get_lookat_coefficients_y
+    ; Grab lookat coeffs from MV-matrix
+    mov sub_param_1, model_view_mtx[1]
+    call normalize_vec3
+    ; sub_return_1 already contains the normalized lookat coefficients
+.end

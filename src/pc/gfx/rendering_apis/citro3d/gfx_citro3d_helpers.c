@@ -61,24 +61,40 @@ static const int texture_tile_order[4][4] =
     {10, 11, 14, 15}
 };
 
-uint8_t citro3d_helpers_calculate_shader_code(bool has_texture, bool has_color)
+Emu64ShaderCode citro3d_helpers_calculate_shader_code(union ShaderProgramFeatureFlags feature_flags)
 {
-    
     // 1 => position (always)
     // 2 => texture
     // 4 => color
+    // 8 => normals
+    // color and normals are mutually exclusive
+    const bool has_position = feature_flags.position,
+               has_texture = feature_flags.tex,
+               has_color = feature_flags.color,
+               has_normals = feature_flags.normals;
 
-    uint8_t shader_code = EMU64_VBO_POSITION;
+    if (has_color && has_normals)
+        fprintf(stderr, "Has color and normals: %c%c%c%c\n",
+        has_position ? 'P' : '-',
+        has_texture  ? 'T' : '-',
+        has_color    ? 'C' : '-',
+        has_normals  ? 'N' : '-');
 
+    Emu64ShaderCode shader_code = 0;
+    
+    if (has_position)
+        shader_code |= EMU64_VBO_POSITION;
     if (has_texture)
-        shader_code += EMU64_VBO_TEXTURE;
+        shader_code |= EMU64_VBO_TEXTURE;
     if (has_color)
-        shader_code += EMU64_VBO_COLOR;
+        shader_code |= EMU64_VBO_COLOR;
+    if (has_normals)
+        shader_code |= EMU64_VBO_NORMALS;
 
     return shader_code;
 }
 
-const struct n3ds_shader_info* citro3d_helpers_get_shader_info(uint8_t shader_code)
+const struct n3ds_shader_info* citro3d_helpers_get_shader_info(Emu64ShaderCode shader_code)
 {
     const struct n3ds_shader_info* shader = NULL;
 
@@ -93,13 +109,28 @@ const struct n3ds_shader_info* citro3d_helpers_get_shader_info(uint8_t shader_co
         case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_COLOR:
             shader = &emu64_shader_7;
             break;
+        case EMU64_VBO_POSITION | EMU64_VBO_NORMALS:
+            shader = &emu64_shader_9;
+            break;
+        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_NORMALS:
+            shader = &emu64_shader_11;
+            break;
         default:
             shader = &emu64_shader_7;
-            fprintf(stderr, "Warning! Using default shader 7 for %u\n", shader_code);
+            fprintf(stderr, "Invalid shader code: %c%c%c%c\n",
+            (shader_code & EMU64_VBO_POSITION) ? 'P' : '-',
+            (shader_code & EMU64_VBO_TEXTURE)  ? 'T' : '-',
+            (shader_code & EMU64_VBO_COLOR)    ? 'C' : '-',
+            (shader_code & EMU64_VBO_NORMALS)  ? 'N' : '-');
             break;
     }
 
     return shader;
+}
+
+const struct n3ds_shader_info* citro3d_helpers_get_shader_info_from_flags(union ShaderProgramFeatureFlags feature_flags)
+{
+    return citro3d_helpers_get_shader_info(citro3d_helpers_calculate_shader_code(feature_flags)); 
 }
 
 struct TextureSize citro3d_helpers_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size)
@@ -553,4 +584,16 @@ enum Emu64ColorCombinerSource citro3d_helpers_convert_cc_mapping_to_emu64(uint8_
 float citro3d_helpers_convert_cc_mapping_to_emu64_float(uint8_t cc_mapping, bool fog_enabled)
 {
     return citro3d_helpers_convert_cc_mapping_to_emu64(cc_mapping, fog_enabled);
+}
+
+void citro3d_helpers_init_attr_info(const struct n3ds_attribute_data* attributes, C3D_AttrInfo* out_attr_info)
+{
+    AttrInfo_Init(out_attr_info);
+
+    for (size_t i = 0; i < attributes->num_attribs; i++) {
+        GPU_FORMATS format = attributes->data[i].format;
+        int count = attributes->data[i].count;
+        AttrInfo_AddLoader(out_attr_info, i, format, count);
+    }
+    printf("\n");
 }

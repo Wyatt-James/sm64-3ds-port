@@ -2,28 +2,36 @@
 
 ; ----- Uniforms -----
 ; Due to LibCTRU weirdness, declare ALL uniforms in this first file.
-.fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
+.fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4], transposed_model_view_mtx[4]
 .fvec rsp_color_selection      ; { col1_rgb, col1_alpha, col2_rgb, col2_alpha }
-.fvec tex_settings_1           ; { scale_s, scale_t, uv_offset, 1.0 }
+.fvec tex_settings_1           ; { scale_s, scale_t, uv_offset, UNUSED }
 .fvec tex_settings_2           ; { uls, ult, tex_width, tex_height }
+.fvec vertex_load_flags        ; { num_lights, enable_texgen, tex_scale_s, tex_scale_t }
+.fvec ambient_light_color      ; { R, G, B, unused }
+.fvec light_colors[2]          ; { R, G, B, unused }
+.fvec light_directions[2]      ; { X, Y, Z, unused }
 .fvec rsp_colors[4]            ; See enum in color_combiner.v.pica. Keep this at the end of normal unifs because last 2 elems aren't changed.
 
 ; ----- Constant Uniforms -----
-.fvec texture_const_1          ; {  0.0,  1.0,   0.0,    0.0 }
-.fvec texture_const_2          ; {  4.0, -8.0,   1/32,   0.0 }
-.fvec cc_constants             ; { -1.0, 3000,   1.0,    0.0 }
-.fvec emu64_const_1            ; { 0.0,   1.0,  -1.0,  1/255 }
+.fvec texture_const_1          ; {  0.0,  1.0, 1/65536,  1/(127 * 4) }
+.fvec texture_const_2          ; {  4.0, -8.0, 1/32,     1/4         }
+.fvec cc_constants             ; { -1.0, 3000,  1.0,     0.0         }
+.fvec emu64_const_1            ; { 0.0,   1.0, 1/127,    1/255       }
+.fvec emu64_const_2            ; { 255,   256,   127,    128         }
 
 ; At least one const must be present in each DVLE thanks to a libctru (or c3d?) bug.
 .constf dummy_const (0.0, 0.0, 0.0, 0.0)
 
 ; ----- Aliases -----
-.alias ones           emu64_const_1.yyyy   ; Vector full of ones
+.alias zeros               emu64_const_1.x      ; Vector full of zeros
+.alias ones                emu64_const_1.y      ; Vector full of ones
+.alias texture_load_scale  vertex_load_flags.zw ; {tex_scale_s, tex_scale_t}
 
 ; ----- Subroutine Registers -----
 ; These are intended purposes, but they may vary betwen subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
 .alias sub_param_1    r12 ; Subroutine input register
 .alias sub_param_2    r13 ; Subroutine input register
 .alias sub_param_3    r14 ; Subroutine input register
@@ -40,8 +48,8 @@
 .out outtc1 texcoord1 ; texture unit 1
 .out outclr color     ; rgba
 
-.entry main_01
-.proc main_01
+.entry main_03
+.proc main_03
 
 projection:
     mov sub_param_1, inpos
@@ -49,7 +57,14 @@ projection:
     mov outpos, sub_return_1
     mov r0, sub_return_1
 texture:
+    ; Texgen is disabled because we don't have vertex normals, but we will use its ELSE to multiply by tex_scale.
     mov sub_param_1, intex
+    mov sub_param_3, texture_load_scale
+    mov sub_param_3.z, zeros
+    call generate_texcoord_pair
+    mov sub_param_1, sub_return_1        ; Returned texcoords are immediately used
+
+    ; Output texcoords
     call calculate_texcoords
     mov outtc0, sub_return_1
     mov outtc1, sub_return_1

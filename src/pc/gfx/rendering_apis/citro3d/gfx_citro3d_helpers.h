@@ -42,6 +42,8 @@
 #include "src/pc/gfx/color_formats.h"
 #include "src/pc/gfx/gfx_cc.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
+#include "src/pc/gfx/gfx_3ds_shaders.h"
+#include "src/pc/gfx/gfx_3ds_types.h"
 
 // A static definition of a C3D Identity Matrix
 #define C3D_STATIC_IDENTITY_MTX {\
@@ -74,11 +76,14 @@ struct TextureSize {
 // Constant matrices, set during initialization.
 extern const C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
 
-// Calculates a GFX_Citro3D shader code based on the provided RSP flags
-uint8_t citro3d_helpers_calculate_shader_code(bool has_texture, bool has_color);
+// Calculates an Emu64 shader code based on the given feature flags
+Emu64ShaderCode citro3d_helpers_calculate_shader_code(union ShaderProgramFeatureFlags feature_flags);
 
-// Looks up an n3ds_shader_info struct from the given GFX_Citro3D shader code
-const struct n3ds_shader_info* citro3d_helpers_get_shader_info(uint8_t shader_code);
+// Looks up an n3ds_shader_info struct from the given Emu64 shader code
+const struct n3ds_shader_info* citro3d_helpers_get_shader_info(Emu64ShaderCode shader_code);
+
+// Looks up an n3ds_shader_info struct from the given feature flags.
+const struct n3ds_shader_info* citro3d_helpers_get_shader_info_from_flags(union ShaderProgramFeatureFlags feature_flags);
 
 // Adjusts a texture's dimensions to fit within the 3DS' limitations (8 pixels minimum, power-of-2 for each dimension)
 struct TextureSize citro3d_helpers_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size);
@@ -141,5 +146,8 @@ enum Emu64ColorCombinerSource citro3d_helpers_convert_cc_mapping_to_emu64(uint8_
 // Converts a Color Combiner source to its Emu64 version, pre-cast to a float.
 // Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
 float citro3d_helpers_convert_cc_mapping_to_emu64_float(uint8_t cc_mapping, bool fog_enabled);
+
+// Initializes a C3D_AttrInfo from the given attribute data.
+void citro3d_helpers_init_attr_info(const struct n3ds_attribute_data* attributes, C3D_AttrInfo* out_attr_info);
 
 #endif

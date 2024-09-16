@@ -30,7 +30,7 @@
 
 #define GRANULAR_PROFILING 0 // Enables fine-grained performance profiling of various things.
 #define GRANULAR_FLUSHES   0 // Enables fine-grained profiling of flush hit/avoid rate.
-#define FLUSH_COUNTERS    25 // Number of gfx_flush calls to log.
+#define FLUSH_COUNTERS    29 // Number of gfx_flush calls to log.
 
 #if GRANULAR_PROFILING == 1
 #define granular_log_time(v_)     do { profiler_3ds_log_time(v_); } while (0)
@@ -98,8 +98,6 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
 #define MATRIX_SET_INVALID (~MATRIX_SET_NORMAL)
 #define NDC_SCALE (INT16_MAX / 4) // Scaling factor for s16 NDC coordinates. See gfx_dimensions.h for more info.
 
-#define DELIBERATELY_INVALID_CC_ID ~0
-
 #define ASSUME(cond) if (!(cond)) __builtin_unreachable()
 #define LIKELY(cond)              __builtin_expect(!!(cond), 1)
 #define UNLIKELY(cond)            __builtin_expect(!!(cond), 0)
@@ -147,6 +145,8 @@ float MTX_NDC_DOWNSCALE[4][4] = {{1.0f / NDC_SCALE, 0.0f,             0.0f, 0.0f
                                  {0.0f,             1.0f / NDC_SCALE, 0.0f, 0.0f},
                                  {0.0f,             0.0f,             1.0f, 0.0f},
                                  {0.0f,             0.0f,             0.0f, 1.0f}};
+
+typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
 
 struct XYWidthHeight {
     uint16_t x, y, width, height;
@@ -201,7 +201,7 @@ union boolx2 {
 struct LoadedVertex {
     union int16x4 position; // 8 bytes (w is unused, garbage value)
     union int16x2 uv;       // 4 bytes
-    union RGBA32 color;     // 4 bytes
+    union RGBA32 color;     // 4 bytes. Also contains normals.
 };
 
 struct TextureHashmapNode {
@@ -214,6 +214,17 @@ struct TextureHashmapNode {
     uint8_t cms, cmt;
     bool linear_filter;
 };
+
+// These parameters are stored as u0.16s in the DList,
+// but we use u16.16 here for a hack (see gfx_dp_texture_rectangle)
+union TextureScalingFactor {
+    struct {
+        // U16.16
+        uint32_t s, t;
+    };
+    uint64_t u64;
+};
+
 static struct {
     struct TextureHashmapNode *hashmap[1024];
     struct TextureHashmapNode pool[512];
@@ -227,19 +238,13 @@ static struct RSP {
     float P_matrix[4][4];
 
     Light_t current_lights[MAX_LIGHTS + 1];
-    float current_lights_coeffs[MAX_LIGHTS][3];
-    float current_lookat_coeffs[2][3]; // lookat_x, lookat_y
     uint8_t current_num_lights; // includes ambient light
-    bool lights_changed;
 
     uint32_t geometry_mode;
 
-    struct {
-        // U0.16
-        uint16_t s, t;
-    } texture_scaling_factor;
+    union TextureScalingFactor texture_scaling_factor;
 
-    struct LoadedVertex loaded_vertices[MAX_VERTICES];
+    struct LoadedVertex* loaded_vertices[MAX_VERTICES];
     struct LoadedVertex rect_vertices[4]; // Used only for rectangle drawing
 } rsp;
 
@@ -264,7 +269,7 @@ static struct RDP {
     union boolx2 textures_changed;
 
     uint32_t other_mode_l, other_mode_h;
-    uint32_t combine_mode;
+    CombineMode combine_mode;
 
     union RGBA32 env_color, prim_color, fill_color;
     struct XYWidthHeight viewport;
@@ -273,7 +278,7 @@ static struct RDP {
 } rdp;
 
 static struct ShaderState {
-    uint32_t cc_id;
+    ColorCombinerId cc_id;
     uint8_t other_flags;
     bool use_alpha;
     bool use_fog;
@@ -359,6 +364,32 @@ static void gfx_apply_matrices()
         gfx_rapi_apply_model_view_matrix();
 }
 
+static void gfx_apply_lighting()
+{
+    const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
+    gfx_rapi_enable_lighting(enable_lighting);
+
+    if (enable_lighting) {
+        gfx_rapi_set_num_lights(rsp.current_num_lights);
+
+        // Configure ambient light
+        gfx_rapi_configure_light(0, &rsp.current_lights[rsp.current_num_lights - 1]);
+
+        // Configure directional lights
+        for (int i = 0; i < rsp.current_num_lights - 1; i++)
+            gfx_rapi_configure_light(i + 1, &rsp.current_lights[i]);
+    }
+}
+
+static void gfx_apply_texgen()
+{
+    const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
+    const bool enable_texture_gen = rsp.geometry_mode & G_TEXTURE_GEN;
+
+    gfx_rapi_enable_texgen(enable_lighting && enable_texture_gen);
+    gfx_rapi_set_texture_scaling_factor(rsp.texture_scaling_factor.s, rsp.texture_scaling_factor.t);
+}
+
 static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
     granular_log_time(0);
 
@@ -367,6 +398,8 @@ static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
         GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += buf_vbo_num_verts / 3);
         GRANULAR_FLUSH_DO(flushes[flush_id]++);
         gfx_apply_matrices();
+        gfx_apply_lighting();
+        gfx_apply_texgen();
 
         gfx_rapi_draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
         buf_vbo_len = 0;
@@ -525,48 +558,8 @@ static void import_texture(int tile) {
     }
 }
 
-static void gfx_normalize_vector(float v[3]) {
-    float s = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    v[0] /= s;
-    v[1] /= s;
-    v[2] /= s;
-}
-
-static void gfx_transposed_matrix_mul(float res[3], const float a[3], const float b[4][4]) {
-    res[0] = a[0] * b[0][0] + a[1] * b[0][1] + a[2] * b[0][2];
-    res[1] = a[0] * b[1][0] + a[1] * b[1][1] + a[2] * b[1][2];
-    res[2] = a[0] * b[2][0] + a[1] * b[2][1] + a[2] * b[2][2];
-}
-
-static void calculate_normal_dir(const Light_t *light, float output[3]) {
-    float light_dir[3] = {
-        light->dir[0] / 127.0f,
-        light->dir[1] / 127.0f,
-        light->dir[2] / 127.0f
-    };
-    gfx_transposed_matrix_mul(output, light_dir, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-    gfx_normalize_vector(output);
-}
-
-// lookat_x = {1, 0, 0};
-static void calculate_lookat_x(float res[3], const float b[4][4])
-{
-    res[0] = b[0][0];
-    res[1] = b[1][0];
-    res[2] = b[2][0];
-    gfx_normalize_vector(res);
-}
-
-// lookat_y = {0, 1, 0};
-static void calculate_lookat_y(float res[3], const float b[4][4])
-{
-    res[0] = b[0][1];
-    res[1] = b[1][1];
-    res[2] = b[2][1];
-    gfx_normalize_vector(res);
-}
-
 // Multiplies the whole matrix. When both funcs are inline, saves ~200us.
+// Matrices are column-major.
 static inline void gfx_matrix_mul_unsafe(float res[4][4], const float* restrict a, const float* restrict  b) {
     #define MTA(r_, c_) a[ARR_INDEX_2D(c_, r_, 4)]
     #define MTB(r_, c_) b[ARR_INDEX_2D(c_, r_, 4)]
@@ -603,7 +596,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         }
     }
 #else
-    const float* matrix = (float*) addr; // WYATT_TODO SHUT UP, COMPILER! UB but it works.
+    const float* matrix = (float*) addr;
 #endif
 
     const bool is_load = parameters & G_MTX_LOAD,
@@ -637,7 +630,6 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         if (matrix_updated) {
             gfx_flush(3);
             last_mv_mtx_addr = matrix;
-            rsp.lights_changed = true;
         }
         
         if (is_push && rsp.modelview_matrix_stack_size < 11)
@@ -671,109 +663,20 @@ static void gfx_sp_pop_matrix(uint32_t count) {
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
     granular_log_time(0);
 
-    // Load each vert
+    // Load each vert pointer
     for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
         const Vtx_t *v = &vertices[vert].v;
-        struct LoadedVertex *d = &rsp.loaded_vertices[dest];
-        
-        d->position.u64 = *((uint64_t*) (&v->ob[0])); // W is set to garbage
-        d->color.u32 = *((uint32_t*) v->cn);
+        rsp.loaded_vertices[dest] = (struct LoadedVertex*) v; // Vertex formats are identical, so a cast is sufficient.
     }
     granular_log_time(5); // Vertex Copy
-
-    // Calculate lighting
-    if (LIKELY(rsp.geometry_mode & G_LIGHTING)) {
-        if (rsp.lights_changed) {
-            rsp.lights_changed = false;
-            for (int light = 0; light < rsp.current_num_lights - 1; light++)
-                calculate_normal_dir(&rsp.current_lights[light], rsp.current_lights_coeffs[light]);
-
-            calculate_lookat_x(rsp.current_lookat_coeffs[0], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-            calculate_lookat_y(rsp.current_lookat_coeffs[1], rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
-            granular_log_time(6); // Light Recalculation
-        }
-
-        /* Required uniforms:
-         * rsp.current_lights color:  u8vec[3]
-         * rsp.current_lights_coeffs: fvec[2] (ambient does not need one)
-         * rsp.current_num_lights:    u8
-         * lighting enable flag:      bool
-         * fallback color and alpha:  fvec
-         * 
-         * Required VBO values:
-         * Vertex normals (u8[3], can replace current CC_SHADE colors)
-         * Vertex alpha (u8[1], retain)
-         * 
-         * Shaders required: all with color inputs
-         */
-        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
-            const Vtx_tn *vn = &vertices[vert].n;
-            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
-
-            int r = rsp.current_lights[rsp.current_num_lights - 1].col[0];
-            int g = rsp.current_lights[rsp.current_num_lights - 1].col[1];
-            int b = rsp.current_lights[rsp.current_num_lights - 1].col[2];
-
-            ASSUME(rsp.current_num_lights <= (MAX_LIGHTS + 1));
-            for (int light = 0; light < rsp.current_num_lights - 1; light++) {
-                float intensity = 0;
-                intensity += vn->n[0] * rsp.current_lights_coeffs[light][0];
-                intensity += vn->n[1] * rsp.current_lights_coeffs[light][1];
-                intensity += vn->n[2] * rsp.current_lights_coeffs[light][2];
-                intensity /= 127.0f;
-                if (intensity > 0.0f) {
-                    r += intensity * rsp.current_lights[light].col[0];
-                    g += intensity * rsp.current_lights[light].col[1];
-                    b += intensity * rsp.current_lights[light].col[2];
-                }
-            }
-
-            // Why is UCLAMP8 slower here? It should be faster, but it's like 150us slower.
-            d->color.r = r > 255 ? 255 : r;
-            d->color.g = g > 255 ? 255 : g;
-            d->color.b = b > 255 ? 255 : b;
-        }
-        
-        granular_log_time(7); // Vertex Light Calculation
-    }
-    
-    // Calculate texcoords
-    if (UNLIKELY((rsp.geometry_mode & G_LIGHTING) && (rsp.geometry_mode & G_TEXTURE_GEN))) {
-        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
-            const Vtx_tn *vn = &vertices[vert].n;
-            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
-
-            const float
-            dotx = vn->n[0] * rsp.current_lookat_coeffs[0][0]
-                 + vn->n[1] * rsp.current_lookat_coeffs[0][1]
-                 + vn->n[2] * rsp.current_lookat_coeffs[0][2],
-
-            doty = vn->n[0] * rsp.current_lookat_coeffs[1][0]
-                 + vn->n[1] * rsp.current_lookat_coeffs[1][1]
-                 + vn->n[2] * rsp.current_lookat_coeffs[1][2];
-
-            d->uv.u = (int16_t) ((dotx / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.s);
-            d->uv.v = (int16_t) ((doty / 127.0f + 1.0f) / 4.0f * rsp.texture_scaling_factor.t);
-        }
-        granular_log_time(8); // Texgen Calculation
-    } else {
-        for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
-            const Vtx_t *v = &vertices[vert].v;
-            struct LoadedVertex *d = &rsp.loaded_vertices[dest];
-
-            d->uv.u = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
-            d->uv.v = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
-        }
-        granular_log_time(9); // Texcoord Copy
-    }
 }
 
 static void gfx_sp_tri_update_state()
 {
     granular_log_time(0);
-    uint32_t cc_id = shader_state.cc_id;
+    ColorCombinerId cc_id = shader_state.cc_id;
+    static ColorCombinerId prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
-    static uint32_t prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
     if (prev_cc_id != cc_id) {
         prev_cc_id  = cc_id;
@@ -892,7 +795,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     buf_vbo_num_verts += numVerts;
 
     const bool use_texture = shader_state.used_textures.either;
-    const bool use_color   = shader_state.num_inputs > 0;
+    const bool use_color_or_normals = (shader_state.num_inputs > 0) || (rsp.geometry_mode & G_LIGHTING);
 
     for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
         // Struct copy
@@ -902,7 +805,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
         if (use_texture)
             buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->uv.u32;
 
-        if (use_color)
+        if (use_color_or_normals)
             buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->color.u32;
     }
     
@@ -915,8 +818,13 @@ static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_tris) {
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
-    rsp.geometry_mode &= ~clear;
-    rsp.geometry_mode |= set;
+    uint32_t old_mode = rsp.geometry_mode;
+    uint32_t new_mode = (rsp.geometry_mode & ~clear) | set;
+
+    if (new_mode != old_mode) {
+        gfx_flush(25);
+        rsp.geometry_mode = new_mode;
+    }
 }
 
 static void gfx_set_viewport(struct XYWidthHeight viewport) {
@@ -948,6 +856,7 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
     // NOTE: reads out of bounds if it is an ambient light
     // This used to avoid overwriting the lookat mtx, but that data no longer even makes it this far.
     if (LIKELY(index == G_MV_LIGHT)) {
+        gfx_flush(27);
         const int lightidx = offset / 24;
         memcpy((rsp.current_lights - 2) + lightidx, data, sizeof(Light_t));
     } else { // G_MV_VIEWPORT
@@ -964,13 +873,13 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
         case G_MV_LOOKATY:
         case G_MV_LOOKATX:
             memcpy(rsp.current_lookat + (index - G_MV_LOOKATY) / 2, data, sizeof(Light_t));
-            //rsp.lights_changed = 1;
             break;
 #endif
         case G_MV_L0:
         case G_MV_L1:
         case G_MV_L2:
             // NOTE: reads out of bounds if it is an ambient light
+            gfx_flush(27);
             memcpy(rsp.current_lights + (index - G_MV_L0) / 2, data, sizeof(Light_t));
             break;
     }
@@ -980,6 +889,7 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
 static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data) {
     switch (index) {
         case G_MW_NUMLIGHT:
+            gfx_flush(26);
 #ifdef F3DEX_GBI_2
             rsp.current_num_lights = data / 24 + 1; // add ambient light
 #else
@@ -987,7 +897,6 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
             // The 31th bit is a flag that lights should be recalculated
             rsp.current_num_lights = (data - 0x80000000U) / 32;
 #endif
-            rsp.lights_changed = 1;
             break;
         case G_MW_FOG:
             if (shader_state.fog_settings != data) {
@@ -1001,9 +910,14 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
     }
 }
 
-static void gfx_sp_texture(uint16_t sc, uint16_t tc, UNUSED uint8_t level, UNUSED uint8_t tile, UNUSED uint8_t on) {
-    rsp.texture_scaling_factor.s = sc;
-    rsp.texture_scaling_factor.t = tc;
+// These parameters are stored as u16s in the DList, but we use u32 here for a hack (see gfx_dp_texture_rectangle)
+static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSED uint8_t tile, UNUSED uint8_t on) {
+    union TextureScalingFactor new_mode = {.s = sc, .t = tc};
+
+    if (rsp.texture_scaling_factor.u64 != new_mode.u64) {
+        gfx_flush(28);
+        rsp.texture_scaling_factor.u64 = new_mode.u64; // Struct copy
+    }
 }
 
 static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly, uint32_t lrx, uint32_t lry) {
@@ -1175,20 +1089,28 @@ static void shader_state_init(struct ShaderState* ss)
     ss->iod_mode = IOD_COUNT;
 }
 
-static void calculate_cc_id()
-{
-    shader_state.cc_id = rdp.combine_mode;
 
-    if (shader_state.use_fog)      shader_state.cc_id |= SHADER_OPT_FOG;
-    if (shader_state.texture_edge) shader_state.cc_id |= SHADER_OPT_TEXTURE_EDGE;
-    if (shader_state.use_noise)    shader_state.cc_id |= SHADER_OPT_NOISE;
-    if (shader_state.use_alpha)
-        shader_state.cc_id |= SHADER_OPT_ALPHA;
+static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
+{
+    ColorCombinerId id = combine_mode;
+
+    if (use_fog)      id |= SHADER_OPT_FOG;
+    if (texture_edge) id |= SHADER_OPT_TEXTURE_EDGE;
+    if (use_noise)    id |= SHADER_OPT_NOISE;
+    if (use_alpha)
+        id |= SHADER_OPT_ALPHA;
     else
-        shader_state.cc_id &= ~0xfff000;
+        id &= ~0xfff000;
+
+    return id;
 }
 
-static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
+static void calculate_cc_id()
+{
+    shader_state.cc_id = calculate_cc_id_internal(rdp.combine_mode, shader_state.use_fog, shader_state.texture_edge, shader_state.use_noise, shader_state.use_alpha);
+}
+
+static void gfx_dp_set_combine_mode(CombineMode combine_mode) {
 #if ENABLE_SHADER_SWAP_COUNTER == 1
     // Low savings: usually under 1%
     if (rdp.combine_mode != combine_mode) {
@@ -1197,7 +1119,7 @@ static void gfx_dp_set_combine_mode(uint32_t combine_mode) {
     } else
         avoided_swaps_combine_mode++;
 #else
-    rdp.combine_mode  = combine_mode;
+    rdp.combine_mode = combine_mode;
     calculate_cc_id();
 #endif
 }
@@ -1297,7 +1219,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 }
 
 static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, UNUSED uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
-    uint32_t saved_combine_mode = rdp.combine_mode;
+    CombineMode saved_combine_mode = rdp.combine_mode;
     if ((rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY) {
         // Per RDP Command Summary Set Tile's shift s and this dsdx should be set to 4 texels
         // Divide by 4 to get 1 instead
@@ -1346,8 +1268,13 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         ur->uv.v = lrt;
     }
 
+    // Disable texture scaling by using a 1x scale. The other three parameters are unused.
+    union TextureScalingFactor saved_scaling_factor = { .u64 = rsp.texture_scaling_factor.u64 };
+    gfx_sp_texture(0x10000, 0x10000, 0, 0, 0);
+
     gfx_draw_rectangle(ulx, uly, lrx, lry);
     gfx_dp_set_combine_mode(saved_combine_mode);
+    gfx_sp_texture(saved_scaling_factor.s, saved_scaling_factor.t, 0, 0, 0);
 }
 
 static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
@@ -1365,9 +1292,9 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
     }
 
     for (int i = 0; i < ARRAY_COUNT(rsp.rect_vertices); i++)
-        rsp.rect_vertices[i].color = rdp.fill_color;
+        rsp.rect_vertices[i].color = rdp.fill_color; // Struct copy
 
-    uint32_t saved_combine_mode = rdp.combine_mode;
+    CombineMode saved_combine_mode = rdp.combine_mode;
     gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_SHADE), color_comb(0, 0, 0, G_ACMUX_SHADE)));
     gfx_draw_rectangle(ulx, uly, lrx, lry);
     gfx_dp_set_combine_mode(saved_combine_mode);
@@ -1536,21 +1463,18 @@ static void gfx_run_dl(Gfx* cmd) {
                 const uint8_t i1 = C0(16, 8) / 2,
                               i2 = C0(8, 8)  / 2,
                               i3 = C0(0, 8)  / 2;
-                // gfx_sp_tri1(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2);
 #elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
                 const uint8_t i1 = C1(16, 8) / 2,
                               i2 = C1(8, 8)  / 2,
                               i3 = C1(0, 8)  / 2;
-                // gfx_sp_tri1(C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
 #else
                 const uint8_t i1 = C1(16, 8) / 10,
                               i2 = C1(8, 8)  / 10,
                               i3 = C1(0, 8)  / 10;
-                // gfx_sp_tri1(C1(16, 8) / 10, C1(8, 8) / 10, C1(0, 8) / 10);
 #endif
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i1];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i3];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i1];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i2];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i3];
                 break;
             }
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
@@ -1561,15 +1485,12 @@ static void gfx_run_dl(Gfx* cmd) {
                               i4 = C1(16, 8) / 2,
                               i5 = C1(8, 8)  / 2,
                               i6 = C1(0, 8)  / 2;
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i1];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i2];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i3];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i4];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i5];
-                tri_batch[num_verts_batched++] = &rsp.loaded_vertices[i6];
-
-                // gfx_sp_tri2(C0(16, 8) / 2, C0(8, 8) / 2, C0(0, 8) / 2,
-                //             C1(16, 8) / 2, C1(8, 8) / 2, C1(0, 8) / 2);
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i1];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i2];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i3];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i4];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i5];
+                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i6];
                 break;
             }
 #endif
@@ -1701,7 +1622,6 @@ static void gfx_run_dl(Gfx* cmd) {
 static void gfx_sp_reset() {
     rsp.modelview_matrix_stack_size = 1;
     rsp.current_num_lights = 2;
-    rsp.lights_changed = true;
 }
 
 void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {

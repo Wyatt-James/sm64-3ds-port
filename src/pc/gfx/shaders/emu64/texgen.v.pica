@@ -1,0 +1,83 @@
+.nodvle
+
+; Emu64 Texcoord Generation routine
+
+; ----- Constant Uniforms -----
+.fvec emu64_const_1       ; { 0,  1, 1/127,    1/255 }
+.fvec texture_const_1     ; { 0,  1, 1/65536,  1/508 }
+.fvec texture_const_2     ; { 4, -8,  1/32,    1/4   }
+
+; ----- Aliases -----
+.alias zeros          emu64_const_1.xxxx   ; Vector full of zeros
+.alias one_over_65536 texture_const_1.zzzz ; Vector full of 1/65536
+.alias one_over_508   texture_const_1.wwww ; Vector full of 1/508
+.alias one_over_4     texture_const_2.wwww ; Vector full of 1/4
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+.alias vertex_texcoord sub_param_1
+.alias vertex_normal   sub_param_2
+.alias tex_scale       sub_param_3
+.alias texgen_enable   sub_param_3.z
+
+; Subroutine
+; Inputs:
+;   sub_param_1: vertex texcoords {u, v}
+;   sub_param_2: vertex normal {x, y, z}. Range [-127, 127]
+;   sub_param_3: tex_scale and texgen enable flag {u, v, flag}
+; Outputs:
+;   sub_return_1: texcoord output {u, v}
+; Also Uses:
+;   sub_scratch_1: math intermediates
+;   sub_scratch_2: texcoord accumulation
+;   sub_scratch_3: scale value
+.proc generate_texcoord_pair
+
+mov sub_scratch_1, zeros
+cmp texgen_enable, ne, ne, sub_scratch_1  ; Set flag if texgen is enabled
+
+ifc cmp.x
+    ; Texgen enabled
+    calculate_u:
+        call get_lookat_coefficients_x                   ; Clobbers sub_param_1.
+        mov sub_scratch_1, sub_return_1                  ; sub_scratch_1 = normalized lookat_coeffs.
+
+        dp3 sub_scratch_1, sub_scratch_1, vertex_normal  ;   normal · lookat_coeffs
+        mul sub_scratch_1, one_over_508, sub_scratch_1   ;  (normal · lookat_coeffs) / 508
+
+        add sub_scratch_1, one_over_4, sub_scratch_1     ;  (normal · lookat_coeffs) / 508 + 0.25
+
+        mov sub_scratch_2.x, sub_scratch_1               ; ((normal · lookat_coeffs) / 508 + 0.25) * tex_scale
+        
+    calculate_v:
+        call get_lookat_coefficients_y                   ; Clobbers sub_param_1.
+        mov sub_scratch_1, sub_return_1                  ; sub_scratch_1 = normalized lookat_coeffs.
+
+        dp3 sub_scratch_1, sub_scratch_1, vertex_normal  ;   normal · lookat_coeffs
+        mul sub_scratch_1, one_over_508, sub_scratch_1   ;  (normal · lookat_coeffs) / 508
+
+        add sub_scratch_1, one_over_4, sub_scratch_1     ;  (normal · lookat_coeffs) / 508 + 0.25
+
+        mov sub_scratch_2.y, sub_scratch_1               ; ((normal · lookat_coeffs) / 508 + 0.25) * tex_scale
+    
+    common:
+        mov sub_scratch_3, tex_scale
+.else
+    ; Texgen disabled: just scale the vertex texcoords
+    ; vertex_texcoord * scaling_factor;
+    mov sub_scratch_2, vertex_texcoord
+    mul sub_scratch_3, one_over_65536, tex_scale
+.end
+
+return:
+    mul sub_return_1, sub_scratch_2, sub_scratch_3
+.end

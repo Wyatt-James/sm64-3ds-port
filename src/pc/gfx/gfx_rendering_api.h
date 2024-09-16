@@ -14,7 +14,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <PR/gbi.h>
 
+#include "src/pc/gfx/color_formats.h"
+#include "src/pc/gfx/gfx_cc.h"
 #include "multi_viewport/multi_viewport.h"
 
 #define GFX_DISABLE 0
@@ -24,7 +27,9 @@
 #define GFX_RAPI_TEXTURE_FORMATS  GFX_ENABLE
 #define GFX_RAPI_STEREOSCOPIC_3D  GFX_ENABLE
 #define GFX_RAPI_FOG              GFX_ENABLE
-#define GFX_RAPI_MATRICES         GFX_ENABLE
+#define GFX_RAPI_VERTEX_MATRICES  GFX_ENABLE
+#define GFX_RAPI_VERTEX_LIGHTING  GFX_ENABLE
+#define GFX_RAPI_VERTEX_TEXGEN    GFX_ENABLE
 #define GFX_RAPI_MULTI_VIEWPORT   GFX_ENABLE
 #define GFX_RAPI_GPU_TEXCOORDS    GFX_ENABLE
 #define GFX_RAPI_COLOR_COMBINER   GFX_ENABLE
@@ -32,7 +37,9 @@
 #define GFX_RAPI_TEXTURE_FORMATS  GFX_DISABLE
 #define GFX_RAPI_STEREOSCOPIC_3D  GFX_DISABLE
 #define GFX_RAPI_FOG              GFX_DISABLE
-#define GFX_RAPI_MATRICES         GFX_DISABLE
+#define GFX_RAPI_VERTEX_MATRICES  GFX_DISABLE
+#define GFX_RAPI_VERTEX_LIGHTING  GFX_DISABLE
+#define GFX_RAPI_VERTEX_TEXGEN    GFX_DISABLE
 #define GFX_RAPI_MULTI_VIEWPORT   GFX_DISABLE
 #define GFX_RAPI_GPU_TEXCOORDS    GFX_DISABLE
 #define GFX_RAPI_COLOR_COMBINER   GFX_DISABLE
@@ -98,14 +105,27 @@ void                    gfx_rapi_set_2d_mode                (int mode_2d);      
 void                    gfx_rapi_set_iod                    (float z, float w);     // Adjusts the strength of the depth effect.
 #endif
 
-// Optional feature: GPU handles matrix-vector multiplication
-#if GFX_RAPI_MATRICES == GFX_ENABLE
+// Optional feature: GPU handles vertex-load matrix-vector multiplication
+#if GFX_RAPI_VERTEX_MATRICES == GFX_ENABLE
 void                    gfx_rapi_set_model_view_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
 void                    gfx_rapi_set_projection_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
 void                    gfx_rapi_apply_model_view_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
 void                    gfx_rapi_apply_projection_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
 void                    gfx_rapi_select_matrix_set          (uint32_t matrix_set_id);   // Selects one of the given matrix sets, but does not send it to the GPU.
 void                    gfx_rapi_set_backface_culling_mode  (uint32_t culling_mode);    // Sets the GPU's backface culling mode
+#endif
+
+// Optional feature: GPU handles vertex-load vertex lighting calculation
+#if GFX_RAPI_VERTEX_LIGHTING == GFX_ENABLE
+void                    gfx_rapi_enable_lighting            (bool enable);                   // Enables or disables lights. When enabled, the shader color/normals VBO uses an s8 format, else u8.
+void                    gfx_rapi_set_num_lights             (int num_lights);                // Sets the number of lights, including ambient. Set to 1 for ambient-only.
+void                    gfx_rapi_configure_light            (int light_id, Light_t* light);  // Configures a single directional light. A light_id of 0 is ambient, for which direction is ignored.
+#endif
+
+// Optional feature: GPU handles vertex-load texture generation
+#if GFX_RAPI_VERTEX_TEXGEN == GFX_ENABLE
+void                    gfx_rapi_enable_texgen              (bool enable);            // Enables or disables texgen.
+void                    gfx_rapi_set_texture_scaling_factor (uint32_t s, uint32_t t); // Sets the texture scaling factor for use with texgen. These use a U16.16 format.
 #endif
 
 // Optional feature: multiple viewports
@@ -124,7 +144,7 @@ void                    gfx_rapi_set_texture_settings             (int16_t upper
 // Optional feature: GPU color combiner
 #if GFX_RAPI_COLOR_COMBINER == GFX_ENABLE
 void                    gfx_rapi_select_color_combiner            (size_t cc_index);                                              // Selects a color combiner by index. Bounds checks are not enforced. If the current CC is already loaded, does nothing.
-size_t                  gfx_rapi_lookup_or_create_color_combiner  (uint32_t cc_id);                                               // Looks up or creates a color combiner from the given CCID.
+size_t                  gfx_rapi_lookup_or_create_color_combiner  (ColorCombinerId cc_id);                                               // Looks up or creates a color combiner from the given CCID.
 void                    gfx_rapi_color_combiner_get_info          (size_t cc_index, uint8_t *num_inputs, bool used_textures[2]);  // Returns some info about the current color combiner.
 
 void                    gfx_rapi_set_cc_prim_color                (uint32_t color);                                               // Sets the GPU prim color. This is global across color combiners.

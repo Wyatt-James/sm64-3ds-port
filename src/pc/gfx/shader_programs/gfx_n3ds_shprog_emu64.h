@@ -2,6 +2,7 @@
 #define GFX_N3DS_SHPROG_EMU64_H
 
 #include <stdio.h>
+#include <3ds/gpu/enums.h>
 
 #include "src/pc/gfx/gfx_3ds_shaders.h"
 
@@ -9,14 +10,20 @@
  * A set of shaders for emulating the N64.
  */
 
+#define EMU64_NUM_VERTEX_FORMATS 5
+
+#define EMU64_MAX_LIGHTS 2 // Does NOT include ambient
+#define EMU64_NUM_RSP_COLORS 4
+
 // Stride values for specific inputs. Unit is one word (uint32_t)
 #define EMU64_STRIDE_RGBA         1
-#define EMU64_STRIDE_RGB          1
+#define EMU64_STRIDE_XYZA         1
 #define EMU64_STRIDE_POSITION     2
 #define EMU64_STRIDE_TEXTURE      1
 #define EMU64_STRIDE_VERTEX_COLOR EMU64_STRIDE_RGBA
+#define EMU64_STRIDE_VERTEX_NORMAL_AND_ALPHA EMU64_STRIDE_XYZA
 
-// Maximum possible stride
+// Maximum possible stride. RGBA and XYZA are mutually exclusive.
 #define EMU64_STRIDE_MAX      (EMU64_STRIDE_POSITION    \
                             +  EMU64_STRIDE_TEXTURE     \
                             +  EMU64_STRIDE_RGBA)
@@ -25,7 +32,8 @@
 enum Emu64ShaderFeature {
    EMU64_VBO_POSITION     = BIT(0),
    EMU64_VBO_TEXTURE      = BIT(1),
-   EMU64_VBO_COLOR        = BIT(2)
+   EMU64_VBO_COLOR        = BIT(2), // Mutually exclusive
+   EMU64_VBO_NORMALS      = BIT(3)  // Mutually exclusive
 };
                             
 // Negative values are special cases.
@@ -44,10 +52,15 @@ struct n3ds_emu64_uniform_locations {
    int projection_mtx,
        model_view_mtx,
        game_projection_mtx,
+       transposed_model_view_mtx,
        rsp_color_selection,
        tex_settings_1,
        tex_settings_2,
-       rsp_colors[4];
+       vertex_load_flags,
+       ambient_light_color,
+       light_colors[EMU64_MAX_LIGHTS],
+       light_directions[EMU64_MAX_LIGHTS],
+       rsp_colors[EMU64_NUM_RSP_COLORS];
 };
 
 // Uniforms that should be initialized once and remain constant.
@@ -55,14 +68,16 @@ struct n3ds_emu64_const_uniform_locations {
    int texture_const_1,
        texture_const_2,
        cc_constants,
-       emu64_const_1;
+       emu64_const_1,
+       emu64_const_2;
 };
 
 struct n3ds_emu64_const_uniform_defaults {
    float texture_const_1[4],
          texture_const_2[4],
          cc_constants[4],
-         emu64_const_1[4];
+         emu64_const_1[4],
+         emu64_const_2[4];
 };
 
 extern struct n3ds_emu64_uniform_locations
@@ -81,9 +96,18 @@ extern struct n3ds_shader_binary
    emu64_shader_binary;
 
 extern const struct n3ds_shader_info
-   emu64_shader_3, // Pos + Tex
-   emu64_shader_5, // Pos + Color
-   emu64_shader_7; // Pos + Tex + Color
+   emu64_shader_3,  // Pos + Tex
+   emu64_shader_5,  // Pos + Color
+   emu64_shader_7,  // Pos + Tex + Color
+   emu64_shader_9,  // Pos + Normals + Alpha
+   emu64_shader_11; // Pos + Tex + Normals + Alpha
+
+extern const struct n3ds_emu64_vertex_attribute
+   emu64_vertex_format_3[],
+   emu64_vertex_format_5[],
+   emu64_vertex_format_7[],
+   emu64_vertex_format_9[],
+   emu64_vertex_format_11[];
 
 // Initializes Emu64
 void shprog_emu64_init();

@@ -1,0 +1,96 @@
+.nodvle
+
+; Emu64 Vertex Lighting routine.
+; Calculates lighting based on num_lights.
+
+; ----- Uniforms -----
+.fvec vertex_load_flags        ; { num_lights, enable_texgen, tex_scale_s, tex_scale_t }
+.fvec ambient_light_color      ; { R, G, B, unused }
+.fvec light_colors[2]          ; { R, G, B, unused }
+.fvec light_directions[2]      ; { X, Y, Z, unused }
+
+; ----- Constant Uniforms -----
+.fvec emu64_const_1       ; {   0,   1, 1/127,  1/255 }
+.fvec emu64_const_2       ; { 255, 256,   127,    128 }
+
+; ----- Aliases -----
+.alias zeros          emu64_const_1.xxxx     ; Vector full of zeros
+.alias ones           emu64_const_1.yyyy     ; Vector full of ones
+.alias one_over_127   emu64_const_1.zzzz     ; Vector full of 1/127
+.alias color_scale    emu64_const_1.wwww     ; Vector full of 1/255
+.alias val_255        emu64_const_2.xxxx     ; Vector full of 255
+.alias val_256        emu64_const_2.yyyy     ; Vector full of 256
+.alias val_127        emu64_const_2.zzzz     ; Vector full of 127
+.alias val_128        emu64_const_2.wwww     ; Vector full of 128
+.alias num_lights     vertex_load_flags.xxxx ; Vector full of num_lights. Includes ambient.
+
+; ----- Subroutine Registers -----
+; These are intended purposes, but they may vary betwen subroutines.
+.alias sub_scratch_1  r10 ; Subroutine scratch register
+.alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
+.alias sub_param_1    r12 ; Subroutine input register
+.alias sub_param_2    r13 ; Subroutine input register
+.alias sub_param_3    r14 ; Subroutine input register
+.alias sub_return_1   r15 ; Subroutine return register
+.alias sub_return_2   r9  ; Subroutine return register
+
+.alias vertex_normal  sub_param_1 ; Normals and colors occupy the same space.
+.alias vertex_color   sub_param_1 ; Normals and colors occupy the same space.
+.alias light_output   sub_scratch_3
+
+; Subroutine
+; Inputs:
+;   sub_param_1: vertex color {R, G, B, A} OR vertex normals {X, Y, Z, Alpha passthrough}. This value may be overwritten!
+; Outputs:
+;   sub_return_1: vertex color {R, G, B, A}, [0, 1]. Alpha is not clamped.
+; Also Uses:
+;   sub_scratch_1: control flow
+;   sub_scratch_2: math intermediates
+;   sub_scratch_3: light accumulation
+.proc calculate_lighting
+loop_initial_conditions:
+    mov sub_scratch_1, num_lights
+    add sub_scratch_1, -ones, sub_scratch_1  ; Subtract 1 to remove ambient.
+    mov light_output, zeros                  ; Color output starts at 0
+
+loop_head:
+    add sub_scratch_1, -ones, sub_scratch_1  ; Decrement index
+    cmp zeros, gt, gt, sub_scratch_1         ; Set flag if (0 > counter)
+    jmpc cmp.x, loop_end                     ; Exit loop if we're out of lights
+    mova a0, sub_scratch_1
+
+coefficients:
+
+    mov sub_param_2, sub_param_1  ; Preserve vertex normals
+
+    mov sub_param_1, light_directions[a0.x]
+    call calculate_light_coefficients        ; Calculate coefficients based on light direction
+    mov sub_param_1, sub_return_1
+    call normalize_vec3                      ; Normalize and move to sub_scratch_2.
+    mov sub_scratch_2, sub_return_1
+
+    mov sub_param_1, sub_param_2  ; Restore vertex normals
+
+intensity:
+    ; Intensity: (coeffs · normal) / 127, clamp negatives to 0
+
+    dp3 sub_scratch_2, sub_scratch_2, vertex_normal           ;  coeffs · normals
+    mul sub_scratch_2, one_over_127,  sub_scratch_2           ; (coeffs · normals) / 127
+    max sub_scratch_2, zeros,         sub_scratch_2           ; clamp negative intensity to 0
+
+color:
+    ; Multiply intensity by color and accumulate
+    mul sub_scratch_2, light_colors[a0.x], sub_scratch_2
+    add light_output, light_output, sub_scratch_2
+
+    jmpc !cmp.x, loop_head
+
+loop_end:
+    add light_output, ambient_light_color, light_output  ; Add ambient light
+    min light_output, ones, light_output                 ; Clamp light to <= 1.0
+    mov light_output.a, vertex_color.a                   ; Preserve input alpha
+
+return:
+    mov sub_return_1, light_output
+.end

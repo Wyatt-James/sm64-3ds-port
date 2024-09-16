@@ -126,8 +126,8 @@ void print_intro_text(void) {
             print_text(20, 20, "START");
 #else
 #ifdef TARGET_N3DS
-            print_press_start(20, 38, "PRESS");
-            print_press_start(20, 20, "START");
+            print_text_centered(20, 38, "PRESS");
+            print_text_centered(20, 20, "START");
 #else
             print_text_centered(60, 38, "PRESS");
             print_text_centered(60, 20, "START");
@@ -386,12 +386,6 @@ void render_game(void) {
         gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         render_text_labels();
         do_cutscene_handler();
-
-#ifdef TARGET_N3DS
-        gDPSet2d(gDisplayListHead++, STEREO_MODE_2D);
-#endif
-
-        render_press_start(); // "press start" handler
 
 #ifdef TARGET_N3DS
         gDPSet2d(gDisplayListHead++, STEREO_MODE_3D_CREDITS); // credits are mode3

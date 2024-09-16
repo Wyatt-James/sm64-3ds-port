@@ -30,6 +30,7 @@
 ; These are intended purposes, but they may vary betwen subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
+.alias sub_scratch_3  r8  ; Subroutine scratch register
 .alias sub_param_1    r12 ; Subroutine input register
 .alias sub_param_2    r13 ; Subroutine input register
 .alias sub_param_3    r14 ; Subroutine input register
@@ -59,7 +60,7 @@
     
     mov sub_scratch_1, nones
     mov sub_scratch_2, in_enum.x
-    cmp sub_scratch_2, lt, eq, sub_scratch_1 ; Sets cmp.x if sub_scratch_1 < -1, and sets cmp.y if sub_scratch_1 == -1;
+    cmp sub_scratch_2, lt, eq, sub_scratch_1 ; Sets cmp.x if sub_scratch_2 < -1, and sets cmp.y if sub_scratch_2 == -1;
 
     ; if selection is LoD or SHADE...
     ifc cmp.x || cmp.y
