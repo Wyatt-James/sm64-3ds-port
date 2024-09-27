@@ -598,11 +598,6 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
         }
     }
 
-    // Update vertex loading flags
-    if (RFLAG_ON(FLAG_VERT_LOAD_FLAGS_CHANGED) || OPT_DISABLED(optimize.consecutive_vertex_load_flags)) {
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.vertex_load_flags, vertex_load_flags.num_lights, vertex_load_flags.enable_texgen, vertex_load_flags.texture_scale_s, vertex_load_flags.texture_scale_t);
-    }
-
     float* const vb_ptr = current_vertex_buffer->ptr;
     const size_t vb_num_verts = current_vertex_buffer->num_verts;
     const uint8_t vb_stride = current_vertex_buffer->vbo_info->stride;
@@ -615,8 +610,15 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
         return;
     }
 
+    // Copy verts into the GPU buffer
     float* const vb_head = &vb_ptr[vb_num_verts * vb_stride];
     memcpy(vb_head, buf_vbo, buf_vbo_num_bytes * VERTEX_BUFFER_UNIT_SIZE);
+
+    // Update vertex loading flags
+    if (RFLAG_ON(FLAG_VERT_LOAD_FLAGS_CHANGED) || OPT_DISABLED(optimize.consecutive_vertex_load_flags)) {
+        RFLAG_CLEAR(FLAG_VERT_LOAD_FLAGS_CHANGED);
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.vertex_load_flags, vertex_load_flags.num_lights, vertex_load_flags.enable_texgen, vertex_load_flags.texture_scale_s, vertex_load_flags.texture_scale_t);
+    }
 
     if (cc_features->num_inputs > 1) {
         if (cc->use_env_color)
@@ -947,26 +949,27 @@ void gfx_rapi_select_matrix_set(uint32_t matrix_set_id)
     game_projection       = &game_matrix_sets[matrix_set_id].game_projection;
 }
 
-// Optimized in the emulation layer
+// Optimized in the emulation layer.
 void gfx_rapi_set_backface_culling_mode(uint32_t culling_mode)
 {
     C3D_CullFace(citro3d_helpers_convert_cull_mode(culling_mode));
 }
 
+// Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_enable_lighting(bool enable)
 {
-    if (vertex_load_flags.enable_lighting != enable) {
-        vertex_load_flags.enable_lighting  = enable;
-        RFLAG_SET(FLAG_RECALCULATE_SHADER);
-    }
+    RFLAG_SET(FLAG_RECALCULATE_SHADER);
+    vertex_load_flags.enable_lighting = enable;
 }
 
+// Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_set_num_lights(int num_lights)
 {
     RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
     vertex_load_flags.num_lights = num_lights;
 }
 
+// Optimized in the emulation layer. Each light is updated at most one time per-drawcall.
 void gfx_rapi_configure_light(int light_id, Light_t* light)
 {
     union RGBA32 color = {
@@ -987,12 +990,14 @@ void gfx_rapi_configure_light(int light_id, Light_t* light)
     }
 }
 
+// Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_enable_texgen(bool enable)
 {
     RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
     vertex_load_flags.enable_texgen = enable;
 }
 
+// Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_set_texture_scaling_factor(uint32_t s, uint32_t t)
 {
     RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);

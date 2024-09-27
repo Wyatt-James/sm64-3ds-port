@@ -85,6 +85,7 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
 #define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
+#define SET_BITS(num_bits_) ((1 << (num_bits_)) - 1) // Sets N least significant bits. For example, (2) = 0b11.
 
 #define MAX_BUFFERED_TRIS 256
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
@@ -136,15 +137,21 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
 #define MODE_SWAP_COUNT_DO(stmt) do {} while (0)
 #endif
 
-float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
-                            {0.0f, 1.0f, 0.0f, 0.0f},
-                            {0.0f, 0.0f, 1.0f, 0.0f},
-                            {0.0f, 0.0f, 0.0f, 1.0f}};
+static float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
+                                   {0.0f, 1.0f, 0.0f, 0.0f},
+                                   {0.0f, 0.0f, 1.0f, 0.0f},
+                                   {0.0f, 0.0f, 0.0f, 1.0f}};
 
-float MTX_NDC_DOWNSCALE[4][4] = {{1.0f / NDC_SCALE, 0.0f,             0.0f, 0.0f},
-                                 {0.0f,             1.0f / NDC_SCALE, 0.0f, 0.0f},
-                                 {0.0f,             0.0f,             1.0f, 0.0f},
-                                 {0.0f,             0.0f,             0.0f, 1.0f}};
+static float MTX_NDC_DOWNSCALE[4][4] = {{1.0f / NDC_SCALE, 0.0f,             0.0f, 0.0f},
+                                        {0.0f,             1.0f / NDC_SCALE, 0.0f, 0.0f},
+                                        {0.0f,             0.0f,             1.0f, 0.0f},
+                                        {0.0f,             0.0f,             0.0f, 1.0f}};
+
+// A valid default value for a Light_t pointer.
+static Light_t LIGHT_DEFAULT = {
+    .col = {0, 0, 0},
+    .dir = {1, 1, 1}
+};
 
 typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
 
@@ -237,7 +244,8 @@ static struct RSP {
     uint8_t modelview_matrix_stack_size;
     float P_matrix[4][4];
 
-    Light_t current_lights[MAX_LIGHTS + 1];
+    Light_t* current_lights[MAX_LIGHTS + 1]; // MUST be populated with valid pointers during init! Use LIGHT_DEFAULT.
+    uint8_t lights_changed_bitfield;
     uint8_t current_num_lights; // includes ambient light
 
     uint32_t geometry_mode;
@@ -294,6 +302,10 @@ static struct ShaderState {
     union RGBA32 env_color;
     enum Stereoscopic3dMode stereo_3d_mode;
     enum IodMode iod_mode;
+    uint8_t current_num_lights;
+    bool enable_lighting;
+    bool enable_texgen;
+    union TextureScalingFactor texture_scaling_factor;
 } shader_state;
 
 static struct RenderingState {
@@ -367,27 +379,51 @@ static void gfx_apply_matrices()
 static void gfx_apply_lighting()
 {
     const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
-    gfx_rapi_enable_lighting(enable_lighting);
+
+    if (shader_state.enable_lighting != enable_lighting) {
+        shader_state.enable_lighting  = enable_lighting;
+        gfx_rapi_enable_lighting(enable_lighting);
+    }
+
+    ASSUME(rsp.current_num_lights <= MAX_LIGHTS);
 
     if (enable_lighting) {
-        gfx_rapi_set_num_lights(rsp.current_num_lights);
+        if (shader_state.current_num_lights != rsp.current_num_lights) { // Doesn't really happen in gameplay
+            shader_state.current_num_lights  = rsp.current_num_lights;
 
-        // Configure ambient light
-        gfx_rapi_configure_light(0, &rsp.current_lights[rsp.current_num_lights - 1]);
+            gfx_rapi_set_num_lights(rsp.current_num_lights);
+
+            // If numlights has changed, our current lights are invalid.
+            rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS + 1);
+        }
 
         // Configure directional lights
-        for (int i = 0; i < rsp.current_num_lights - 1; i++)
-            gfx_rapi_configure_light(i + 1, &rsp.current_lights[i]);
+        for (int i = 0; i < rsp.current_num_lights; i++) {
+            Light_t* light = rsp.current_lights[rsp.current_num_lights - 1 - i]; // Reverse the order so that ambient is sent as 0
+
+            if (rsp.lights_changed_bitfield & BIT(i))
+                gfx_rapi_configure_light(i, light);
+        }
+
+        rsp.lights_changed_bitfield = 0;
     }
 }
 
 static void gfx_apply_texgen()
 {
-    const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
-    const bool enable_texture_gen = rsp.geometry_mode & G_TEXTURE_GEN;
+    const bool geo_enable_lighting = rsp.geometry_mode & G_LIGHTING;
+    const bool geo_enable_texgen = rsp.geometry_mode & G_TEXTURE_GEN;
+    const bool enable_texgen = geo_enable_lighting && geo_enable_texgen;
 
-    gfx_rapi_enable_texgen(enable_lighting && enable_texture_gen);
-    gfx_rapi_set_texture_scaling_factor(rsp.texture_scaling_factor.s, rsp.texture_scaling_factor.t);
+    if (shader_state.enable_texgen != enable_texgen) {
+        shader_state.enable_texgen  = enable_texgen;
+        gfx_rapi_enable_texgen(enable_texgen);
+    }
+
+    if (shader_state.texture_scaling_factor.u64 != rsp.texture_scaling_factor.u64) {
+        shader_state.texture_scaling_factor.u64  = rsp.texture_scaling_factor.u64;
+        gfx_rapi_set_texture_scaling_factor(rsp.texture_scaling_factor.s, rsp.texture_scaling_factor.t);
+    }
 }
 
 static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
@@ -853,21 +889,21 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
 static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
 #ifdef F3DEX_GBI_2
 
-    // NOTE: reads out of bounds if it is an ambient light
-    // This used to avoid overwriting the lookat mtx, but that data no longer even makes it this far.
+    // This previously avoided overwriting the lookat mtx, but that data no longer even makes it this far.
     if (LIKELY(index == G_MV_LIGHT)) {
         gfx_flush(27);
-        const int lightidx = offset / 24;
-        memcpy((rsp.current_lights - 2) + lightidx, data, sizeof(Light_t));
+        const int light_index = (offset / 24) - 2;
+        rsp.current_lights[light_index] = (Light_t*) data;
+        rsp.lights_changed_bitfield |= BIT(light_index);
     } else { // G_MV_VIEWPORT
-        gfx_calc_and_set_viewport((const Vp_t *) data);
+        gfx_calc_and_set_viewport((const Vp_t*) data);
     }
 
 // Original GBI (me no care)
 #else
     switch (index) {
         case G_MV_VIEWPORT:
-            gfx_calc_and_set_viewport((const Vp_t *) data);
+            gfx_calc_and_set_viewport((const Vp_t*) data);
             break;
 #if 0
         case G_MV_LOOKATY:
@@ -880,7 +916,9 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
         case G_MV_L2:
             // NOTE: reads out of bounds if it is an ambient light
             gfx_flush(27);
-            memcpy(rsp.current_lights + (index - G_MV_L0) / 2, data, sizeof(Light_t));
+            const int light_index = (index - G_MV_L0) / 2;
+            rsp.current_lights[light_index] = (Light_t*) data;
+            rsp.lights_changed_bitfield |= BIT(light_index);
             break;
     }
 #endif
@@ -894,7 +932,7 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
             rsp.current_num_lights = data / 24 + 1; // add ambient light
 #else
             // Ambient light is included
-            // The 31th bit is a flag that lights should be recalculated
+            // Bit 31 is a flag that lights should be recalculated
             rsp.current_num_lights = (data - 0x80000000U) / 32;
 #endif
             break;
@@ -1087,6 +1125,10 @@ static void shader_state_init(struct ShaderState* ss)
     ss->env_color.u32  = ~rdp.env_color.u32;
     ss->stereo_3d_mode = STEREO_MODE_COUNT;
     ss->iod_mode = IOD_COUNT;
+    ss->current_num_lights = MAX_LIGHTS + 1;
+    ss->enable_lighting = ~0;
+    ss->texture_scaling_factor.s = INT32_MAX;
+    ss->texture_scaling_factor.t = INT32_MAX;
 }
 
 
@@ -1622,6 +1664,7 @@ static void gfx_run_dl(Gfx* cmd) {
 static void gfx_sp_reset() {
     rsp.modelview_matrix_stack_size = 1;
     rsp.current_num_lights = 2;
+    rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS + 1);
 }
 
 void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {
@@ -1645,6 +1688,10 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
     rsp.rect_vertices[1].position.z =
     rsp.rect_vertices[2].position.z =
     rsp.rect_vertices[3].position.z = -1;
+
+    // Initialize lights to all black
+    for (int i = 0; i < MAX_LIGHTS + 1; i++)
+        rsp.current_lights[i] = &LIGHT_DEFAULT;
 
     // Initialize the matstack to identity
     for (int i = 0; i < MAT_STACK_SIZE; i++)
