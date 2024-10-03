@@ -1705,7 +1705,7 @@ void gfx_run(Gfx *commands) {
 
     non_granular_log_time(0);
     gfx_run_dl(commands);
-    non_granular_log_time(5); // GFX Run DL
+    non_granular_log_time(5); // GFX Run Display List
 
     gfx_flush(24);
     gfx_rapi_end_frame();

@@ -389,11 +389,11 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 0:  Misc
     // 1:  Run Level Script
     // 2:  Synchronous Audio Synthesis
-    // 3:  Render Game
+    // 3:  Build Display List
     // 4:  GFX Rendering API Start Frame (VSync)
-    // 5:  GFX Run DL
+    // 5:  GFX Run Display List
 
-    // Detailed IDs (replaces GFX Run DL):
+    // Detailed IDs (replaces GFX Run Display List):
     // 5:  Vertex Copy
     // 6:  Light Recalculation
     // 7:  Vertex Light Calculation

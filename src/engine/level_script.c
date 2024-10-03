@@ -884,7 +884,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
 
     profiler_3ds_log_time(0);
     render_game();
-    profiler_3ds_log_time(3); // Render Game
+    profiler_3ds_log_time(3); // Build Display List
 
     end_master_display_list();
     alloc_display_list(0);
