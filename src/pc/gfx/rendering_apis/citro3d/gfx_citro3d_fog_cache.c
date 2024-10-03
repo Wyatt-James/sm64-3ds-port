@@ -20,7 +20,7 @@ enum FogCacheResult fog_cache_load(struct FogCache* cache, uint16_t from, uint16
 
     // Current already loaded
     if (cache->current != NULL && cache->current->id == id)
-        return FOGCACHE_HIT;
+        return FOGCACHE_CURRENT;
 
     // Load pre-calculated LUT
     for (uint8_t i = 0; i < cache->count; i++)

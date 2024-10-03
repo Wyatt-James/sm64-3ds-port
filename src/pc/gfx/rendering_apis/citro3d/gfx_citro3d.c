@@ -886,10 +886,15 @@ void gfx_rapi_set_fog(uint16_t from, uint16_t to)
     // FIXME: The near/far factors are personal preference
     // BOB:  6400, 59392 => 0.16, 116
     // JRB:  1280, 64512 => 0.80, 126
-    if (fog_cache_load(&fog_cache, from, to) == FOGCACHE_MISS) {
-        C3D_FogLut* lut = fog_cache_current(&fog_cache);
-        FogLut_Exp(lut, 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
-        C3D_FogLutBind(lut);
+    switch (fog_cache_load(&fog_cache, from, to)) {
+        default:
+            break;
+        case FOGCACHE_MISS:
+            FogLut_Exp(fog_cache_current(&fog_cache), 0.05f, 1.5f, 1024 / (float)from, ((float)to) / 512);
+            // Fall-through
+        case FOGCACHE_HIT:
+            C3D_FogLutBind(fog_cache_current(&fog_cache));
+            break;
     }
 }
 

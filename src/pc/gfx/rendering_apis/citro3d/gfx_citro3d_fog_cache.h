@@ -39,6 +39,7 @@ struct FogCache {
 };
 
 enum FogCacheResult {
+    FOGCACHE_CURRENT,
     FOGCACHE_HIT,
     FOGCACHE_MISS
 };
@@ -53,6 +54,6 @@ void fog_cache_init(struct FogCache* cache);
 enum FogCacheResult fog_cache_load(struct FogCache* cache, uint16_t from, uint16_t to);
 
 // Returns the current fog LUT.
-C3D_FogLut* fog_cache_current();
+C3D_FogLut* fog_cache_current(struct FogCache* cache);
 
 #endif
