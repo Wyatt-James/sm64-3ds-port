@@ -139,6 +139,9 @@ void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[4
 // Sets a C3D float uniform from an RGBA32 union. Scales by 1/255.
 void citro3d_helpers_set_fv_unif_rgba32(GPU_SHADER_TYPE type, int id, union RGBA32 color);
 
+// Sets a C3D float uniform from an RGBA32 union, but sets Alpha to 0. Scales by 1/255.
+void citro3d_helpers_set_fv_unif_rgb32(GPU_SHADER_TYPE type, int id, union RGBA32 color);
+
 // Converts a Color Combiner source to its Emu64 version.
 // Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
 enum Emu64ColorCombinerSource citro3d_helpers_convert_cc_mapping_to_emu64(uint8_t cc_mapping, bool fog_enabled);

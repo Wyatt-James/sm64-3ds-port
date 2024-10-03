@@ -7,6 +7,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "src/pc/bit_flag.h"
+
 #include "gfx_citro3d.h"
 #include "gfx_citro3d_helpers.h"
 #include "gfx_citro3d_fog_cache.h"
@@ -59,31 +61,26 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 
 // #define FLAG_FOG_ENABLED                 BIT(0)
 // #define FLAG_ALPHA_TEST                  BIT(1)
-#define FLAG_VIEWPORT_CHANGED             BIT(2)
-#define FLAG_SCISSOR_CHANGED              BIT(3)
-#define FLAG_VIEWPORT_OR_SCISSOR_CHANGED (FLAG_VIEWPORT_CHANGED | FLAG_SCISSOR_CHANGED)
-#define FLAG_TEX_SETTINGS_CHANGED         BIT(4) // Set explicitly by RDP commands.
-#define FLAG_CC_MAPPING_CHANGED           BIT(5)
-#define FLAG_RECALCULATE_SHADER           BIT(6)
-#define FLAG_VERT_LOAD_FLAGS_CHANGED      BIT(7) // Excludes lighting_enable since it's handled by FLAG_RECALCULATE_SHADER
+#define RFLAG_VIEWPORT_CHANGED             BIT(2)
+#define RFLAG_SCISSOR_CHANGED              BIT(3)
+#define RFLAG_VIEWPORT_OR_SCISSOR_CHANGED (RFLAG_VIEWPORT_CHANGED | RFLAG_SCISSOR_CHANGED)
+#define RFLAG_TEX_SETTINGS_CHANGED         BIT(4) // Set explicitly by RDP commands.
+#define RFLAG_CC_MAPPING_CHANGED           BIT(5)
+#define RFLAG_RECALCULATE_SHADER           BIT(6)
+#define RFLAG_VERT_LOAD_FLAGS_CHANGED      BIT(7) // Excludes lighting_enable since it's handled by RFLAG_RECALCULATE_SHADER
 
-#define FLAG_ALL ~0
-#define FLAG_SET_ON_FRAME_START (FLAG_VIEWPORT_OR_SCISSOR_CHANGED | FLAG_TEX_SETTINGS_CHANGED | FLAG_CC_MAPPING_CHANGED | FLAG_RECALCULATE_SHADER | FLAG_VERT_LOAD_FLAGS_CHANGED)
-
-#define FLAG_ON(flags_, flag_)    ((flags_) &  (flag_))
-#define FLAG_SET(flags_, flag_)   ((flags_) |= (flag_))
-#define FLAG_CLEAR(flags_, flag_)  flags_ &= ~(flag_)
+#define RFLAG_FRAME_START (RFLAG_VIEWPORT_OR_SCISSOR_CHANGED | RFLAG_TEX_SETTINGS_CHANGED | RFLAG_CC_MAPPING_CHANGED | RFLAG_RECALCULATE_SHADER | RFLAG_VERT_LOAD_FLAGS_CHANGED)
 
 #define RFLAG_ON(flag_)    FLAG_ON(render_state.flags,    flag_)
 #define RFLAG_SET(flag_)   FLAG_SET(render_state.flags,   flag_)
 #define RFLAG_CLEAR(flag_) FLAG_CLEAR(render_state.flags, flag_)
+#define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
+#define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))  
 
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 
 #define BSWAP32(v_)          (__builtin_bswap32(v_))
-#define BOOL_INVERT(v_)      do {v_ = !v_;} while (0)
-#define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
-#define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))                                        // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
+#define BOOL_INVERT(v_)      do {v_ = !v_;} while (0)                                      // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
 
 // See f32x2_note.txt
 union f32x2 {
@@ -274,7 +271,7 @@ static struct OptimizationFlags optimize = {
 };
 
 static struct RenderState render_state = {
-    .flags = FLAG_SET_ON_FRAME_START,
+    .flags = RFLAG_FRAME_START,
     .fog_enabled = 0xFF,
     .fog_lut = NULL,
     .alpha_test = 0xFF,
@@ -443,14 +440,14 @@ void internal_citro3d_select_render_target(C3D_RenderTarget* target)
     // C3D_FrameDrawOn: overwrites framebuf settings, viewport, and disables scissor (through viewport)
     // C3D_SetViewport: overwrites viewport and disables scissor
     // C3D_SetScissor: overwrites scissor.
-    if (RFLAG_ON(FLAG_VIEWPORT_OR_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
-        RFLAG_CLEAR(FLAG_VIEWPORT_CHANGED);
-        RFLAG_SET(FLAG_SCISSOR_CHANGED);
+    if (RFLAG_ON(RFLAG_VIEWPORT_OR_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
+        RFLAG_CLEAR(RFLAG_VIEWPORT_CHANGED);
+        RFLAG_SET(RFLAG_SCISSOR_CHANGED);
         C3D_SetViewport(viewport_config.y, viewport_config.x, viewport_config.height, viewport_config.width);
     }
 
-    if (RFLAG_ON(FLAG_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
-        RFLAG_CLEAR(FLAG_SCISSOR_CHANGED);
+    if (RFLAG_ON(RFLAG_SCISSOR_CHANGED) || OPT_DISABLED(optimize.viewport_and_scissor)) {
+        RFLAG_CLEAR(RFLAG_SCISSOR_CHANGED);
         if (scissor_config.enable)
             C3D_SetScissor(GPU_SCISSOR_NORMAL, scissor_config.y1, scissor_config.x1, scissor_config.y2, scissor_config.x2);
     }
@@ -551,14 +548,14 @@ void gfx_rapi_set_zmode_decal(bool zmode_decal)
 // Optimized in the emulation layer only for normal use; draw_rectangle is unoptomized.
 void gfx_rapi_set_viewport(int x, int y, int width, int height)
 {
-    RFLAG_SET(FLAG_VIEWPORT_CHANGED);
+    RFLAG_SET(RFLAG_VIEWPORT_CHANGED);
     citro3d_helpers_convert_viewport_settings(&viewport_config, gGfx3DSMode, x, y, width, height);
 }
 
 // Optimized in the emulation layer
 void gfx_rapi_set_scissor(int x, int y, int width, int height)
 {
-    RFLAG_SET(FLAG_SCISSOR_CHANGED);
+    RFLAG_SET(RFLAG_SCISSOR_CHANGED);
     citro3d_helpers_convert_scissor_settings(&scissor_config, gGfx3DSMode, x, y, width, height);
 }
 
@@ -580,8 +577,8 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
                hasNorm = vertex_load_flags.enable_lighting;
 
     // Select shader and vertex buffer. Must be done before using current_shader_program or current_vertex_buffer.
-    if (RFLAG_ON(FLAG_RECALCULATE_SHADER) || OPT_DISABLED(optimize.change_shader_on_cc_change)) {
-        RFLAG_CLEAR(FLAG_RECALCULATE_SHADER);
+    if (RFLAG_ON(RFLAG_RECALCULATE_SHADER) || OPT_DISABLED(optimize.change_shader_on_cc_change)) {
+        RFLAG_CLEAR(RFLAG_RECALCULATE_SHADER);
 
         const union ShaderProgramFeatureFlags shader_features = {
             .position = true,
@@ -615,8 +612,8 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
     memcpy(vb_head, buf_vbo, buf_vbo_num_bytes * VERTEX_BUFFER_UNIT_SIZE);
 
     // Update vertex loading flags
-    if (RFLAG_ON(FLAG_VERT_LOAD_FLAGS_CHANGED) || OPT_DISABLED(optimize.consecutive_vertex_load_flags)) {
-        RFLAG_CLEAR(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    if (RFLAG_ON(RFLAG_VERT_LOAD_FLAGS_CHANGED) || OPT_DISABLED(optimize.consecutive_vertex_load_flags)) {
+        RFLAG_CLEAR(RFLAG_VERT_LOAD_FLAGS_CHANGED);
         C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.vertex_load_flags, vertex_load_flags.num_lights, vertex_load_flags.enable_texgen, vertex_load_flags.texture_scale_s, vertex_load_flags.texture_scale_t);
     }
 
@@ -627,7 +624,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
             C3D_TexEnvColor(C3D_GetTexEnv(0), rdp_prim_color.u32);
     }
 
-    // See the definition of `union f32x2` for an explanation of why we use U64 comparison instead of F64.
+    // See f32x2_note.txt for an explanation of why we use U64 comparison instead of F64.
     if (hasTex) {
         struct TexHandle* tex = current_texture;
         if (render_state.texture_scale.u64 != tex->scale.u64 || *(uint32_t*) &render_state.uv_offset != *(uint32_t*) &texture_settings.uv_offset || OPT_DISABLED(optimize.texture_settings_1)) {
@@ -636,8 +633,8 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
             C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_1, tex->scale.s, tex->scale.t, texture_settings.uv_offset, 1);
         }
 
-        if (RFLAG_ON(FLAG_TEX_SETTINGS_CHANGED) || OPT_DISABLED(optimize.texture_settings_2)) {
-            RFLAG_CLEAR(FLAG_TEX_SETTINGS_CHANGED);
+        if (RFLAG_ON(RFLAG_TEX_SETTINGS_CHANGED) || OPT_DISABLED(optimize.texture_settings_2)) {
+            RFLAG_CLEAR(RFLAG_TEX_SETTINGS_CHANGED);
             C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.tex_settings_2, texture_settings.uls, texture_settings.ult, texture_settings.width, texture_settings.height);
         }
     }
@@ -792,7 +789,7 @@ void gfx_rapi_start_frame()
     render_state.texture_scale.f64 = INFINITY;
     render_state.uv_offset = INFINITY;
     render_state.shader_program = NULL;
-    RFLAG_SET(FLAG_SET_ON_FRAME_START);
+    RFLAG_SET(RFLAG_FRAME_START);
 }
 
 void gfx_rapi_end_frame()
@@ -958,14 +955,14 @@ void gfx_rapi_set_backface_culling_mode(uint32_t culling_mode)
 // Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_enable_lighting(bool enable)
 {
-    RFLAG_SET(FLAG_RECALCULATE_SHADER);
+    RFLAG_SET(RFLAG_RECALCULATE_SHADER);
     vertex_load_flags.enable_lighting = enable;
 }
 
 // Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_set_num_lights(int num_lights)
 {
-    RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    RFLAG_SET(RFLAG_VERT_LOAD_FLAGS_CHANGED);
     vertex_load_flags.num_lights = num_lights;
 }
 
@@ -976,31 +973,26 @@ void gfx_rapi_configure_light(int light_id, Light_t* light)
         .u32 = *(uint32_t*) &light->col // Alpha is ignored, so we can put garbage there.
     };
 
-    // Ambient
-    if (light_id == 0)
-        citro3d_helpers_set_fv_unif_rgba32(GPU_VERTEX_SHADER, emu64_uniform_locations.ambient_light_color, color);
+    const int color_uniform_location = (light_id == 0) ? emu64_uniform_locations.ambient_light_color : emu64_uniform_locations.light_colors[light_id - 1];
 
-    // Non-ambient
-    else {
-        light_id--;
+    citro3d_helpers_set_fv_unif_rgb32(GPU_VERTEX_SHADER, color_uniform_location, color);
 
-        // We don't need to scale the direction to [-1, 1] because it will be normalized
-        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.light_directions[light_id], light->dir[0], light->dir[1], light->dir[2], 0);
-        citro3d_helpers_set_fv_unif_rgba32(GPU_VERTEX_SHADER, emu64_uniform_locations.light_colors[light_id], color);
-    }
+    // We don't need to scale the direction to [-1, 1] because it will be normalized
+    if (light_id != 0)
+        C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.light_directions[light_id - 1], light->dir[0], light->dir[1], light->dir[2], 0.f);
 }
 
 // Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_enable_texgen(bool enable)
 {
-    RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    RFLAG_SET(RFLAG_VERT_LOAD_FLAGS_CHANGED);
     vertex_load_flags.enable_texgen = enable;
 }
 
 // Optimized in the emulation layer. Only set once per-drawcall.
 void gfx_rapi_set_texture_scaling_factor(uint32_t s, uint32_t t)
 {
-    RFLAG_SET(FLAG_VERT_LOAD_FLAGS_CHANGED);
+    RFLAG_SET(RFLAG_VERT_LOAD_FLAGS_CHANGED);
     vertex_load_flags.texture_scale_s = s;
     vertex_load_flags.texture_scale_t = t;
 }
@@ -1040,7 +1032,7 @@ void gfx_rapi_set_texture_settings(int16_t upper_left_s, int16_t upper_left_t, i
     texture_settings.ult = upper_left_t;
     texture_settings.width = width;
     texture_settings.height = height;
-    RFLAG_SET(FLAG_TEX_SETTINGS_CHANGED);
+    RFLAG_SET(RFLAG_TEX_SETTINGS_CHANGED);
 }
 
 // Redundant CCIDs are optimized in the emulation layer.
@@ -1081,7 +1073,7 @@ void gfx_rapi_select_color_combiner(size_t cc_index)
         }
         
         current_color_combiner = cc;
-        RFLAG_SET(FLAG_RECALCULATE_SHADER);
+        RFLAG_SET(RFLAG_RECALCULATE_SHADER);
     }
 }
 

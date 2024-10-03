@@ -11,6 +11,8 @@
 #endif
 #include <PR/gbi.h>
 
+#include "src/pc/bit_flag.h"
+
 #include "gfx_pc.h"
 
 #include "src/pc/gfx/gfx_rendering_api.h"
@@ -28,30 +30,6 @@
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
 
-#define GRANULAR_PROFILING 0 // Enables fine-grained performance profiling of various things.
-#define GRANULAR_FLUSHES   0 // Enables fine-grained profiling of flush hit/avoid rate.
-#define FLUSH_COUNTERS    29 // Number of gfx_flush calls to log.
-
-#if GRANULAR_PROFILING == 1
-#define granular_log_time(v_)     do { profiler_3ds_log_time(v_); } while (0)
-#define non_granular_log_time(v_) do { } while (0)
-#else
-#define granular_log_time(v_)     do { } while (0)
-#define non_granular_log_time(v_) do { profiler_3ds_log_time(v_); } while (0)
-#endif
-
-#if GRANULAR_FLUSHES == 1
-#define GRANULAR_FLUSH(v_) v_
-#define GRANULAR_FLUSH_DO(v_) do { v_; } while (0)
-#define gfx_flush(id_) gfx_flush_impl(id_)
-static int flushes[FLUSH_COUNTERS], flush_avoids[FLUSH_COUNTERS]; // Read with debugger
-static int tris_per_flush[FLUSH_COUNTERS][255];
-#else
-#define GRANULAR_FLUSH(v_)
-#define GRANULAR_FLUSH_DO(v_) do {} while (0)
-#define gfx_flush(id_) gfx_flush_impl()
-#endif
-
 /*
  *   Flush Totals, updated for commmit 634be2132a77c3c3fc04f66b87a2badd4d41e2ca
  *   Measured 1 frame after BoB benchmark, goomba was visible
@@ -66,16 +44,47 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
  *   subtotals: { 4, 0, 10, 107, 0, 29, 0, 3, 2, 18, 142, 0, 8, 2, 0, 0, 0, 0, 5, 12, 12, 6, 2, 14, 1 }
  */
 
-// If enabled, shader swaps will be counter and printed each frame.
-#define ENABLE_SHADER_SWAP_COUNTER 0
-#define ENABLE_OTHER_MODE_SWAP_COUNTER 0
-#define ENABLE_ASSERTIONS 0
+
+// -------------------- PREPROCESSOR FLAGS --------------------
+
+#define GRANULAR_PROFILING 0 // Enables fine-grained performance profiling of various things.
+#define GRANULAR_FLUSHES   0 // Enables fine-grained profiling of flush hit/avoid rate.
+#define FLUSH_COUNTERS    29 // Number of gfx_flush calls to log.
+#define ENABLE_ASSERTIONS  0 // Enables or disables assertions. Leave off for release.
+
+
+// -------------------- DEBUG MACROS --------------------
+
+#if GRANULAR_PROFILING == 1
+#define granular_log_time(v_)     do { profiler_3ds_log_time(v_); } while (0)
+#define non_granular_log_time(v_) do { } while (0)
+#else
+#define granular_log_time(v_)     do { } while (0)
+#define non_granular_log_time(v_) do { profiler_3ds_log_time(v_); } while (0)
+#endif
+
+#if GRANULAR_FLUSHES == 1
+#define GRANULAR_FLUSH_PARAM_DECLARATION(params_) params_  /* Passes the given parameters through                  */
+#define GRANULAR_FLUSH_DO(stmt_) do { stmt_; } while (0)   /* Executes a statement if granular flushes are enabled */
+#define gfx_flush(id_) gfx_flush_impl(id_)                 /* Passes the flush ID if granular flushes are enabled  */
+
+static int flushes[FLUSH_COUNTERS],              // Read these counters with a debugger.
+           flush_avoids[FLUSH_COUNTERS],
+           tris_per_flush[FLUSH_COUNTERS][255];
+#else
+#define GRANULAR_FLUSH_PARAM_DECLARATION(params_)  /* Dummies out the given parameters.                    */
+#define GRANULAR_FLUSH_DO(stmt_) do {} while (0)   /* Executes a statement if granular flushes are enabled */
+#define gfx_flush(id_) gfx_flush_impl()            /* Passes the flush ID if granular flushes are enabled  */
+#endif
 
 #if ENABLE_ASSERTIONS == 1
 #define SUPPORT_CHECK(x) assert(x)
 #else
 #define SUPPORT_CHECK(x) do {} while (0)
 #endif
+
+
+// -------------------- GENERAL-PURPOSE MACROS AND CONSTANTS --------------------
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
@@ -84,8 +93,9 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
 
 #define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
+
+#define COMBINE_MODE(rgb, alpha) (((CombineMode) rgb) | (((CombineMode) alpha) << 12))
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
-#define SET_BITS(num_bits_) ((1 << (num_bits_)) - 1) // Sets N least significant bits. For example, (2) = 0b11.
 
 #define MAX_BUFFERED_TRIS 256
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
@@ -106,7 +116,7 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
 
 #define XYWH_EQUAL(vp1_, vp2_) (vp1_.x == vp2_.x && vp1_.y == vp2_.y && vp1_.width == vp2_.width && vp1_.height == vp2_.height) // Compares two XYWidthHeight structs
 
-// Supported Texture formats (see import_texture)
+// Supported Texture formats (see upload_texture_to_rendering_api)
 // Max val for format_: 0b100 (range [0-4])
 // Max val for size_:   0b101 (range [0-5])
 #define TEX_FORMAT(format_, size_) ((((uint32_t) format_) << 3 ) | (uint32_t) size_)
@@ -120,22 +130,6 @@ static int tris_per_flush[FLUSH_COUNTERS][255];
 #define TEXFMT_I8     TEX_FORMAT(G_IM_FMT_I,    G_IM_SIZ_8b)  // Unused by SM64
 #define TEXFMT_CI4    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_4b)  // Unused by SM64
 #define TEXFMT_CI8    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_8b)  // Unused by SM64
-
-#define UCLAMP8(v) ((uint8_t) __usat(v, 8))
-#define U32_AS_FLOAT(v) (*(float*) &v)
-#define COMBINE_MODE(rgb, alpha) (((uint32_t) rgb) | (((uint32_t) alpha) << 12))
-
-#if ENABLE_SHADER_SWAP_COUNTER == 1
-#define SHADER_COUNT_DO(stmt) do {stmt;} while (0)
-#else
-#define SHADER_COUNT_DO(stmt) do {} while (0)
-#endif
-
-#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
-#define MODE_SWAP_COUNT_DO(stmt) do {stmt;} while (0)
-#else
-#define MODE_SWAP_COUNT_DO(stmt) do {} while (0)
-#endif
 
 static float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
                                    {0.0f, 1.0f, 0.0f, 0.0f},
@@ -153,11 +147,8 @@ static Light_t LIGHT_DEFAULT = {
     .dir = {1, 1, 1}
 };
 
-typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
 
-struct XYWidthHeight {
-    uint16_t x, y, width, height;
-};
+// -------------------- TYPES --------------------
 
 union int16x2 {
     struct {
@@ -204,6 +195,12 @@ union boolx2 {
     int16_t either;
 };
 
+typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
+
+struct XYWidthHeight {
+    uint16_t x, y, width, height;
+};
+
 // Total size: 16 bytes
 struct LoadedVertex {
     union int16x4 position; // 8 bytes (w is unused, garbage value)
@@ -231,6 +228,8 @@ union TextureScalingFactor {
     };
     uint64_t u64;
 };
+
+// -------------------- GLOBAL VARIABLES --------------------
 
 static struct {
     struct TextureHashmapNode *hashmap[1024];
@@ -287,35 +286,39 @@ static struct RDP {
 
 static struct ShaderState {
     ColorCombinerId cc_id;
-    uint8_t other_flags;
     bool use_alpha;
     bool use_fog;
     bool texture_edge;
     bool use_noise;
     uint8_t num_inputs;
     union boolx2 used_textures;
+} shader_state;
+
+static struct RenderingState {
     uint32_t fog_settings;
     uint32_t matrix_set;
     bool p_mtx_changed, mv_mtx_changed;
-    union int16x4 texture_settings;
-    union RGBA32 prim_color;
-    union RGBA32 env_color;
     enum Stereoscopic3dMode stereo_3d_mode;
     enum IodMode iod_mode;
     uint8_t current_num_lights;
     bool enable_lighting;
     bool enable_texgen;
-    union TextureScalingFactor texture_scaling_factor;
-} shader_state;
-
-static struct RenderingState {
+    union TextureScalingFactor texture_scaling_factor; // Why is this slow as hell when in RenderingState instead of ShaderState? 7.01 vs 7.18ms in castle courtyard
+    
+    ColorCombinerId cc_id;
+    union RGBA32 prim_color;
+    union RGBA32 env_color;
+    bool linear_filter;
+    union int16x4 texture_settings;
+    uint32_t culling_mode;
     bool depth_test;
+    struct XYWidthHeight viewport;
+    struct XYWidthHeight scissor;
+
     bool depth_mask;
     bool decal_mode;
     bool alpha_blend;
-    uint32_t culling_mode;
-    struct XYWidthHeight viewport, scissor;
-    struct TextureHashmapNode *textures[2];
+    struct TextureHashmapNode* textures[2];
 } rendering_state;
 
 struct GfxDimensions gfx_current_dimensions;
@@ -333,37 +336,29 @@ static size_t buf_vbo_num_verts = 0;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
 
-#if ENABLE_SHADER_SWAP_COUNTER == 1
-int num_shader_swaps = 0, avoided_swaps_recalc = 0, avoided_swaps_combine_mode = 0;
-#endif
-
-#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
-static int om_h_sets = 0, om_l_sets = 0, om_h_skips = 0, om_l_skips = 0;
-#endif
-
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
-static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id));
+static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id));
 
 static void gfx_apply_matrices()
 {
     bool apply_p_mtx = false, apply_mv_mtx = false;
 
-    if (shader_state.matrix_set != rsp.matrix_set) {
-        shader_state.matrix_set  = rsp.matrix_set;
+    if (rendering_state.matrix_set != rsp.matrix_set) {
+        rendering_state.matrix_set  = rsp.matrix_set;
         gfx_rapi_select_matrix_set(rsp.matrix_set);
         apply_p_mtx = apply_mv_mtx = true;
     }
 
     if (rsp.matrix_set == MATRIX_SET_NORMAL) {
-        if (shader_state.p_mtx_changed) {
-            shader_state.p_mtx_changed = false;
+        if (rendering_state.p_mtx_changed) {
+            rendering_state.p_mtx_changed = false;
             gfx_rapi_set_projection_matrix(rsp.P_matrix);
             apply_p_mtx = true;
         }
 
-        if (shader_state.mv_mtx_changed) {
-            shader_state.mv_mtx_changed = false;
+        if (rendering_state.mv_mtx_changed) {
+            rendering_state.mv_mtx_changed = false;
             gfx_rapi_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
             apply_mv_mtx = true;
         }
@@ -380,16 +375,16 @@ static void gfx_apply_lighting()
 {
     const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
 
-    if (shader_state.enable_lighting != enable_lighting) {
-        shader_state.enable_lighting  = enable_lighting;
+    if (rendering_state.enable_lighting != enable_lighting) {
+        rendering_state.enable_lighting  = enable_lighting;
         gfx_rapi_enable_lighting(enable_lighting);
     }
 
     ASSUME(rsp.current_num_lights <= MAX_LIGHTS);
 
     if (enable_lighting) {
-        if (shader_state.current_num_lights != rsp.current_num_lights) { // Doesn't really happen in gameplay
-            shader_state.current_num_lights  = rsp.current_num_lights;
+        if (rendering_state.current_num_lights != rsp.current_num_lights) { // Doesn't really happen in gameplay
+            rendering_state.current_num_lights  = rsp.current_num_lights;
 
             gfx_rapi_set_num_lights(rsp.current_num_lights);
 
@@ -415,18 +410,18 @@ static void gfx_apply_texgen()
     const bool geo_enable_texgen = rsp.geometry_mode & G_TEXTURE_GEN;
     const bool enable_texgen = geo_enable_lighting && geo_enable_texgen;
 
-    if (shader_state.enable_texgen != enable_texgen) {
-        shader_state.enable_texgen  = enable_texgen;
+    if (rendering_state.enable_texgen != enable_texgen) {
+        rendering_state.enable_texgen  = enable_texgen;
         gfx_rapi_enable_texgen(enable_texgen);
     }
 
-    if (shader_state.texture_scaling_factor.u64 != rsp.texture_scaling_factor.u64) {
-        shader_state.texture_scaling_factor.u64  = rsp.texture_scaling_factor.u64;
+    if (rendering_state.texture_scaling_factor.u64 != rsp.texture_scaling_factor.u64) {
+        rendering_state.texture_scaling_factor.u64  = rsp.texture_scaling_factor.u64;
         gfx_rapi_set_texture_scaling_factor(rsp.texture_scaling_factor.s, rsp.texture_scaling_factor.t);
     }
 }
 
-static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
+static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id)) {
     granular_log_time(0);
 
     // Over 50% of calls are pointless
@@ -448,8 +443,8 @@ static void gfx_flush_impl(GRANULAR_FLUSH(uint8_t flush_id)) {
 
 static void gfx_set_2d(int mode_2d)
 {
-    if (shader_state.stereo_3d_mode != mode_2d) {
-        shader_state.stereo_3d_mode  = mode_2d;
+    if (rendering_state.stereo_3d_mode != mode_2d) {
+        rendering_state.stereo_3d_mode  = mode_2d;
         gfx_flush(0);
         
         gfx_rapi_set_2d_mode(mode_2d);
@@ -458,8 +453,8 @@ static void gfx_set_2d(int mode_2d)
 
 static void gfx_set_iod(uint32_t iod)
 {
-    if (shader_state.iod_mode != iod) {
-        shader_state.iod_mode  = iod;
+    if (rendering_state.iod_mode != iod) {
+        rendering_state.iod_mode  = iod;
         gfx_flush(1);
 
         float z, w;
@@ -524,13 +519,12 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     return false;
 }
 
-static void import_texture(int tile) {
+static void upload_texture_to_rendering_api(int tile) {
     uint8_t fmt = rdp.texture_tile.fmt;
     uint8_t siz = rdp.texture_tile.siz;
 
-    if (gfx_texture_cache_lookup(tile, &rendering_state.textures[tile], rdp.loaded_texture[tile].addr, fmt, siz)) {
+    if (gfx_texture_cache_lookup(tile, &rendering_state.textures[tile], rdp.loaded_texture[tile].addr, fmt, siz))
         return;
-    }
 
     uint32_t line_size = rdp.texture_tile.line_size_bytes,
              tile_size = rdp.loaded_texture[tile].size_bytes;
@@ -650,12 +644,12 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         if (is_load) {
             if (matrix_updated) {
                 memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
-                shader_state.p_mtx_changed = true;
+                rendering_state.p_mtx_changed = true;
             }
         }
         else {
             gfx_matrix_mul_safe(rsp.P_matrix, matrix, (float*) rsp.P_matrix);
-            shader_state.p_mtx_changed = true;
+            rendering_state.p_mtx_changed = true;
         }
 
     } else { // G_MTX_MODELVIEW
@@ -673,11 +667,11 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
         if (is_load) {
             if (matrix_updated) {
-                shader_state.mv_mtx_changed = true;
+                rendering_state.mv_mtx_changed = true;
                 memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
             }
         } else {
-            shader_state.mv_mtx_changed = true;
+            rendering_state.mv_mtx_changed = true;
             if (is_push)
                 gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
             else
@@ -693,7 +687,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
     rsp.modelview_matrix_stack_size -= count;
-    shader_state.mv_mtx_changed = true;
+    rendering_state.mv_mtx_changed = true;
 }
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
@@ -710,81 +704,75 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 static void gfx_sp_tri_update_state()
 {
     granular_log_time(0);
-    ColorCombinerId cc_id = shader_state.cc_id;
-    static ColorCombinerId prev_cc_id = DELIBERATELY_INVALID_CC_ID;
 
-
-    if (prev_cc_id != cc_id) {
-        prev_cc_id  = cc_id;
-        SHADER_COUNT_DO(num_shader_swaps++);
+    if (rendering_state.cc_id != shader_state.cc_id) {
+        rendering_state.cc_id  = shader_state.cc_id;
 
         granular_log_time(10); // gfx_sp_tri_update_state
         gfx_flush(5);
         granular_log_time(0);
 
-        size_t cc_index = gfx_rapi_lookup_or_create_color_combiner(cc_id);
+        const size_t cc_index = gfx_rapi_lookup_or_create_color_combiner(shader_state.cc_id);
         gfx_rapi_color_combiner_get_info(cc_index, &shader_state.num_inputs, shader_state.used_textures.bools);
         gfx_rapi_select_color_combiner(cc_index);
-    } else
-        SHADER_COUNT_DO(avoided_swaps_recalc++);
+    }
 
-    if (UNLIKELY(shader_state.prim_color.u32 != rdp.prim_color.u32)) {
-        shader_state.prim_color.u32  = rdp.prim_color.u32;
-
+    if (UNLIKELY(rendering_state.prim_color.u32 != rdp.prim_color.u32)) {
+        rendering_state.prim_color.u32           = rdp.prim_color.u32;
         granular_log_time(10); // gfx_sp_tri_update_state
         gfx_flush(6);
         granular_log_time(0);
-
         gfx_rapi_set_cc_prim_color(rdp.prim_color.u32);
     }
 
-    if (UNLIKELY(shader_state.env_color.u32 != rdp.env_color.u32)) {
-        shader_state.env_color.u32  = rdp.env_color.u32;
-
+    if (UNLIKELY(rendering_state.env_color.u32 != rdp.env_color.u32)) {
+        rendering_state.env_color.u32           = rdp.env_color.u32;
         granular_log_time(10); // gfx_sp_tri_update_state
         gfx_flush(7);
         granular_log_time(0);
-
         gfx_rapi_set_cc_env_color(rdp.env_color.u32);
     }
         
-    const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
     if (shader_state.used_textures.either) {
-        static bool linear_filter_old = false;
-        if (linear_filter_old != linear_filter) {
-            linear_filter_old  = linear_filter;
+        const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
+        if (rendering_state.linear_filter != linear_filter) {
+            rendering_state.linear_filter  = linear_filter;
             granular_log_time(10); // gfx_sp_tri_update_state
             gfx_flush(8);
             granular_log_time(0);
             gfx_rapi_set_uv_offset(linear_filter ? 0.5f : 0.0f);
         }
 
-        if (shader_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
-            shader_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
+        if (rendering_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
+            rendering_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
             granular_log_time(10); // gfx_sp_tri_update_state
             gfx_flush(9);
             granular_log_time(0);
             gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
         }
-    }
 
-    for (int i = 0; i < 2; i++) {
-        if (shader_state.used_textures.bools[i]) {
-            if (rdp.textures_changed.bools[i]) {
-                granular_log_time(10); // gfx_sp_tri_update_state
-                gfx_flush(10);
-                granular_log_time(0);
-                import_texture(i);
-                rdp.textures_changed.bools[i] = false;
-            }
-            if (linear_filter != rendering_state.textures[i]->linear_filter || rdp.texture_tile.cms != rendering_state.textures[i]->cms || rdp.texture_tile.cmt != rendering_state.textures[i]->cmt) {
-                granular_log_time(10); // gfx_sp_tri_update_state
-                gfx_flush(11);
-                granular_log_time(0);
-                gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
-                rendering_state.textures[i]->linear_filter = linear_filter;
-                rendering_state.textures[i]->cms = rdp.texture_tile.cms;
-                rendering_state.textures[i]->cmt = rdp.texture_tile.cmt;
+        for (int i = 0; i < 2; i++) {
+            if (shader_state.used_textures.bools[i]) {
+                if (rdp.textures_changed.bools[i]) {
+                    rdp.textures_changed.bools[i] = false;
+                    granular_log_time(10); // gfx_sp_tri_update_state
+                    gfx_flush(10);
+                    granular_log_time(0);
+                    upload_texture_to_rendering_api(i);
+                }
+
+                if (rendering_state.textures[i]->linear_filter != linear_filter 
+                || rendering_state.textures[i]->cms != rdp.texture_tile.cms
+                || rendering_state.textures[i]->cmt != rdp.texture_tile.cmt)
+                {
+                    rendering_state.textures[i]->linear_filter = linear_filter;
+                    rendering_state.textures[i]->cms = rdp.texture_tile.cms;
+                    rendering_state.textures[i]->cmt = rdp.texture_tile.cmt;
+                    granular_log_time(10); // gfx_sp_tri_update_state
+                    gfx_flush(11);
+                    granular_log_time(0);
+                    gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
+                }
             }
         }
     }
@@ -793,7 +781,7 @@ static void gfx_sp_tri_update_state()
     // Handled here to optimize rectangle drawing
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
     if (rendering_state.culling_mode != culling_mode) {
-        rendering_state.culling_mode = culling_mode;
+        rendering_state.culling_mode  = culling_mode;
         gfx_flush(12);
         gfx_rapi_set_backface_culling_mode(culling_mode);
     }
@@ -809,7 +797,7 @@ static void gfx_sp_tri_update_state()
 
     // Handled here to optimize rectangle drawing
     if (!XYWH_EQUAL(rendering_state.viewport, rdp.viewport)) {
-        rendering_state.viewport = rdp.viewport;
+        rendering_state.viewport = rdp.viewport; // Struct copy
         gfx_flush(14);
         gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
@@ -937,8 +925,8 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
 #endif
             break;
         case G_MW_FOG:
-            if (shader_state.fog_settings != data) {
-                shader_state.fog_settings  = data;
+            if (rendering_state.fog_settings != data) {
+                rendering_state.fog_settings  = data;
                 gfx_flush(16);
                 uint16_t fog_mul = (int16_t)(data >> 16),
                          fog_offset = (int16_t)data;
@@ -1111,26 +1099,31 @@ static void shader_state_init(struct ShaderState* ss)
 {
     ss->cc_id = DELIBERATELY_INVALID_CC_ID;
     ss->num_inputs = 0;
-    ss->other_flags = 0;
     ss->texture_edge = false;
     ss->use_alpha = false;
     ss->use_fog = false;
     ss->use_noise = false;
     ss->used_textures.either = 0;
-    ss->matrix_set = MATRIX_SET_INVALID;
-    ss->p_mtx_changed = true;
-    ss->mv_mtx_changed = true;
-    ss->texture_settings.u64 = ~0;
-    ss->prim_color.u32 = ~rdp.prim_color.u32;
-    ss->env_color.u32  = ~rdp.env_color.u32;
-    ss->stereo_3d_mode = STEREO_MODE_COUNT;
-    ss->iod_mode = IOD_COUNT;
-    ss->current_num_lights = MAX_LIGHTS + 1;
-    ss->enable_lighting = ~0;
-    ss->texture_scaling_factor.s = INT32_MAX;
-    ss->texture_scaling_factor.t = INT32_MAX;
 }
 
+static void rendering_state_init(struct RenderingState* rs)
+{
+    rs->cc_id = DELIBERATELY_INVALID_CC_ID;
+    rs->texture_settings.u64 = ~0;
+    rs->prim_color.u32 = ~rdp.prim_color.u32;
+    rs->env_color.u32  = ~rdp.env_color.u32;
+    rs->linear_filter = ~0;
+    rs->matrix_set = MATRIX_SET_INVALID;
+    rs->p_mtx_changed = true;
+    rs->mv_mtx_changed = true;
+    rs->stereo_3d_mode = STEREO_MODE_COUNT;
+    rs->iod_mode = IOD_COUNT;
+    rs->current_num_lights = MAX_LIGHTS + 1;
+    rs->enable_lighting = ~0;
+    rs->enable_texgen = ~0;
+    rs->texture_scaling_factor.s = INT32_MAX;
+    rs->texture_scaling_factor.t = INT32_MAX;
+}
 
 static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
 {
@@ -1153,17 +1146,8 @@ static void calculate_cc_id()
 }
 
 static void gfx_dp_set_combine_mode(CombineMode combine_mode) {
-#if ENABLE_SHADER_SWAP_COUNTER == 1
-    // Low savings: usually under 1%
-    if (rdp.combine_mode != combine_mode) {
-        rdp.combine_mode  = combine_mode;
-        calculate_cc_id();
-    } else
-        avoided_swaps_combine_mode++;
-#else
     rdp.combine_mode = combine_mode;
     calculate_cc_id();
-#endif
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -1352,17 +1336,7 @@ static void gfx_dp_set_color_image(UNUSED uint32_t format, UNUSED uint32_t size,
 
 static void set_other_mode_h(uint32_t other_mode_h)
 {
-#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
-    // About 50% savings, but relatively low in count (aside from goddard)
-    if (rdp.other_mode_h != other_mode_h) {
-        rdp.other_mode_h  = other_mode_h;
-        om_h_sets++;
-    }
-    else
-        om_h_skips++;
-#else
     rdp.other_mode_h  = other_mode_h;
-#endif
 }
 
 static void set_other_mode_l(uint32_t other_mode_l)
@@ -1370,7 +1344,6 @@ static void set_other_mode_l(uint32_t other_mode_l)
     // About 66% savings, but relatively low in count (aside from goddard)
     if (LIKELY(rdp.other_mode_l != other_mode_l)) {
         rdp.other_mode_l  = other_mode_l;
-        MODE_SWAP_COUNT_DO(om_l_sets++);
         
         const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
         if (z_upd != rendering_state.depth_mask) {
@@ -1399,8 +1372,6 @@ static void set_other_mode_l(uint32_t other_mode_l)
             rendering_state.alpha_blend = shader_state.use_alpha;
         }
     }
-    else
-        MODE_SWAP_COUNT_DO(om_l_skips++);
 }
 
 static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mode) {
@@ -1682,6 +1653,7 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
     gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
 
     shader_state_init(&shader_state);
+    rendering_state_init(&rendering_state);
 
     // Screen-space rect Z will always be -1.
     rsp.rect_vertices[0].position.z =
@@ -1738,16 +1710,6 @@ void gfx_run(Gfx *commands) {
     gfx_flush(24);
     gfx_rapi_end_frame();
     gfx_wapi->swap_buffers_begin();
-
-#if ENABLE_SHADER_SWAP_COUNTER == 1
-    printf("Swaps %d  RC %d  CM %d\n", num_shader_swaps, avoided_swaps_recalc, avoided_swaps_combine_mode);
-    num_shader_swaps = avoided_swaps_recalc = avoided_swaps_combine_mode = 0;
-#endif
-
-#if ENABLE_OTHER_MODE_SWAP_COUNTER == 1
-    printf("OMH %d SK %d  OML %d SK %d\n", om_h_sets, om_h_skips, om_l_sets, om_l_skips);
-    om_h_sets = om_l_sets = om_h_skips = om_l_skips = 0;
-#endif
 
     // GDB print commands:
     // set print repeats 0
