@@ -37,7 +37,7 @@
 
 #include "../configfile.h"
 
-static int button_mapping[10][2];
+static int button_mapping[14][2];
 
 static void set_button_mapping(int index, int mask_n64, int mask_3ds)
 {
@@ -80,7 +80,7 @@ static u32 controller_3ds_get_held(void)
 
 static void controller_3ds_init(void)
 {
-    u32 i;
+    u32 i = 0;
     set_button_mapping(i++, A_BUTTON,     configKeyA); // n64 button => configured button
     set_button_mapping(i++, B_BUTTON,     configKeyB);
     set_button_mapping(i++, START_BUTTON, configKeyStart);
@@ -91,6 +91,10 @@ static void controller_3ds_init(void)
     set_button_mapping(i++, D_CBUTTONS,   configKeyCDown);
     set_button_mapping(i++, L_CBUTTONS,   configKeyCLeft);
     set_button_mapping(i++, R_CBUTTONS,   configKeyCRight);
+    set_button_mapping(i++, U_JPAD,       configKeyDUp);
+    set_button_mapping(i++, D_JPAD,       configKeyDDown);
+    set_button_mapping(i++, L_JPAD,       configKeyDLeft);
+    set_button_mapping(i++, R_JPAD,       configKeyDRight);
 }
 
 static void controller_3ds_read(OSContPad *pad)

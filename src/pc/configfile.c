@@ -51,6 +51,10 @@ unsigned int configKeyStickUp    = 0x11;
 unsigned int configKeyStickDown  = 0x1F;
 unsigned int configKeyStickLeft  = 0x1E;
 unsigned int configKeyStickRight = 0x20;
+unsigned int configKeyDUp        = 0xFFFF; // Unbound
+unsigned int configKeyDDown      = 0xFFFF;
+unsigned int configKeyDLeft      = 0xFFFF;
+unsigned int configKeyDRight     = 0xFFFF;
 #else
 unsigned int configKeyA          = KEY_A | KEY_Y;
 unsigned int configKeyB          = KEY_B | KEY_X;
@@ -66,6 +70,10 @@ unsigned int configKeyStickUp    = 0;
 unsigned int configKeyStickDown  = 0;
 unsigned int configKeyStickLeft  = 0;
 unsigned int configKeyStickRight = 0;
+unsigned int configKeyDUp        = 0;
+unsigned int configKeyDDown      = 0;
+unsigned int configKeyDLeft      = 0;
+unsigned int configKeyDRight     = 0;
 #endif
 
 
@@ -81,6 +89,10 @@ static const struct ConfigOption options[] = {
     {.name = "key_cdown",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyCDown},
     {.name = "key_cleft",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyCLeft},
     {.name = "key_cright",     .type = CONFIG_TYPE_UINT, .uintValue = &configKeyCRight},
+    {.name = "key_dup",        .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDUp},
+    {.name = "key_ddown",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDDown},
+    {.name = "key_dleft",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDLeft},
+    {.name = "key_dright",     .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDRight},
 #ifndef TARGET_N3DS
     {.name = "key_stickup",    .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickUp},
     {.name = "key_stickdown",  .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickDown},
