@@ -2,6 +2,8 @@
 
 This document describes how to remap controls for SM643DS using the `sm64config.txt` configuration file.
 
+[This](https://codepen.io/benoitcaron/full/abNZrbP) online editor from [BenoitCaron](https://github.com/BenoitCaron) is usable, but it does not support remapping of all buttons.
+
 ## Caveats and Limitations
 
 - All of the N64 and 3DS buttons are available to remap except for the N64 Analog Stick and 3DS Circle Pad, as their mapping is hard-coded.
@@ -69,5 +71,4 @@ The following 3DS buttons are supported by SM643DS.
 - The 3DS Circle Pad can actually be bound to N64 buttons, but it cannot be unbound from the N64 Analog Stick from within `sm64config.txt,` so its codes were omitted here.
 - The Touch Screen's virtual buttons cannot currently be edited.
 - When running on the Old 3DS, mapping buttons only present on the New 3DS is harmless.
-- [This](https://codepen.io/benoitcaron/full/abNZrbP) online editor from [BenoitCaron](https://github.com/BenoitCaron) is usable, but it does not support remapping of all buttons.
 - If duplicate config entries exist in `sm64config.txt,` the last entry will be the only one used.
