@@ -1,4 +1,4 @@
-FROM devkitpro/devkitarm:20240202 as build
+FROM devkitpro/devkitarm:20240202 AS build
 
 RUN apt-get update && \
     apt-get install -y \
@@ -34,4 +34,9 @@ ENV DEVKITPRO=/opt/devkitpro
 ENV DEVKITARM=/opt/devkitpro/devkitARM
 ENV DEVKITPPC=/opt/devkitpro/devkitPPC
 
-CMD echo 'usage: docker run --rm --mount type=bind,source="$(pwd)",destination=/sm64 sm64 make VERSION=${VERSION:-us} -j4'
+# ----- How to build this Dockerfile -----
+
+# Replace <yourname> with your screen name and <yourversion> with anything you'd like. Don't worry, nothing will be uploaded.
+
+# build docker image: `docker build -t <yourname>/sm64:<yourversion> - < ./Dockerfile`
+# build SM643DS:      `docker run --rm -v $(pwd):/sm64 <yourname>/sm64:<yourversion> make --jobs 8 VERSION=us`
