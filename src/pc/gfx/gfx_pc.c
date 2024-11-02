@@ -114,8 +114,6 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 #define UNLIKELY(cond)            __builtin_expect(!!(cond), 0)
 #define EXPECT(val, expected)     __builtin_expect(val, expected)
 
-#define XYWH_EQUAL(vp1_, vp2_) (vp1_.x == vp2_.x && vp1_.y == vp2_.y && vp1_.width == vp2_.width && vp1_.height == vp2_.height) // Compares two XYWidthHeight structs
-
 // Supported Texture formats (see upload_texture_to_rendering_api)
 // Max val for format_: 0b100 (range [0-4])
 // Max val for size_:   0b101 (range [0-5])
@@ -197,8 +195,11 @@ union boolx2 {
 
 typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
 
-struct XYWidthHeight {
-    uint16_t x, y, width, height;
+union XYWidthHeight {
+    struct {
+        uint16_t x, y, width, height;
+    };
+    uint64_t u64;
 };
 
 // Total size: 16 bytes
@@ -279,7 +280,7 @@ static struct RDP {
     CombineMode combine_mode;
 
     union RGBA32 env_color, prim_color, fill_color;
-    struct XYWidthHeight viewport;
+    union XYWidthHeight viewport;
     void *z_buf_address;
     void *color_image_address;
 } rdp;
@@ -312,8 +313,7 @@ static struct RenderingState {
     union int16x4 texture_settings;
     uint32_t culling_mode;
     bool depth_test;
-    struct XYWidthHeight viewport;
-    struct XYWidthHeight scissor;
+    union XYWidthHeight viewport, scissor;
 
     bool depth_mask;
     bool decal_mode;
@@ -796,8 +796,8 @@ static void gfx_sp_tri_update_state()
     }
 
     // Handled here to optimize rectangle drawing
-    if (!XYWH_EQUAL(rendering_state.viewport, rdp.viewport)) {
-        rendering_state.viewport = rdp.viewport; // Struct copy
+    if (rendering_state.viewport.u64 != rdp.viewport.u64) {
+        rendering_state.viewport      = rdp.viewport; // Struct copy
         gfx_flush(14);
         gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
@@ -851,11 +851,8 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     }
 }
 
-static void gfx_set_viewport(struct XYWidthHeight viewport) {
-    rdp.viewport.x = viewport.x;
-    rdp.viewport.y = viewport.y;
-    rdp.viewport.width = viewport.width;
-    rdp.viewport.height = viewport.height;
+static void gfx_set_viewport(union XYWidthHeight viewport) {
+    rdp.viewport = viewport; // Struct copy
 }
 
 static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
@@ -870,7 +867,7 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
     x *= RATIO_X;
     y *= RATIO_Y;
 
-    struct XYWidthHeight viewport = {x, y, width, height};
+    union XYWidthHeight viewport = {{ x, y, width, height }};
     gfx_set_viewport(viewport);
 }
 
@@ -947,14 +944,14 @@ static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSE
 }
 
 static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly, uint32_t lrx, uint32_t lry) {
-    float x = ulx / 4.0f * RATIO_X;
-    float y = (SCREEN_HEIGHT - lry / 4.0f) * RATIO_Y;
-    float width = (lrx - ulx) / 4.0f * RATIO_X;
-    float height = (lry - uly) / 4.0f * RATIO_Y;
+    uint16_t x = ulx / 4.0f * RATIO_X,
+             y = (SCREEN_HEIGHT - lry / 4.0f) * RATIO_Y,
+             width = (lrx - ulx) / 4.0f * RATIO_X,
+             height = (lry - uly) / 4.0f * RATIO_Y;
 
-    struct XYWidthHeight scissor = {x, y, width, height};
-    if (!XYWH_EQUAL(rendering_state.scissor, scissor)) {
-        rendering_state.scissor = scissor;
+    const union XYWidthHeight scissor = {{ x, y, width, height }};
+    if (rendering_state.scissor.u64 != scissor.u64) {
+        rendering_state.scissor      = scissor;
         gfx_flush(17);
         gfx_rapi_set_scissor(scissor.x, scissor.y, scissor.width, scissor.height);
     }
@@ -1220,8 +1217,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     uint32_t geometry_mode_saved = rsp.geometry_mode;
     gfx_sp_geometry_mode(~0, 0);
 
-    struct XYWidthHeight viewport_saved = rdp.viewport;
-    struct XYWidthHeight viewport = {0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height};
+    union XYWidthHeight viewport_saved = rdp.viewport,
+                        viewport = {{ 0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height }};
     gfx_set_viewport(viewport);
 
     static struct LoadedVertex* rect_triangles[] =
