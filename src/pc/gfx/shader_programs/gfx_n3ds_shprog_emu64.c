@@ -91,8 +91,7 @@ struct n3ds_emu64_uniform_locations
        .tex_settings_1 = -1,
        .tex_settings_2 = -1,
        .vertex_load_flags = -1,
-       .ambient_light_color = -1,
-       .light_colors = { -1, -1 },
+       .light_colors = { .ambient = -1, .directional = { -1, -1 }},
        .light_directions = { -1, -1 },
        .rsp_colors = { -1, -1, -1, -1 },
    };
@@ -145,21 +144,21 @@ void shprog_emu64_init()
     memset(&emu64_const_uniform_locations, -1, sizeof(emu64_const_uniform_locations));
     
     // Variable uniforms
-    emu64_uniform_locations.projection_mtx            = DVLE_GetUniformRegister(dvle, "projection_mtx");
-    emu64_uniform_locations.model_view_mtx            = DVLE_GetUniformRegister(dvle, "model_view_mtx");
-    emu64_uniform_locations.game_projection_mtx       = DVLE_GetUniformRegister(dvle, "game_projection_mtx");
-    emu64_uniform_locations.transposed_model_view_mtx = DVLE_GetUniformRegister(dvle, "transposed_model_view_mtx");
-    emu64_uniform_locations.rsp_color_selection       = DVLE_GetUniformRegister(dvle, "rsp_color_selection");
-    emu64_uniform_locations.tex_settings_1            = DVLE_GetUniformRegister(dvle, "tex_settings_1");
-    emu64_uniform_locations.tex_settings_2            = DVLE_GetUniformRegister(dvle, "tex_settings_2");
-    emu64_uniform_locations.vertex_load_flags         = DVLE_GetUniformRegister(dvle, "vertex_load_flags");
-    emu64_uniform_locations.ambient_light_color       = DVLE_GetUniformRegister(dvle, "ambient_light_color");
-    emu64_uniform_locations.light_colors[0]           = DVLE_GetUniformRegister(dvle, "light_colors");
-    emu64_uniform_locations.light_directions[0]       = DVLE_GetUniformRegister(dvle, "light_directions");
-    emu64_uniform_locations.rsp_colors[0]             = DVLE_GetUniformRegister(dvle, "rsp_colors");
+    emu64_uniform_locations.projection_mtx              = DVLE_GetUniformRegister(dvle, "projection_mtx");
+    emu64_uniform_locations.model_view_mtx              = DVLE_GetUniformRegister(dvle, "model_view_mtx");
+    emu64_uniform_locations.game_projection_mtx         = DVLE_GetUniformRegister(dvle, "game_projection_mtx");
+    emu64_uniform_locations.transposed_model_view_mtx   = DVLE_GetUniformRegister(dvle, "transposed_model_view_mtx");
+    emu64_uniform_locations.rsp_color_selection         = DVLE_GetUniformRegister(dvle, "rsp_color_selection");
+    emu64_uniform_locations.tex_settings_1              = DVLE_GetUniformRegister(dvle, "tex_settings_1");
+    emu64_uniform_locations.tex_settings_2              = DVLE_GetUniformRegister(dvle, "tex_settings_2");
+    emu64_uniform_locations.vertex_load_flags           = DVLE_GetUniformRegister(dvle, "vertex_load_flags");
+    emu64_uniform_locations.light_colors.ambient        = DVLE_GetUniformRegister(dvle, "ambient_light_color");
+    emu64_uniform_locations.light_colors.directional[0] = DVLE_GetUniformRegister(dvle, "light_colors");
+    emu64_uniform_locations.light_directions[0]         = DVLE_GetUniformRegister(dvle, "light_directions");
+    emu64_uniform_locations.rsp_colors[0]               = DVLE_GetUniformRegister(dvle, "rsp_colors");
     
     for (int i = 1; i < EMU64_MAX_LIGHTS; i++) {
-        emu64_uniform_locations.light_colors[i] = emu64_uniform_locations.light_colors[0] + i;
+        emu64_uniform_locations.light_colors.directional[i] = emu64_uniform_locations.light_colors.directional[0] + i;
         emu64_uniform_locations.light_directions[i] = emu64_uniform_locations.light_directions[0] + i;
     }
 
@@ -207,9 +206,9 @@ void shprog_emu64_print_uniform_locations(FILE* out) {
         emu64_uniform_locations.tex_settings_1,
         emu64_uniform_locations.tex_settings_2,
         emu64_uniform_locations.vertex_load_flags,
-        emu64_uniform_locations.ambient_light_color,
-        emu64_uniform_locations.light_colors[0],
-        emu64_uniform_locations.light_colors[1],
+        emu64_uniform_locations.light_colors.ambient,
+        emu64_uniform_locations.light_colors.directional[0],
+        emu64_uniform_locations.light_colors.directional[1],
         emu64_uniform_locations.light_directions[0],
         emu64_uniform_locations.light_directions[1],
         emu64_uniform_locations.rsp_colors[0],

@@ -977,9 +977,7 @@ void gfx_rapi_configure_light(int light_id, Light_t* light)
         .u32 = *(uint32_t*) &light->col // Alpha is ignored, so we can put garbage there.
     };
 
-    const int color_uniform_location = (light_id == 0) ? emu64_uniform_locations.ambient_light_color : emu64_uniform_locations.light_colors[light_id - 1];
-
-    citro3d_helpers_set_fv_unif_rgb32(GPU_VERTEX_SHADER, color_uniform_location, color);
+    citro3d_helpers_set_fv_unif_rgb32(GPU_VERTEX_SHADER, emu64_uniform_locations.light_colors.all[light_id], color);
 
     // We don't need to scale the direction to [-1, 1] because it will be normalized
     if (light_id != 0)
