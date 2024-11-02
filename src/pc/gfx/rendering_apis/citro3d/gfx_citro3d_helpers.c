@@ -403,15 +403,27 @@ GPU_CULLMODE citro3d_helpers_convert_cull_mode(uint32_t culling_mode)
     }
 }
 
-void citro3d_helpers_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx)
-{ 
-    c3d_mtx->r[0].x = sm64_mtx[0][0]; c3d_mtx->r[0].y = sm64_mtx[1][0]; c3d_mtx->r[0].z = sm64_mtx[2][0]; c3d_mtx->r[0].w = sm64_mtx[3][0];
-    c3d_mtx->r[1].x = sm64_mtx[0][1]; c3d_mtx->r[1].y = sm64_mtx[1][1]; c3d_mtx->r[1].z = sm64_mtx[2][1]; c3d_mtx->r[1].w = sm64_mtx[3][1];
-    c3d_mtx->r[2].x = sm64_mtx[0][2]; c3d_mtx->r[2].y = sm64_mtx[1][2]; c3d_mtx->r[2].z = sm64_mtx[2][2]; c3d_mtx->r[2].w = sm64_mtx[3][2];
-    c3d_mtx->r[3].x = sm64_mtx[0][3]; c3d_mtx->r[3].y = sm64_mtx[1][3]; c3d_mtx->r[3].z = sm64_mtx[2][3]; c3d_mtx->r[3].w = sm64_mtx[3][3];
+void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[4][4])
+{
+    for (int i = 0; i < 4; i++) {
+        c3d_mtx->r[i].x = sm64_mtx[0][i];
+        c3d_mtx->r[i].y = sm64_mtx[1][i];
+        c3d_mtx->r[i].z = sm64_mtx[2][i];
+        c3d_mtx->r[i].w = sm64_mtx[3][i];
+    }
 }
 
-void citro3d_helpers_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength)
+void citro3d_helpers_copy_and_transpose_mtx(C3D_Mtx* restrict dst, C3D_Mtx* restrict src)
+{
+    for (int i = 1; i <= 4; i++) {
+        dst->m[4  - i] = src->m[4 * i - 1]; //  3  2  1  0  |  3  7 11 15
+        dst->m[8  - i] = src->m[4 * i - 2]; //  7  6  5  4  |  2  6 10 14
+        dst->m[12 - i] = src->m[4 * i - 3]; // 11 10  9  8  |  1  5  9 13
+        dst->m[16 - i] = src->m[4 * i - 4]; // 15 14 13 12  |  0  4  8 12
+    }
+}
+
+void citro3d_helpers_mtx_stereo_tilt(C3D_Mtx* restrict dst, C3D_Mtx* restrict src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength)
 {
     /** ********************** Default L/R stereo perspective function with x/y tilt removed **********************
 

@@ -921,14 +921,13 @@ void gfx_rapi_set_iod(float z, float w)
 
 void gfx_rapi_set_model_view_matrix(float mtx[4][4])
 {
-    citro3d_helpers_convert_mtx(mtx, model_view);
-    memcpy(transposed_model_view, model_view, sizeof(*transposed_model_view));
-    Mtx_Transpose(transposed_model_view);
+    citro3d_helpers_convert_mtx(model_view, mtx);
+    citro3d_helpers_copy_and_transpose_mtx(transposed_model_view, model_view);
 }
 
 void gfx_rapi_set_projection_matrix(float mtx[4][4])
 {
-    citro3d_helpers_convert_mtx(mtx, game_projection);
+    citro3d_helpers_convert_mtx(game_projection, mtx);
 }
 
 // Optimized in the emulation layer

@@ -112,8 +112,11 @@ GPU_TEXTURE_WRAP_PARAM citro3d_helpers_convert_texture_clamp_mode(uint32_t val);
 // LUT: Converts an RSP backface culling mode to its C3D counterpart.
 GPU_CULLMODE citro3d_helpers_convert_cull_mode(uint32_t culling_mode);
 
-// Converts an RSP matrix to a C3D matrix, which has the elements reversed within each row.
-void citro3d_helpers_convert_mtx(float sm64_mtx[4][4], C3D_Mtx* c3d_mtx);
+// Converts an RSP matrix to a C3D matrix. RSP matrices are column-major, while C3D matrices are row-major with each row reversed left-right.
+void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[4][4]);
+
+// Copies and transposes a C3D_Mtx in a single operation.
+void citro3d_helpers_copy_and_transpose_mtx(C3D_Mtx* restrict dst, C3D_Mtx* restrict src);
 
 // Applies a stereoscopic tilt to the given C3D_Mtx.
 void citro3d_helpers_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscopic3dMode mode_2d, float z, float w, float strength);
