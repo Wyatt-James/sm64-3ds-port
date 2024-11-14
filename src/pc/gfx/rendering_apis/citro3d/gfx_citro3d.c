@@ -75,12 +75,12 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 #define RFLAG_SET(flag_)   FLAG_SET(render_state.flags,   flag_)
 #define RFLAG_CLEAR(flag_) FLAG_CLEAR(render_state.flags, flag_)
 #define OPT_ENABLED(flag_)   (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
-#define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))  
+#define OPT_DISABLED(flag_)  (!OPT_ENABLED(flag_))                                        // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
 
 #define NTSC_FRAMERATE(fps_) ((float) fps_ * (1000.0f / 1001.0f))
 
 #define BSWAP32(v_)          (__builtin_bswap32(v_))
-#define BOOL_INVERT(v_)      do {v_ = !v_;} while (0)                                      // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
+#define BOOL_INVERT(v_)      do {v_ = !v_;} while (0)
 
 // See f32x2_note.txt
 union f32x2 {
@@ -1001,10 +1001,8 @@ void gfx_rapi_set_texture_scaling_factor(uint32_t s, uint32_t t)
 
 void gfx_rapi_set_viewport_clear_color(uint32_t viewport_id, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    screen_clear_configs.array[viewport_id].color.r = r;
-    screen_clear_configs.array[viewport_id].color.g = g;
-    screen_clear_configs.array[viewport_id].color.b = b;
-    screen_clear_configs.array[viewport_id].color.a = a;
+    union RGBA32 color = {.r = r, .g = g, .b = b, .a = a};
+    screen_clear_configs.array[viewport_id].color.u32 = color.u32;
 }
 
 void gfx_rapi_set_viewport_clear_color_u32(uint32_t viewport_id, uint32_t color)
