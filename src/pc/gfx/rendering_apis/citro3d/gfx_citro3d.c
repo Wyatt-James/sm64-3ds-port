@@ -901,8 +901,7 @@ void gfx_rapi_set_fog(uint16_t from, uint16_t to)
 // Optimizations seem pretty fruitless
 void gfx_rapi_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    union RGBA32 fog_color = {.r = r, .g = g, .b = b, .a = a};
-    C3D_FogColor(fog_color.u32);
+    C3D_FogColor((union RGBA32) {.r = r, .g = g, .b = b, .a = a}.u32);
 }
 
 // Optimized in the emulation layer
@@ -1001,8 +1000,7 @@ void gfx_rapi_set_texture_scaling_factor(uint32_t s, uint32_t t)
 
 void gfx_rapi_set_viewport_clear_color(uint32_t viewport_id, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    union RGBA32 color = {.r = r, .g = g, .b = b, .a = a};
-    screen_clear_configs.array[viewport_id].color.u32 = color.u32;
+    screen_clear_configs.array[viewport_id].color.u32 = (union RGBA32) {.r = r, .g = g, .b = b, .a = a}.u32;
 }
 
 void gfx_rapi_set_viewport_clear_color_u32(uint32_t viewport_id, uint32_t color)
@@ -1125,14 +1123,12 @@ size_t gfx_rapi_lookup_or_create_color_combiner(ColorCombinerId cc_id)
 
     // N3DS only cares about the first two mappings, so we want to make an identifier for specifically this to enhance performance
     // RGBA32 works fine since it's four u8s
-    union RGBA32 mapping_id = {
+    cc->cc_mapping_identifier = (union RGBA32) {
         .r = mapping.rgb[0],
         .g = mapping.rgb[1],
         .b = mapping.alpha[0],
         .a = mapping.alpha[1],
-    };
-
-    cc->cc_mapping_identifier = mapping_id.u32;
+    }.u32;
 
     // Preconfigure TEV settings
     citro3d_helpers_configure_tex_env_slot_0(&cc->cc_features, &cc->texenv_slot_0);

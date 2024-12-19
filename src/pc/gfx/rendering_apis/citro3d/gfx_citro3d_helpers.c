@@ -168,9 +168,9 @@ struct TextureSize citro3d_helpers_adjust_texture_dimensions(struct TextureSize 
 }
 
 void citro3d_helpers_pad_and_tile_texture_u32(uint32_t* src,
-                                          uint32_t* dest,
-                                          struct TextureSize src_size,
-                                          struct TextureSize new_size)
+                                              uint32_t* dest,
+                                              struct TextureSize src_size,
+                                              struct TextureSize new_size)
 {
     uint32_t src_w = src_size.width,
              src_h = src_size.height,
@@ -199,9 +199,9 @@ void citro3d_helpers_pad_and_tile_texture_u32(uint32_t* src,
 }
 
 void citro3d_helpers_pad_and_tile_texture_u16(uint16_t* src,
-                                          uint16_t* dest,
-                                          struct TextureSize src_size,
-                                          struct TextureSize new_size)
+                                              uint16_t* dest,
+                                              struct TextureSize src_size,
+                                              struct TextureSize new_size)
 {
     uint32_t src_w = src_size.width,
              src_h = src_size.height,
@@ -229,9 +229,9 @@ void citro3d_helpers_pad_and_tile_texture_u16(uint16_t* src,
 }
 
 void citro3d_helpers_pad_and_tile_texture_u8(uint8_t* src,
-                                         uint8_t* dest,
-                                         struct TextureSize src_size,
-                                         struct TextureSize new_size)
+                                             uint8_t* dest,
+                                             struct TextureSize src_size,
+                                             struct TextureSize new_size)
 {
     uint32_t src_w = src_size.width,
              src_h = src_size.height,
@@ -403,7 +403,7 @@ GPU_CULLMODE citro3d_helpers_convert_cull_mode(uint32_t culling_mode)
     }
 }
 
-void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[4][4])
+void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[restrict 4][4])
 {
     for (int i = 0; i < 4; i++) {
         c3d_mtx->r[i].x = sm64_mtx[0][i];
@@ -552,7 +552,7 @@ enum Stereoscopic3dMode citro3d_helpers_convert_2d_mode(int mode_2d)
 }
 
 // Sets a C3D float uniform from a vector of floats.
-void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[4])
+void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[restrict 4])
 {
     C3D_FVUnifSet(type, id, vec[0], vec[1], vec[2], vec[3]);
 }

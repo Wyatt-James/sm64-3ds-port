@@ -113,7 +113,7 @@ GPU_TEXTURE_WRAP_PARAM citro3d_helpers_convert_texture_clamp_mode(uint32_t val);
 GPU_CULLMODE citro3d_helpers_convert_cull_mode(uint32_t culling_mode);
 
 // Converts an RSP matrix to a C3D matrix. RSP matrices are column-major, while C3D matrices are row-major with each row reversed left-right.
-void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[4][4]);
+void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[restrict 4][4]);
 
 // Copies and transposes a C3D_Mtx in a single operation.
 void citro3d_helpers_copy_and_transpose_mtx(C3D_Mtx* restrict dst, C3D_Mtx* restrict src);
@@ -137,7 +137,7 @@ void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z,
 enum Stereoscopic3dMode citro3d_helpers_convert_2d_mode(int mode_2d);
 
 // Sets a C3D float uniform from a vector of floats.
-void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[4]);
+void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[restrict 4]);
 
 // Sets a C3D float uniform from an RGBA32 union. Scales by 1/255.
 void citro3d_helpers_set_fv_unif_rgba32(GPU_SHADER_TYPE type, int id, union RGBA32 color);

@@ -590,7 +590,7 @@ static void upload_texture_to_rendering_api(int tile) {
 
 // Multiplies the whole matrix. When both funcs are inline, saves ~200us.
 // Matrices are column-major.
-static inline void gfx_matrix_mul_unsafe(float res[4][4], const float* restrict a, const float* restrict  b) {
+static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* restrict a, const float* restrict  b) {
     #define MTA(r_, c_) a[ARR_INDEX_2D(c_, r_, 4)]
     #define MTB(r_, c_) b[ARR_INDEX_2D(c_, r_, 4)]
 
@@ -805,7 +805,7 @@ static void gfx_sp_tri_update_state()
     granular_log_time(10); // gfx_sp_tri_update_state
 }
 
-static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
+static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], uint32_t numTris)
 {
     granular_log_time(0);
 
@@ -836,7 +836,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex * v_arr[], uint32_t numTris)
     granular_log_time(11); // gfx_tri_create_vbo
 }
 
-static void gfx_sp_tri_batched(struct LoadedVertex **v_arr, uint32_t num_tris) {
+static void gfx_sp_tri_batched(struct LoadedVertex *restrict v_arr[restrict], uint32_t num_tris) {
     gfx_sp_tri_update_state();
     gfx_tri_create_vbo(v_arr, num_tris);
 }
