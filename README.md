@@ -111,6 +111,16 @@ wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/maker
   chmod +x /opt/devkitpro/tools/bin/makerom && \
   rm makerom.zip
 
+wget https://github.com/derrekr/citro3d/archive/71f33882fb4e1e7ccda455ea187c1fab6dec64d4.zip \
+  -O /tmp/citro3d-derrekr.zip && \
+  echo 4f36dfb3b0c41a1ea9161c57448674a6052bd84962210ecf99f0ffbd5a7af3d9  citro3d-derrekr.zip | sha256sum --check && \
+  unzip -d /tmp/citro3d-derrekr-temp /tmp/citro3d-derrekr.zip && \
+  mv /tmp/citro3d-derrekr-temp/citro3d-* /tmp/citro3d-derrekr
+
+cd /tmp/citro3d-derrekr
+
+make install
+
 exit
 
 cd

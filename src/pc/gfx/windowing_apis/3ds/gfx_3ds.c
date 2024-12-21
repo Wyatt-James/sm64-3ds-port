@@ -37,6 +37,8 @@
 #undef u8
 #undef s8
 
+#define DEFAULT_GXQUEUE_SIZE 32 // This is the default used by C3D.
+
 // wait a quarter second between mashing
 #ifdef VERSION_EU
 #define DEBOUNCE_FRAMES 6
@@ -96,7 +98,7 @@ static void deinitialise_screens()
 
 static void initialise_screens()
 {
-    C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
+    C3D_InitEx(C3D_DEFAULT_CMDBUF_SIZE, DEFAULT_GXQUEUE_SIZE, true);
 
     bool useAA   = gfx_config.useAA   && n3ds_supports_800px_mode; // old 2DS does not support 800px
     bool useWide = gfx_config.useWide && n3ds_supports_800px_mode; // old 2DS does not support 800px
