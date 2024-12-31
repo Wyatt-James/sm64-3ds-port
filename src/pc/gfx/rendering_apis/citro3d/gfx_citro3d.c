@@ -11,6 +11,7 @@
 
 #include "gfx_citro3d.h"
 #include "gfx_citro3d_helpers.h"
+#include "gfx_citro3d_wrappers.h"
 #include "gfx_citro3d_fog_cache.h"
 #include "src/pc/gfx/gfx_3ds_types.h"
 
@@ -701,11 +702,11 @@ void gfx_rapi_init()
     internal_citro3d_load_shader(internal_citro3d_lookup_or_create_shader(shader_features));
 
     // Initialize constant uniforms
-    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_1, (float*) &emu64_const_uniform_defaults.texture_const_1);
-    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_2, (float*) &emu64_const_uniform_defaults.texture_const_2);
-    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.cc_constants,    (float*) &emu64_const_uniform_defaults.cc_constants);
-    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_1,   (float*) &emu64_const_uniform_defaults.emu64_const_1);
-    citro3d_helpers_set_fv_unif_array(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_2,   (float*) &emu64_const_uniform_defaults.emu64_const_2);
+    C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_1, (float*) &emu64_const_uniform_defaults.texture_const_1);
+    C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, emu64_const_uniform_locations.texture_const_2, (float*) &emu64_const_uniform_defaults.texture_const_2);
+    C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, emu64_const_uniform_locations.cc_constants,    (float*) &emu64_const_uniform_defaults.cc_constants);
+    C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_1,   (float*) &emu64_const_uniform_defaults.emu64_const_1);
+    C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, emu64_const_uniform_locations.emu64_const_2,   (float*) &emu64_const_uniform_defaults.emu64_const_2);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_0], 0, 0, 0, 0);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_1], 1, 1, 1, 1);
 
@@ -976,7 +977,7 @@ void gfx_rapi_configure_light(int light_id, Light_t* light)
         .u32 = *(uint32_t*) &light->col // Alpha is ignored, so we can put garbage there.
     };
 
-    citro3d_helpers_set_fv_unif_rgb32(GPU_VERTEX_SHADER, emu64_uniform_locations.light_colors.all[light_id], color);
+    C3DW_FVUnifSetRGB(GPU_VERTEX_SHADER, emu64_uniform_locations.light_colors.all[light_id], color);
 
     // We don't need to scale the direction to [-1, 1] because it will be normalized
     if (light_id != 0)
@@ -1148,14 +1149,14 @@ void gfx_rapi_color_combiner_get_info(size_t cc_index, uint8_t *num_inputs, bool
 void gfx_rapi_set_cc_prim_color(uint32_t color)
 {
     rdp_prim_color.u32 = color;
-    citro3d_helpers_set_fv_unif_rgba32(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_PRIM], rdp_prim_color);
+    C3DW_FVUnifSetRGBA(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_PRIM], rdp_prim_color);
 }
 
 // Optimized in the emulation layer
 void gfx_rapi_set_cc_env_color(uint32_t color)
 {
-    rdp_env_color.u32 = color;
-    citro3d_helpers_set_fv_unif_rgba32(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_ENV], rdp_env_color);
+    rdp_env_color.u32 = color; 
+    C3DW_FVUnifSetRGBA(GPU_VERTEX_SHADER, emu64_uniform_locations.rsp_colors[EMU64_CC_ENV], rdp_env_color);
 }
 
 #endif

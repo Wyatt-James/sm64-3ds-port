@@ -8,7 +8,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <3ds/gpu/enums.h> // Doesn't define or use any types, so can be outside of the guard.
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -135,15 +134,6 @@ void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z,
 
 // Converts an RSP 2D mode to its GFX_Citro3D counterpart.
 enum Stereoscopic3dMode citro3d_helpers_convert_2d_mode(int mode_2d);
-
-// Sets a C3D float uniform from a vector of floats.
-void citro3d_helpers_set_fv_unif_array(GPU_SHADER_TYPE type, int id, float vec[restrict 4]);
-
-// Sets a C3D float uniform from an RGBA32 union. Scales by 1/255.
-void citro3d_helpers_set_fv_unif_rgba32(GPU_SHADER_TYPE type, int id, union RGBA32 color);
-
-// Sets a C3D float uniform from an RGBA32 union, but sets Alpha to 0. Scales by 1/255.
-void citro3d_helpers_set_fv_unif_rgb32(GPU_SHADER_TYPE type, int id, union RGBA32 color);
 
 // Converts a Color Combiner source to its Emu64 version.
 // Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
