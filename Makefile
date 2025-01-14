@@ -963,9 +963,6 @@ define bin2o
   bin2s -a 4 -H $(BUILD_DIR)/$(MINIMAP_TEXTURES)/`(echo $(<F) | tr . _)`.h $(BUILD_DIR)/$< | $(AS) -o $(BUILD_DIR)/$(MINIMAP_TEXTURES)/$(<F).o
 endef
 
-# TODO: simplify dependency chain
-$(BUILD_DIR)/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.o: $(BUILD_DIR)/src/pc/gfx/windowing_apis/3ds/gfx_3ds.o
-$(BUILD_DIR)/src/pc/gfx/windowing_apis/3ds/gfx_3ds.o: $(BUILD_DIR)/src/pc/gfx/gfx_3ds_menu.o
 $(BUILD_DIR)/src/pc/gfx/gfx_3ds_menu.o: $(MINIMAP_T3X_HEADERS)
 
 %.t3x.o $(BUILD_DIR)/%_t3x.h: %.t3x

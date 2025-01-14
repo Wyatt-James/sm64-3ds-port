@@ -4,6 +4,17 @@
 #include "gfx_3ds_menu.h"
 #include "shader_programs/gfx_n3ds_shprog_emu64.h"
 
+#include "src/minimap/textures/mode_400_t3x.h"
+#include "src/minimap/textures/mode_800_t3x.h"
+#include "src/minimap/textures/aa_on_t3x.h"
+#include "src/minimap/textures/aa_off_t3x.h"
+#include "src/minimap/textures/resume_t3x.h"
+#include "src/minimap/textures/exit_t3x.h"
+#include "src/minimap/textures/menu_cleft_t3x.h"
+#include "src/minimap/textures/menu_cright_t3x.h"
+#include "src/minimap/textures/menu_cdown_t3x.h"
+#include "src/minimap/textures/menu_cup_t3x.h"
+
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
 static C3D_Mtx model_view_mtx, projection_mtx;
