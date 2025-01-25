@@ -3,7 +3,7 @@
 
 #include <types.h>
 
-#define PROFILER_3DS_ENABLE 0
+#define PROFILER_3DS_ENABLE 1
 
 
 #if PROFILER_3DS_ENABLE == 1

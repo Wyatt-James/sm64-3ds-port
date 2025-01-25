@@ -2,8 +2,8 @@
 #include <stdio.h>
 
 #include "gfx_citro3d_helpers.h"
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_defines.h"
 #include "src/pc/gfx/gfx_cc.h"
-#include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -463,7 +463,7 @@ void citro3d_helpers_mtx_stereo_tilt(C3D_Mtx* restrict dst, C3D_Mtx* restrict sr
     }
 
     if (strength != 0.0f) {
-        static C3D_Mtx iod_mtx = C3D_STATIC_IDENTITY_MTX;
+        C3D_Mtx iod_mtx = C3D_STATIC_IDENTITY_MTX;
 
         iod_mtx.r[0].z = (z == 0) ? 0 : -1 * strength / z; // view frustum separation? (+ = deep)
         iod_mtx.r[0].w = (w == 0) ? 0 : -1 * strength / w; // camera-to-viewport separation? (+ = pop)

@@ -1,6 +1,5 @@
 #include <math.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -14,6 +13,8 @@
 #include "src/pc/bit_flag.h"
 
 #include "gfx_pc.h"
+#include "gfx_pc_cold.h"
+#include "gfx_pc_shared.h"
 
 #include "src/pc/gfx/gfx_rendering_api.h"
 #include "gfx_window_manager_api.h"
@@ -30,6 +31,8 @@
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
 
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.c_inc"
+
 /*
  *   Flush Totals, updated for commmit 634be2132a77c3c3fc04f66b87a2badd4d41e2ca
  *   Measured 1 frame after BoB benchmark, goomba was visible
@@ -44,6 +47,8 @@
  *   subtotals: { 4, 0, 10, 107, 0, 29, 0, 3, 2, 18, 142, 0, 8, 2, 0, 0, 0, 0, 5, 12, 12, 6, 2, 14, 1 }
  */
 
+#define HOT
+#define COLD
 
 // -------------------- PREPROCESSOR FLAGS --------------------
 
@@ -99,115 +104,14 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 
 #define MAX_BUFFERED_TRIS 256
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
-#define MAX_LIGHTS 2
-#define MAX_VERTICES 64
-#define MAT_STACK_SIZE 11
-
-#define MATRIX_SET_NORMAL 0
-#define MATRIX_SET_IDENTITY 1
-#define MATRIX_SET_SCALED_NDC 2
-#define MATRIX_SET_INVALID (~MATRIX_SET_NORMAL)
-#define NDC_SCALE (INT16_MAX / 4) // Scaling factor for s16 NDC coordinates. See gfx_dimensions.h for more info.
 
 #define ASSUME(cond) if (!(cond)) __builtin_unreachable()
 #define LIKELY(cond)              __builtin_expect(!!(cond), 1)
 #define UNLIKELY(cond)            __builtin_expect(!!(cond), 0)
 #define EXPECT(val, expected)     __builtin_expect(val, expected)
 
-// Supported Texture formats (see upload_texture_to_rendering_api)
-// Max val for format_: 0b100 (range [0-4])
-// Max val for size_:   0b101 (range [0-5])
-#define TEX_FORMAT(format_, size_) ((((uint32_t) format_) << 3 ) | (uint32_t) size_)
-
-#define TEXFMT_RGBA32 TEX_FORMAT(G_IM_FMT_RGBA, G_IM_SIZ_32b) // Unused by SM64
-#define TEXFMT_RGBA16 TEX_FORMAT(G_IM_FMT_RGBA, G_IM_SIZ_16b)
-#define TEXFMT_IA4    TEX_FORMAT(G_IM_FMT_IA,   G_IM_SIZ_4b)  // Used by text only
-#define TEXFMT_IA8    TEX_FORMAT(G_IM_FMT_IA,   G_IM_SIZ_8b)
-#define TEXFMT_IA16   TEX_FORMAT(G_IM_FMT_IA,   G_IM_SIZ_16b)
-#define TEXFMT_I4     TEX_FORMAT(G_IM_FMT_I,    G_IM_SIZ_4b)  // Unused by SM64
-#define TEXFMT_I8     TEX_FORMAT(G_IM_FMT_I,    G_IM_SIZ_8b)  // Unused by SM64
-#define TEXFMT_CI4    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_4b)  // Unused by SM64
-#define TEXFMT_CI8    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_8b)  // Unused by SM64
-
-static float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
-                                   {0.0f, 1.0f, 0.0f, 0.0f},
-                                   {0.0f, 0.0f, 1.0f, 0.0f},
-                                   {0.0f, 0.0f, 0.0f, 1.0f}};
-
-static float MTX_NDC_DOWNSCALE[4][4] = {{1.0f / NDC_SCALE, 0.0f,             0.0f, 0.0f},
-                                        {0.0f,             1.0f / NDC_SCALE, 0.0f, 0.0f},
-                                        {0.0f,             0.0f,             1.0f, 0.0f},
-                                        {0.0f,             0.0f,             0.0f, 1.0f}};
-
-// A valid default value for a Light_t pointer.
-static Light_t LIGHT_DEFAULT = {
-    .col = {0, 0, 0},
-    .dir = {1, 1, 1}
-};
-
 
 // -------------------- TYPES --------------------
-
-union int16x2 {
-    struct {
-        int16_t s16_upper;
-        int16_t s16_lower;
-    };
-    struct {
-        int16_t u;
-        int16_t v;
-    };
-    uint32_t u32;
-};
-
-union int16x4 {
-    struct {
-        int16_t s16_1;
-        int16_t s16_2;
-        int16_t s16_3;
-        int16_t s16_4;
-    };
-    struct {
-        int16_t x;
-        int16_t y;
-        int16_t z;
-        int16_t w;
-    };
-    struct {
-        int16_t uls;
-        int16_t ult;
-        int16_t width;
-        int16_t height;
-    };
-    struct {
-        uint32_t u32_upper;
-        uint32_t u32_lower;
-    };
-    uint64_t u64;
-    int64_t s64;
-    double f64;
-};
-
-union boolx2 {
-    bool bools[2];
-    int16_t either;
-};
-
-typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
-
-union XYWidthHeight {
-    struct {
-        uint16_t x, y, width, height;
-    };
-    uint64_t u64;
-};
-
-// Total size: 16 bytes
-struct LoadedVertex {
-    union int16x4 position; // 8 bytes (w is unused, garbage value)
-    union int16x2 uv;       // 4 bytes
-    union RGBA32 color;     // 4 bytes. Also contains normals.
-};
 
 struct TextureHashmapNode {
     struct TextureHashmapNode *next;
@@ -220,16 +124,6 @@ struct TextureHashmapNode {
     bool linear_filter;
 };
 
-// These parameters are stored as u0.16s in the DList,
-// but we use u16.16 here for a hack (see gfx_dp_texture_rectangle)
-union TextureScalingFactor {
-    struct {
-        // U16.16
-        uint32_t s, t;
-    };
-    uint64_t u64;
-};
-
 // -------------------- GLOBAL VARIABLES --------------------
 
 static struct {
@@ -238,94 +132,15 @@ static struct {
     uint32_t pool_pos;
 } gfx_texture_cache;
 
-static struct RSP {
-    uint32_t matrix_set;
-    float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
-    uint8_t modelview_matrix_stack_size;
-    float P_matrix[4][4];
+static struct RSP rsp;
+static struct RDP rdp;
 
-    Light_t* current_lights[MAX_LIGHTS + 1]; // MUST be populated with valid pointers during init! Use LIGHT_DEFAULT.
-    uint8_t lights_changed_bitfield;
-    uint8_t current_num_lights; // includes ambient light
-
-    uint32_t geometry_mode;
-
-    union TextureScalingFactor texture_scaling_factor;
-
-    struct LoadedVertex* loaded_vertices[MAX_VERTICES];
-    struct LoadedVertex rect_vertices[4]; // Used only for rectangle drawing
-} rsp;
-
-static struct RDP {
-    const uint8_t *palette;
-    struct {
-        const uint8_t *addr;
-        uint8_t siz;
-        uint8_t tile_number;
-    } texture_to_load;
-    struct {
-        const uint8_t *addr;
-        uint32_t size_bytes;
-    } loaded_texture[2];
-    struct {
-        uint8_t fmt;
-        uint8_t siz;
-        uint8_t cms, cmt;
-        uint32_t line_size_bytes;
-        union int16x4 texture_settings;
-    } texture_tile;
-    union boolx2 textures_changed;
-
-    uint32_t other_mode_l, other_mode_h;
-    CombineMode combine_mode;
-
-    union RGBA32 env_color, prim_color, fill_color;
-    union XYWidthHeight viewport;
-    void *z_buf_address;
-    void *color_image_address;
-} rdp;
-
-static struct ShaderState {
-    ColorCombinerId cc_id;
-    bool use_alpha;
-    bool use_fog;
-    bool texture_edge;
-    bool use_noise;
-    uint8_t num_inputs;
-    union boolx2 used_textures;
-} shader_state;
-
-static struct RenderingState {
-    uint32_t fog_settings;
-    uint32_t matrix_set;
-    bool p_mtx_changed, mv_mtx_changed;
-    enum Stereoscopic3dMode stereo_3d_mode;
-    enum IodMode iod_mode;
-    uint8_t current_num_lights;
-    bool enable_lighting;
-    bool enable_texgen;
-    union TextureScalingFactor texture_scaling_factor; // Why is this slow as hell when in RenderingState instead of ShaderState? 7.01 vs 7.18ms in castle courtyard
-    
-    ColorCombinerId cc_id;
-    union RGBA32 prim_color;
-    union RGBA32 env_color;
-    bool linear_filter;
-    union int16x4 texture_settings;
-    uint32_t culling_mode;
-    bool depth_test;
-    union XYWidthHeight viewport, scissor;
-
-    bool depth_mask;
-    bool decal_mode;
-    bool alpha_blend;
-    struct TextureHashmapNode* textures[2];
-} rendering_state;
+static struct RenderingState rendering_state;
+static struct ShaderState shader_state;
 
 struct GfxDimensions gfx_current_dimensions;
 
-static bool dropped_frame;
-
-static union VertexBuffer {
+static union {
     float as_float[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
     uint32_t as_u32[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
     uint8_t as_u8[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX * 4];
@@ -334,13 +149,11 @@ static union VertexBuffer {
 static size_t buf_vbo_len = 0;
 static size_t buf_vbo_num_verts = 0;
 
-static struct GfxWindowManagerAPI *gfx_wapi;
-
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
 static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id));
 
-static void gfx_apply_matrices()
+HOT static void gfx_apply_matrices()
 {
     bool apply_p_mtx = false, apply_mv_mtx = false;
 
@@ -371,7 +184,7 @@ static void gfx_apply_matrices()
         gfx_rapi_apply_model_view_matrix();
 }
 
-static void gfx_apply_lighting()
+HOT static void gfx_apply_lighting()
 {
     const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
 
@@ -404,7 +217,7 @@ static void gfx_apply_lighting()
     }
 }
 
-static void gfx_apply_texgen()
+HOT static void gfx_apply_texgen()
 {
     const bool geo_enable_lighting = rsp.geometry_mode & G_LIGHTING;
     const bool geo_enable_texgen = rsp.geometry_mode & G_TEXTURE_GEN;
@@ -421,7 +234,7 @@ static void gfx_apply_texgen()
     }
 }
 
-static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id)) {
+HOT static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id)) {
     granular_log_time(0);
 
     // Over 50% of calls are pointless
@@ -441,7 +254,7 @@ static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id)) {
     granular_log_time(12); // gfx_flush
 }
 
-static void gfx_set_2d(int mode_2d)
+HOT static void gfx_set_2d(int mode_2d)
 {
     if (rendering_state.stereo_3d_mode != mode_2d) {
         rendering_state.stereo_3d_mode  = mode_2d;
@@ -451,7 +264,7 @@ static void gfx_set_2d(int mode_2d)
     }
 }
 
-static void gfx_set_iod(uint32_t iod)
+HOT static void gfx_set_iod(uint32_t iod)
 {
     if (rendering_state.iod_mode != iod) {
         rendering_state.iod_mode  = iod;
@@ -484,7 +297,7 @@ static void gfx_set_iod(uint32_t iod)
     }
 }
 
-static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, const uint8_t *orig_addr, uint32_t fmt, uint32_t siz) {
+HOT static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, const uint8_t *orig_addr, uint32_t fmt, uint32_t siz) {
     size_t hash = (uintptr_t)orig_addr;
     hash = (hash >> 5) & 0x3ff;
     struct TextureHashmapNode **node = &gfx_texture_cache.hashmap[hash];
@@ -519,78 +332,24 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     return false;
 }
 
-static void upload_texture_to_rendering_api(int tile) {
+HOT static void lookup_or_upload_texture_to_rendering_api(int tile) {
     uint8_t fmt = rdp.texture_tile.fmt;
     uint8_t siz = rdp.texture_tile.siz;
 
     if (gfx_texture_cache_lookup(tile, &rendering_state.textures[tile], rdp.loaded_texture[tile].addr, fmt, siz))
         return;
-
-    uint32_t line_size = rdp.texture_tile.line_size_bytes,
-             tile_size = rdp.loaded_texture[tile].size_bytes;
-
-    int width, height;
-
-    switch (siz) {
-        case G_IM_SIZ_32b:
-            width = line_size / 2;
-            height = (tile_size / 2) / line_size;
-            break;
-        case G_IM_SIZ_16b:
-            width = line_size / 2;
-            height = tile_size / line_size;
-            break;
-        case G_IM_SIZ_8b:
-            width = line_size;
-            height = tile_size / line_size;
-            break;
-        case G_IM_SIZ_4b:
-            width = line_size * 2;
-            height = tile_size / line_size;
-            break;
-        default:
-            abort();
-    }
-
-    const uint8_t* data = rdp.loaded_texture[tile].addr;
-    const uint8_t *palette = rdp.palette;
-
-    switch (TEX_FORMAT(fmt, siz)) {
-        case TEXFMT_RGBA32:
-            gfx_rapi_upload_texture_rgba32(data, width, height); // Unused by SM64
-            break;
-        case TEXFMT_RGBA16:
-            gfx_rapi_upload_texture_rgba16(data, width, height);
-            break;
-        case TEXFMT_IA4:
-            gfx_rapi_upload_texture_ia4(data, width, height); // Used by text only
-            break;
-        case TEXFMT_IA8:
-            gfx_rapi_upload_texture_ia8(data, width, height);
-            break;
-        case TEXFMT_IA16:
-            gfx_rapi_upload_texture_ia16(data, width, height);
-            break;
-        case TEXFMT_I4:
-            gfx_rapi_upload_texture_i4(data, width, height); // Unused by SM64
-            break;
-        case TEXFMT_I8:
-            gfx_rapi_upload_texture_i8(data, width, height); // Unused by SM64
-            break;
-        case TEXFMT_CI4:
-            gfx_rapi_upload_texture_ci4(data, palette, width, height); // Unused by SM64
-            break;
-        case TEXFMT_CI8:
-            gfx_rapi_upload_texture_ci8(data, palette, width, height); // Unused by SM64
-            break;
-        default:
-            abort();
+    else {
+        const uint32_t line_size = rdp.texture_tile.line_size_bytes,
+                       tile_size = rdp.loaded_texture[tile].size_bytes;
+        const uint8_t *data = rdp.loaded_texture[tile].addr,
+                      *palette = rdp.palette;
+        gfx_cold_upload_texture_to_rendering_api(fmt, siz, line_size, tile_size, data, palette);
     }
 }
 
 // Multiplies the whole matrix. When both funcs are inline, saves ~200us.
 // Matrices are column-major.
-static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* restrict a, const float* restrict  b) {
+HOT static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* restrict a, const float* restrict  b) {
     #define MTA(r_, c_) a[ARR_INDEX_2D(c_, r_, 4)]
     #define MTB(r_, c_) b[ARR_INDEX_2D(c_, r_, 4)]
 
@@ -605,14 +364,13 @@ static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* 
 }
 
 // Multiplies the whole matrix, using a temporary variable. Use only when a == res || b == res.
-static inline void gfx_matrix_mul_safe(float res[4][4], const float* a, const float* b) {
+HOT static inline void gfx_matrix_mul_safe(float res[4][4], const float* a, const float* b) {
     float tmp[4][4];
     gfx_matrix_mul_unsafe(tmp, a, b);
     memcpy(res, tmp, sizeof(tmp));
 }
 
-const float *last_mv_mtx_addr = NULL, *last_p_mtx_addr = NULL;
-static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
+HOT static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
 #ifndef GBI_FLOATS
     const float matrix[4][4];
@@ -634,11 +392,11 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
 
-        bool matrix_updated = !(last_p_mtx_addr == matrix && is_load);
+        bool matrix_updated = !(rendering_state.last_p_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
             gfx_flush(2);
-            last_p_mtx_addr = matrix;
+            rendering_state.last_p_mtx_addr = matrix;
         }
 
         if (is_load) {
@@ -655,11 +413,11 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     } else { // G_MTX_MODELVIEW
         float* src = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
         
-        bool matrix_updated = !(last_mv_mtx_addr == matrix && is_load);
+        bool matrix_updated = !(rendering_state.last_mv_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
             gfx_flush(3);
-            last_mv_mtx_addr = matrix;
+            rendering_state.last_mv_mtx_addr = matrix;
         }
         
         if (is_push && rsp.modelview_matrix_stack_size < 11)
@@ -681,7 +439,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 }
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
-static void gfx_sp_pop_matrix(uint32_t count) {
+HOT static void gfx_sp_pop_matrix(uint32_t count) {
     gfx_flush(4);
 
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
@@ -690,7 +448,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     rendering_state.mv_mtx_changed = true;
 }
 
-static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
+HOT static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
     granular_log_time(0);
 
     // Load each vert pointer
@@ -701,7 +459,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     granular_log_time(5); // Vertex Copy
 }
 
-static void gfx_sp_tri_update_state()
+HOT static void gfx_sp_tri_update_state()
 {
     granular_log_time(0);
 
@@ -758,12 +516,12 @@ static void gfx_sp_tri_update_state()
                     granular_log_time(10); // gfx_sp_tri_update_state
                     gfx_flush(10);
                     granular_log_time(0);
-                    upload_texture_to_rendering_api(i);
+                    lookup_or_upload_texture_to_rendering_api(i);
                 }
 
                 if (rendering_state.textures[i]->linear_filter != linear_filter 
-                || rendering_state.textures[i]->cms != rdp.texture_tile.cms
-                || rendering_state.textures[i]->cmt != rdp.texture_tile.cmt)
+                 || rendering_state.textures[i]->cms != rdp.texture_tile.cms
+                 || rendering_state.textures[i]->cmt != rdp.texture_tile.cmt)
                 {
                     rendering_state.textures[i]->linear_filter = linear_filter;
                     rendering_state.textures[i]->cms = rdp.texture_tile.cms;
@@ -805,7 +563,7 @@ static void gfx_sp_tri_update_state()
     granular_log_time(10); // gfx_sp_tri_update_state
 }
 
-static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], uint32_t numTris)
+HOT static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], uint32_t numTris)
 {
     granular_log_time(0);
 
@@ -836,12 +594,12 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
     granular_log_time(11); // gfx_tri_create_vbo
 }
 
-static void gfx_sp_tri_batched(struct LoadedVertex *restrict v_arr[restrict], uint32_t num_tris) {
+HOT static void gfx_sp_tri_batched(struct LoadedVertex *restrict v_arr[restrict], uint32_t num_tris) {
     gfx_sp_tri_update_state();
     gfx_tri_create_vbo(v_arr, num_tris);
 }
 
-static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
+HOT static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     uint32_t old_mode = rsp.geometry_mode;
     uint32_t new_mode = (rsp.geometry_mode & ~clear) | set;
 
@@ -851,11 +609,11 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     }
 }
 
-static void gfx_set_viewport(union XYWidthHeight viewport) {
+HOT static void gfx_set_viewport(union XYWidthHeight viewport) {
     rdp.viewport = viewport; // Struct copy
 }
 
-static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
+HOT static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
     // 2 bits fraction
     float width = 2.0f * viewport_raw->vscale[0] / 4.0f;
     float height = 2.0f * viewport_raw->vscale[1] / 4.0f;
@@ -871,7 +629,7 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
     gfx_set_viewport(viewport);
 }
 
-static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
+HOT static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
 #ifdef F3DEX_GBI_2
 
     // This previously avoided overwriting the lookat mtx, but that data no longer even makes it this far.
@@ -909,7 +667,7 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
 #endif
 }
 
-static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data) {
+HOT static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data) {
     switch (index) {
         case G_MW_NUMLIGHT:
             gfx_flush(26);
@@ -934,7 +692,7 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
 }
 
 // These parameters are stored as u16s in the DList, but we use u32 here for a hack (see gfx_dp_texture_rectangle)
-static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSED uint8_t tile, UNUSED uint8_t on) {
+HOT static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSED uint8_t tile, UNUSED uint8_t on) {
     union TextureScalingFactor new_mode = {.s = sc, .t = tc};
 
     if (rsp.texture_scaling_factor.u64 != new_mode.u64) {
@@ -943,7 +701,7 @@ static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSE
     }
 }
 
-static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly, uint32_t lrx, uint32_t lry) {
+HOT static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly, uint32_t lrx, uint32_t lry) {
     uint16_t x = ulx / 4.0f * RATIO_X,
              y = (SCREEN_HEIGHT - lry / 4.0f) * RATIO_Y,
              width = (lrx - ulx) / 4.0f * RATIO_X,
@@ -957,12 +715,12 @@ static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly,
     }
 }
 
-static void gfx_dp_set_texture_image(UNUSED uint32_t format, uint32_t size, UNUSED uint32_t width, const void* addr) {
+HOT static void gfx_dp_set_texture_image(UNUSED uint32_t format, uint32_t size, UNUSED uint32_t width, const void* addr) {
     rdp.texture_to_load.addr = addr;
     rdp.texture_to_load.siz = size;
 }
 
-static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t tmem, uint8_t tile, UNUSED uint32_t palette, uint32_t cmt, UNUSED uint32_t maskt, UNUSED uint32_t shiftt, uint32_t cms, UNUSED uint32_t masks, UNUSED uint32_t shifts) {
+HOT static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t tmem, uint8_t tile, UNUSED uint32_t palette, uint32_t cmt, UNUSED uint32_t maskt, UNUSED uint32_t shiftt, uint32_t cms, UNUSED uint32_t masks, UNUSED uint32_t shifts) {
     // G_TX_RENDERTILE is always >= G_TX_LOADTILE
     if (LIKELY(tile == G_TX_RENDERTILE)) {
         SUPPORT_CHECK(palette == 0); // palette should set upper 4 bits of color index in 4b mode
@@ -980,14 +738,14 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         rdp.texture_to_load.tile_number = tmem / 256;
 }
 
-static void set_tile_size_internal(uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
+HOT static void set_tile_size_internal(uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
     rdp.texture_tile.texture_settings.uls = uls;
     rdp.texture_tile.texture_settings.ult = ult;
     rdp.texture_tile.texture_settings.width  = lrs - uls + 4;
     rdp.texture_tile.texture_settings.height = lrt - ult + 4;
 }
 
-static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
+HOT static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
     if (tile == G_TX_RENDERTILE) {
         set_tile_size_internal(uls, ult, lrs, lrt);
         rdp.textures_changed.bools[0] = true;
@@ -995,13 +753,13 @@ static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint1
     }
 }
 
-static void gfx_dp_load_tlut(UNUSED uint8_t tile, UNUSED uint32_t high_index) {
+HOT static void gfx_dp_load_tlut(UNUSED uint8_t tile, UNUSED uint32_t high_index) {
     SUPPORT_CHECK(tile == G_TX_LOADTILE);
     SUPPORT_CHECK(rdp.texture_to_load.siz == G_IM_SIZ_16b);
     rdp.palette = rdp.texture_to_load.addr;
 }
 
-static void gfx_dp_load_block(uint8_t tile, UNUSED uint32_t uls, UNUSED uint32_t ult, uint32_t lrs, UNUSED uint32_t dxt) {
+HOT static void gfx_dp_load_block(uint8_t tile, UNUSED uint32_t uls, UNUSED uint32_t ult, uint32_t lrs, UNUSED uint32_t dxt) {
     if (tile == 1) return;
     SUPPORT_CHECK(tile == G_TX_LOADTILE);
     SUPPORT_CHECK(uls == 0);
@@ -1031,7 +789,7 @@ static void gfx_dp_load_block(uint8_t tile, UNUSED uint32_t uls, UNUSED uint32_t
     rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
 }
 
-static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t lrs, uint32_t lrt) {
+HOT static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t lrs, uint32_t lrt) {
     if (tile == 1) return;
     SUPPORT_CHECK(tile == G_TX_LOADTILE);
     SUPPORT_CHECK(uls == 0);
@@ -1064,7 +822,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
 }
 
 
-static uint8_t color_comb_component(uint32_t v) {
+HOT static uint8_t color_comb_component(uint32_t v) {
     switch (v) {
         case G_CCMUX_TEXEL0:
             return CC_TEXEL0;
@@ -1085,44 +843,14 @@ static uint8_t color_comb_component(uint32_t v) {
     }
 }
 
-static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+HOT static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
     return color_comb_component(a) |
            (color_comb_component(b) << 3) |
            (color_comb_component(c) << 6) |
            (color_comb_component(d) << 9);
 }
 
-static void shader_state_init(struct ShaderState* ss)
-{
-    ss->cc_id = DELIBERATELY_INVALID_CC_ID;
-    ss->num_inputs = 0;
-    ss->texture_edge = false;
-    ss->use_alpha = false;
-    ss->use_fog = false;
-    ss->use_noise = false;
-    ss->used_textures.either = 0;
-}
-
-static void rendering_state_init(struct RenderingState* rs)
-{
-    rs->cc_id = DELIBERATELY_INVALID_CC_ID;
-    rs->texture_settings.u64 = ~0;
-    rs->prim_color.u32 = ~rdp.prim_color.u32;
-    rs->env_color.u32  = ~rdp.env_color.u32;
-    rs->linear_filter = ~0;
-    rs->matrix_set = MATRIX_SET_INVALID;
-    rs->p_mtx_changed = true;
-    rs->mv_mtx_changed = true;
-    rs->stereo_3d_mode = STEREO_MODE_COUNT;
-    rs->iod_mode = IOD_COUNT;
-    rs->current_num_lights = MAX_LIGHTS + 1;
-    rs->enable_lighting = ~0;
-    rs->enable_texgen = ~0;
-    rs->texture_scaling_factor.s = INT32_MAX;
-    rs->texture_scaling_factor.t = INT32_MAX;
-}
-
-static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
+HOT static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
 {
     ColorCombinerId id = combine_mode;
 
@@ -1137,36 +865,36 @@ static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool u
     return id;
 }
 
-static void calculate_cc_id()
+HOT static void calculate_cc_id()
 {
     shader_state.cc_id = calculate_cc_id_internal(rdp.combine_mode, shader_state.use_fog, shader_state.texture_edge, shader_state.use_noise, shader_state.use_alpha);
 }
 
-static void gfx_dp_set_combine_mode(CombineMode combine_mode) {
+HOT static void gfx_dp_set_combine_mode(CombineMode combine_mode) {
     rdp.combine_mode = combine_mode;
     calculate_cc_id();
 }
 
-static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+HOT static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     rdp.env_color.r = r;
     rdp.env_color.g = g;
     rdp.env_color.b = b;
     rdp.env_color.a = a;
 }
 
-static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+HOT static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     rdp.prim_color.r = r;
     rdp.prim_color.g = g;
     rdp.prim_color.b = b;
     rdp.prim_color.a = a;
 }
 
-static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+HOT static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     gfx_flush(18);
     gfx_rapi_set_fog_color(r, g, b, a);
 }
 
-static void gfx_dp_set_fill_color(uint32_t packed_color) {
+HOT static void gfx_dp_set_fill_color(uint32_t packed_color) {
     uint16_t col16 = (uint16_t)packed_color;
     uint32_t r = col16 >> 11;
     uint32_t g = (col16 >> 6) & 0x1f;
@@ -1178,7 +906,7 @@ static void gfx_dp_set_fill_color(uint32_t packed_color) {
     rdp.fill_color.a = a * 255;
 }
 
-static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
+HOT static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
     gfx_flush(19);
 
     uint32_t saved_other_mode_h = rdp.other_mode_h;
@@ -1241,7 +969,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
         set_other_mode_h(saved_other_mode_h);
 }
 
-static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, UNUSED uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
+HOT static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, UNUSED uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
     CombineMode saved_combine_mode = rdp.combine_mode;
     if ((rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY) {
         // Per RDP Command Summary Set Tile's shift s and this dsdx should be set to 4 texels
@@ -1300,7 +1028,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     gfx_sp_texture(saved_scaling_factor.s, saved_scaling_factor.t, 0, 0, 0);
 }
 
-static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
+HOT static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
     if (UNLIKELY(rdp.color_image_address == rdp.z_buf_address)) {
         // Don't clear Z buffer here since we already did it with glClear
         return;
@@ -1323,20 +1051,20 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
     gfx_dp_set_combine_mode(saved_combine_mode);
 }
 
-static void gfx_dp_set_z_image(void *z_buf_address) {
+HOT static void gfx_dp_set_z_image(void *z_buf_address) {
     rdp.z_buf_address = z_buf_address;
 }
 
-static void gfx_dp_set_color_image(UNUSED uint32_t format, UNUSED uint32_t size, UNUSED uint32_t width, void* address) {
+HOT static void gfx_dp_set_color_image(UNUSED uint32_t format, UNUSED uint32_t size, UNUSED uint32_t width, void* address) {
     rdp.color_image_address = address;
 }
 
-static void set_other_mode_h(uint32_t other_mode_h)
+HOT static void set_other_mode_h(uint32_t other_mode_h)
 {
     rdp.other_mode_h  = other_mode_h;
 }
 
-static void set_other_mode_l(uint32_t other_mode_l)
+HOT static void set_other_mode_l(uint32_t other_mode_l)
 {
     // About 66% savings, but relatively low in count (aside from goddard)
     if (LIKELY(rdp.other_mode_l != other_mode_l)) {
@@ -1371,7 +1099,7 @@ static void set_other_mode_l(uint32_t other_mode_l)
     }
 }
 
-static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mode) {
+HOT static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mode) {
     uint64_t mask = (((uint64_t)1 << num_bits) - 1) << shift;
     uint64_t om = rdp.other_mode_l | ((uint64_t)rdp.other_mode_h << 32);
     om = (om & ~mask) | mode;
@@ -1379,14 +1107,14 @@ static void gfx_sp_set_other_mode(uint32_t shift, uint32_t num_bits, uint64_t mo
     set_other_mode_l((uint32_t)om);
 }
 
-static inline void *seg_addr(uintptr_t w1) {
+HOT static inline void *seg_addr(uintptr_t w1) {
     return (void *) w1;
 }
 
 #define C0(pos, width) ((cmd->words.w0 >> (pos)) & ((1U << width) - 1))
 #define C1(pos, width) ((cmd->words.w1 >> (pos)) & ((1U << width) - 1))
 
-static void gfx_run_dl(Gfx* cmd) {
+HOT static void gfx_run_dl(Gfx* cmd) {
     static struct LoadedVertex *tri_batch[MAX_VERTICES * 3];
     static uint32_t num_verts_batched = 0;
 
@@ -1629,45 +1357,37 @@ static void gfx_run_dl(Gfx* cmd) {
     }
 }
 
-static void gfx_sp_reset() {
-    rsp.modelview_matrix_stack_size = 1;
-    rsp.current_num_lights = 2;
-    rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS + 1);
+void gfx_run(Gfx* commands) {
+    gfx_cold_pre_run(&rsp, &rendering_state);
+    
+    non_granular_log_time(0);
+    gfx_run_dl(commands);
+    gfx_flush(24);
+    non_granular_log_time(5); // GFX Run Display List
+
+    gfx_cold_post_run();
+    
+    // GDB print commands:
+    // set print repeats 0
+    // set print elements 10000
+    // set logging on
+    GRANULAR_FLUSH_DO(bzero(flushes, sizeof(flushes)));
+    GRANULAR_FLUSH_DO(bzero(flush_avoids, sizeof(flush_avoids)));
+    GRANULAR_FLUSH_DO(bzero(tris_per_flush, sizeof(tris_per_flush)));
 }
 
-void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {
-    gfx_wapi = wapi;
-    gfx_wapi->init(game_name, start_in_fullscreen);
-    gfx_rapi_init();
-
-    // dimensions won't change on 3DS, so just do this once
-    gfx_wapi->get_dimensions(&gfx_current_dimensions.width, &gfx_current_dimensions.height);
-    if (gfx_current_dimensions.height == 0) {
-        // Avoid division by zero
-        gfx_current_dimensions.height = 1;
-    }
-    gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
-    gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
-
-    shader_state_init(&shader_state);
-    rendering_state_init(&rendering_state);
-
-    // Screen-space rect Z will always be -1.
-    rsp.rect_vertices[0].position.z =
-    rsp.rect_vertices[1].position.z =
-    rsp.rect_vertices[2].position.z =
-    rsp.rect_vertices[3].position.z = -1;
-
-    // Initialize lights to all black
-    for (int i = 0; i < MAX_LIGHTS + 1; i++)
-        rsp.current_lights[i] = &LIGHT_DEFAULT;
-
-    // Initialize the matstack to identity
-    for (int i = 0; i < MAT_STACK_SIZE; i++)
-        memcpy(rsp.modelview_matrix_stack[i], MTX_IDENTITY, sizeof(MTX_IDENTITY));
+void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen)
+{
+    gfx_cold_init(
+        wapi,
+        game_name,
+        start_in_fullscreen,
+        &rsp,
+        &rdp,
+        &shader_state,
+        &rendering_state
+    );
     
-    memcpy(rsp.P_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
-
     // Initialize constant matrices and set normal MTX mode
     gfx_rapi_select_matrix_set(MATRIX_SET_IDENTITY);
     gfx_rapi_set_model_view_matrix(MTX_IDENTITY);
@@ -1678,48 +1398,5 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
     gfx_rapi_set_projection_matrix(MTX_IDENTITY);
 
     gfx_rapi_select_matrix_set(MATRIX_SET_NORMAL);
-    rsp.matrix_set = MATRIX_SET_NORMAL;
-}
-
-void gfx_start_frame(void) {
-    gfx_wapi->handle_events();
-}
-
-void gfx_run(Gfx *commands) {
-    gfx_sp_reset();
-
-    if (!gfx_wapi->start_frame()) {
-        dropped_frame = true;
-        return;
-    }
-    dropped_frame = false;
-
-    profiler_3ds_log_time(0);
-    gfx_rapi_start_frame();
-    profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
-    gfx_rapi_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
-    last_mv_mtx_addr = last_p_mtx_addr = NULL;
-
-    non_granular_log_time(0);
-    gfx_run_dl(commands);
-    non_granular_log_time(5); // GFX Run Display List
-
-    gfx_flush(24);
-    gfx_rapi_end_frame();
-    gfx_wapi->swap_buffers_begin();
-
-    // GDB print commands:
-    // set print repeats 0
-    // set print elements 10000
-    // set logging on
-    GRANULAR_FLUSH_DO(bzero(flushes, sizeof(flushes)));
-    GRANULAR_FLUSH_DO(bzero(flush_avoids, sizeof(flush_avoids)));
-    GRANULAR_FLUSH_DO(bzero(tris_per_flush, sizeof(tris_per_flush)));
-}
-
-void gfx_end_frame(void) {
-    if (!dropped_frame) {
-        gfx_rapi_finish_render();
-        gfx_wapi->swap_buffers_end();
-    }
+    gfx_cold_rsp_init(&rsp);
 }

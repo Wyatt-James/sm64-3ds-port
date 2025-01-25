@@ -1,5 +1,4 @@
-#ifndef GFX_CITRO3D_HELPERS_H
-#define GFX_CITRO3D_HELPERS_H
+#pragma once
 
 /*
  * A file for basic helper functions. These should be generally applicable to C3D,
@@ -42,35 +41,8 @@
 #include "src/pc/gfx/gfx_cc.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
 #include "src/pc/gfx/gfx_3ds_shaders.h"
-#include "src/pc/gfx/gfx_3ds_types.h"
-
-// A static definition of a C3D Identity Matrix
-#define C3D_STATIC_IDENTITY_MTX {\
-        .r = {\
-            {.x = 1.0f},\
-            {.y = 1.0f},\
-            {.z = 1.0f},\
-            {.w = 1.0f}\
-        }\
-    }
-
-struct ScissorConfig {
-    int x1, y1, x2, y2;
-    bool enable;
-};
-
-struct ViewportConfig {
-    int x, y, width, height;
-};
-
-struct IodConfig {
-    float z, w;
-};
-
-struct TextureSize {
-    uint16_t width, height;
-    bool success;
-};
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_types.h"
+#include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 
 // Constant matrices, set during initialization.
 extern const C3D_Mtx IDENTITY_MTX, DEPTH_ADD_W_MTX;
@@ -145,5 +117,3 @@ float citro3d_helpers_convert_cc_mapping_to_emu64_float(uint8_t cc_mapping, bool
 
 // Initializes a C3D_AttrInfo from the given attribute data.
 void citro3d_helpers_init_attr_info(const struct n3ds_attribute_data* attributes, C3D_AttrInfo* out_attr_info);
-
-#endif

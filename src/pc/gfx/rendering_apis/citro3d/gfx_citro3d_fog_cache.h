@@ -1,5 +1,4 @@
-#ifndef GFX_CITRO3D_FOG_CACHE_H
-#define GFX_CITRO3D_FOG_CACHE_H
+#pragma once
 
 #include <stdint.h>
 
@@ -55,5 +54,3 @@ enum FogCacheResult fog_cache_load(struct FogCache* cache, uint16_t from, uint16
 
 // Returns the current fog LUT.
 C3D_FogLut* fog_cache_current(struct FogCache* cache);
-
-#endif

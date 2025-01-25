@@ -1,5 +1,4 @@
-#ifndef GFX_CITRO3D_WRAPPERS_H
-#define GFX_CITRO3D_WRAPPERS_H
+#pragma once
 
 // I hate this library
 // hack for redefinition of types in libctru
@@ -42,5 +41,3 @@ void C3DW_FVUnifSetRGBA(GPU_SHADER_TYPE type, int id, union RGBA32 color);
 
 // Sets a C3D float uniform from an RGBA32 union, but sets Alpha to 0. Scales by 1/255.
 void C3DW_FVUnifSetRGB(GPU_SHADER_TYPE type, int id, union RGBA32 color);
-
-#endif

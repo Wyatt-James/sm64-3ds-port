@@ -246,6 +246,7 @@ else
   SRC_DIRS := $(SRC_DIRS) src/pc $(GFX_ROOT_DIR) $(GFX_ROOT_DIR)/multi_viewport $(GFX_ROOT_DIR)/shader_programs src/pc/audio src/pc/controller src/pc/n3ds $(foreach rendering_api,$(RENDERING_APIS),$(RENDERING_API_ROOT_DIR)/$(rendering_api)) $(foreach windowing_api,$(WINDOWING_APIS),$(WINDOWING_API_ROOT_DIR)/$(windowing_api))
   # If this is enabled, you can do ASM debugging on these files.
   # SRC_DIRS := $(SRC_DIRS) src/pc/mixer_implementations
+	# SRC_DIRS := $(SRC_DIRS) src/pc/gfx/rendering_apis/citro3d/cold
   ASM_DIRS :=
 endif
 BIN_DIRS := bin bin/$(VERSION)

@@ -45,6 +45,9 @@
 #define GFX_RAPI_COLOR_COMBINER   GFX_DISABLE
 #endif
 
+
+#define GRUNK static
+
 // Types to be defined by the implementation
 #if GFX_RAPI_COLOR_COMBINER == GFX_DISABLE
 struct ShaderProgram;
@@ -62,15 +65,15 @@ void                    gfx_rapi_shader_get_info            (struct ShaderProgra
 #endif
 
 uint32_t                gfx_rapi_new_texture                ();                                                                                   // Returns the index for a new texture. If no textures are available, it will return a valid texture, but which texture it is is implementation-defined.
-void                    gfx_rapi_select_texture             (int tile, uint32_t texture_id);                                                      // Selects a currently loaded texture.
-void                    gfx_rapi_set_sampler_parameters     (int texture_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t); // Sets the texture sampling parameters for the given texture slot.
-void                    gfx_rapi_set_depth_test             (bool depth_test);                                                                    // Enables or disables GPU depth test.
-void                    gfx_rapi_set_depth_mask             (bool z_upd);                                                                         // Enables or disables GPU depth upadtes.
-void                    gfx_rapi_set_zmode_decal            (bool zmode_decal);                                                                   // Enables or disables decal mode.
-void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                                // Sets the GPU viewport settings.
-void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                                // Sets the GPU scissor settings.
-void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                                     // Enables or disables alpha blending.
-void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);                       // Draws the given triangles.
+// GRUNK void                    gfx_rapi_select_texture             (int tile, uint32_t texture_id);                                                      // Selects a currently loaded texture.
+// GRUNK void                    gfx_rapi_set_sampler_parameters     (int texture_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t); // Sets the texture sampling parameters for the given texture slot.
+// GRUNK void                    gfx_rapi_set_depth_test             (bool depth_test);                                                                    // Enables or disables GPU depth test.
+// GRUNK void                    gfx_rapi_set_depth_mask             (bool z_upd);                                                                         // Enables or disables GPU depth upadtes.
+// GRUNK void                    gfx_rapi_set_zmode_decal            (bool zmode_decal);                                                                   // Enables or disables decal mode.
+// GRUNK void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                                // Sets the GPU viewport settings.
+// GRUNK void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                                // Sets the GPU scissor settings.
+// GRUNK void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                                     // Enables or disables alpha blending.
+// GRUNK void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);                       // Draws the given triangles.
 void                    gfx_rapi_init                       ();                                                                                   // Initializes the GFX Rendering API.
 void                    gfx_rapi_on_resize                  ();                                                                                   // Called when the window is resized.
 void                    gfx_rapi_start_frame                ();                                                                                   // Called at the start of a frame.
@@ -94,38 +97,38 @@ void                    gfx_rapi_upload_texture             (const uint8_t *rgba
 
 // Optional feature: GPU handles fog rendering
 #if GFX_RAPI_FOG == GFX_ENABLE
-void                    gfx_rapi_set_fog                    (uint16_t from, uint16_t to);                   // Sets the GPU fog distance factors.
-void                    gfx_rapi_set_fog_color              (uint8_t r, uint8_t g, uint8_t b, uint8_t a);   // Sets the GPU fog color.
-void                    gfx_rapi_set_fog_color_u32          (uint32_t color);                               // Sets the GPU fog color, RGBA8888 format.
+// GRUNK void                    gfx_rapi_set_fog                    (uint16_t from, uint16_t to);                   // Sets the GPU fog distance factors.
+// GRUNK void                    gfx_rapi_set_fog_color              (uint8_t r, uint8_t g, uint8_t b, uint8_t a);   // Sets the GPU fog color.
+// GRUNK void                    gfx_rapi_set_fog_color_u32          (uint32_t color);                               // Sets the GPU fog color, RGBA8888 format.
 #endif
 
 // Optional feature: stereoscopic 3D rendering
 #if GFX_RAPI_STEREOSCOPIC_3D == GFX_ENABLE
-void                    gfx_rapi_set_2d_mode                (int mode_2d);          // Used for depth overrides.
-void                    gfx_rapi_set_iod                    (float z, float w);     // Adjusts the strength of the depth effect.
+// GRUNK void                    gfx_rapi_set_2d_mode                (int mode_2d);          // Used for depth overrides.
+// GRUNK void                    gfx_rapi_set_iod                    (float z, float w);     // Adjusts the strength of the depth effect.
 #endif
 
 // Optional feature: GPU handles vertex-load matrix-vector multiplication
 #if GFX_RAPI_VERTEX_MATRICES == GFX_ENABLE
-void                    gfx_rapi_set_model_view_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
-void                    gfx_rapi_set_projection_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
-void                    gfx_rapi_apply_model_view_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
-void                    gfx_rapi_apply_projection_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
-void                    gfx_rapi_select_matrix_set          (uint32_t matrix_set_id);   // Selects one of the given matrix sets, but does not send it to the GPU.
+// GRUNK void                    gfx_rapi_set_model_view_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
+// GRUNK void                    gfx_rapi_set_projection_matrix      (float mtx[4][4]);          // Sets the speficied matrix of the current matrix set, but does not send it to the GPU.
+// GRUNK void                    gfx_rapi_apply_model_view_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
+// GRUNK void                    gfx_rapi_apply_projection_matrix    ();                         // Sends the specified matrix from the current matrix set to the GPU.
+// GRUNK void                    gfx_rapi_select_matrix_set          (uint32_t matrix_set_id);   // Selects one of the given matrix sets, but does not send it to the GPU.
 void                    gfx_rapi_set_backface_culling_mode  (uint32_t culling_mode);    // Sets the GPU's backface culling mode
 #endif
 
 // Optional feature: GPU handles vertex-load vertex lighting calculation
 #if GFX_RAPI_VERTEX_LIGHTING == GFX_ENABLE
-void                    gfx_rapi_enable_lighting            (bool enable);                   // Enables or disables lights. When enabled, the shader color/normals VBO uses an s8 format, else u8.
-void                    gfx_rapi_set_num_lights             (int num_lights);                // Sets the number of lights, including ambient. Set to 1 for ambient-only.
-void                    gfx_rapi_configure_light            (int light_id, Light_t* light);  // Configures a single directional light. A light_id of 0 is ambient, for which direction is ignored.
+// GRUNK void                    gfx_rapi_enable_lighting            (bool enable);                   // Enables or disables lights. When enabled, the shader color/normals VBO uses an s8 format, else u8.
+// GRUNK void                    gfx_rapi_set_num_lights             (int num_lights);                // Sets the number of lights, including ambient. Set to 1 for ambient-only.
+// GRUNK void                    gfx_rapi_configure_light            (int light_id, Light_t* light);  // Configures a single directional light. A light_id of 0 is ambient, for which direction is ignored.
 #endif
 
 // Optional feature: GPU handles vertex-load texture generation
 #if GFX_RAPI_VERTEX_TEXGEN == GFX_ENABLE
-void                    gfx_rapi_enable_texgen              (bool enable);            // Enables or disables texgen.
-void                    gfx_rapi_set_texture_scaling_factor (uint32_t s, uint32_t t); // Sets the texture scaling factor for use with texgen. These use a U16.16 format.
+// GRUNK void                    gfx_rapi_enable_texgen              (bool enable);            // Enables or disables texgen.
+// GRUNK void                    gfx_rapi_set_texture_scaling_factor (uint32_t s, uint32_t t); // Sets the texture scaling factor for use with texgen. These use a U16.16 format.
 #endif
 
 // Optional feature: multiple viewports
@@ -137,18 +140,18 @@ void                    gfx_rapi_enable_viewport_clear_buffer_flag  (uint32_t vi
 
 // Optional feature: GPU texture coordinate calculation
 #if GFX_RAPI_GPU_TEXCOORDS == GFX_ENABLE
-void                    gfx_rapi_set_uv_offset                    (float offset);                                                               // Sets the global offset for UV coordinates.
-void                    gfx_rapi_set_texture_settings             (int16_t upper_left_s, int16_t upper_left_t, int16_t width, int16_t height);  // Sets various texture settings.
+// GRUNK void                    gfx_rapi_set_uv_offset                    (float offset);                                                               // Sets the global offset for UV coordinates.
+// GRUNK void                    gfx_rapi_set_texture_settings             (int16_t upper_left_s, int16_t upper_left_t, int16_t width, int16_t height);  // Sets various texture settings.
 #endif
 
 // Optional feature: GPU color combiner
 #if GFX_RAPI_COLOR_COMBINER == GFX_ENABLE
-void                    gfx_rapi_select_color_combiner            (size_t cc_index);                                              // Selects a color combiner by index. Bounds checks are not enforced. If the current CC is already loaded, does nothing.
-size_t                  gfx_rapi_lookup_or_create_color_combiner  (ColorCombinerId cc_id);                                               // Looks up or creates a color combiner from the given CCID.
-void                    gfx_rapi_color_combiner_get_info          (size_t cc_index, uint8_t *num_inputs, bool used_textures[2]);  // Returns some info about the current color combiner.
+// GRUNK void                    gfx_rapi_select_color_combiner            (size_t cc_index);                                              // Selects a color combiner by index. Bounds checks are not enforced. If the current CC is already loaded, does nothing.
+// GRUNK size_t                  gfx_rapi_lookup_or_create_color_combiner  (ColorCombinerId cc_id);                                               // Looks up or creates a color combiner from the given CCID.
+// GRUNK void                    gfx_rapi_color_combiner_get_info          (size_t cc_index, uint8_t *num_inputs, bool used_textures[2]);  // Returns some info about the current color combiner.
 
-void                    gfx_rapi_set_cc_prim_color                (uint32_t color);                                               // Sets the GPU prim color. This is global across color combiners.
-void                    gfx_rapi_set_cc_env_color                 (uint32_t color);                                               // Sets the GPU env color. This is global across color combiners.
+// GRUNK void                    gfx_rapi_set_cc_prim_color                (uint32_t color);                                               // Sets the GPU prim color. This is global across color combiners.
+// GRUNK void                    gfx_rapi_set_cc_env_color                 (uint32_t color);                                               // Sets the GPU env color. This is global across color combiners.
 #endif
 
 #endif

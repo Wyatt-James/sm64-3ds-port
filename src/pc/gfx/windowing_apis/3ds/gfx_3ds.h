@@ -1,7 +1,6 @@
+#pragma once
 #ifdef TARGET_N3DS
 
-#ifndef GFX_3DS_H
-#define GFX_3DS_H
 
 #include "src/pc/gfx/gfx_window_manager_api.h"
 
@@ -84,5 +83,4 @@ static bool load_t3x_texture(C3D_Tex* tex, C3D_TexCube* cube, const void* data, 
     return true;
 }
 
-#endif
 #endif

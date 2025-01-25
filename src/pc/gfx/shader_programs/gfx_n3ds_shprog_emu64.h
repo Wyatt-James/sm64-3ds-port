@@ -2,6 +2,7 @@
 #define GFX_N3DS_SHPROG_EMU64_H
 
 #include <stdio.h>
+#include <stdint.h>
 #include <3ds/gpu/enums.h>
 
 #include "src/pc/gfx/gfx_3ds_shaders.h"
@@ -29,6 +30,8 @@
 #define EMU64_STRIDE_MAX      (EMU64_STRIDE_POSITION    \
                             +  EMU64_STRIDE_TEXTURE     \
                             +  EMU64_STRIDE_RGBA)
+
+typedef uint8_t Emu64ShaderCode; // EMU64 shader code WYATT_TODO move me!
 
 // Shader VBO features
 enum Emu64ShaderFeature {

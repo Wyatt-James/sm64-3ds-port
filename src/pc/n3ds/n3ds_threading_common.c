@@ -5,7 +5,7 @@
 
 #define DEFAULT_THREAD_NAME "unnamed"
 
-bool n3ds_enable_multi_threading = true;
+bool n3ds_enable_multi_threading = false;
 bool n3ds_old_core_1_is_available = false;
 
 
