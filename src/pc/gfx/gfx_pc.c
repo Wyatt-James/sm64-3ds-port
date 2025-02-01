@@ -99,7 +99,8 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 
 #define MAX_BUFFERED_TRIS 256
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
-#define MAX_LIGHTS 2
+#define MAX_DIRECTIONAL_LIGHTS 2
+#define MAX_LIGHTS (MAX_DIRECTIONAL_LIGHTS + 1)
 #define MAX_VERTICES 64
 #define MAT_STACK_SIZE 11
 
@@ -244,9 +245,9 @@ static struct RSP {
     uint8_t modelview_matrix_stack_size;
     float P_matrix[4][4];
 
-    Light_t* current_lights[MAX_LIGHTS + 1]; // MUST be populated with valid pointers during init! Use LIGHT_DEFAULT.
+    Light_t* lights[MAX_LIGHTS]; // MUST be populated with valid pointers during init! Use LIGHT_DEFAULT.
     uint8_t lights_changed_bitfield;
-    uint8_t current_num_lights; // includes ambient light
+    uint8_t num_lights; // includes ambient light
 
     uint32_t geometry_mode;
 
@@ -301,7 +302,7 @@ static struct RenderingState {
     bool p_mtx_changed, mv_mtx_changed;
     enum Stereoscopic3dMode stereo_3d_mode;
     enum IodMode iod_mode;
-    uint8_t current_num_lights;
+    uint8_t num_lights;
     bool enable_lighting;
     bool enable_texgen;
     union TextureScalingFactor texture_scaling_factor; // Why is this slow as hell when in RenderingState instead of ShaderState? 7.01 vs 7.18ms in castle courtyard
@@ -380,23 +381,28 @@ static void gfx_apply_lighting()
         gfx_rapi_enable_lighting(enable_lighting);
     }
 
-    ASSUME(rsp.current_num_lights <= MAX_LIGHTS);
-
     if (enable_lighting) {
-        if (rendering_state.current_num_lights != rsp.current_num_lights) { // Doesn't really happen in gameplay
-            rendering_state.current_num_lights  = rsp.current_num_lights;
+        const uint8_t num_lights = rsp.num_lights;
+        uint8_t lights_changed_bitfield = rsp.lights_changed_bitfield;
 
-            gfx_rapi_set_num_lights(rsp.current_num_lights);
+        ASSUME(num_lights <= MAX_LIGHTS);
+        ASSUME(lights_changed_bitfield <= SET_BITS(MAX_LIGHTS));
+
+        if (UNLIKELY(rendering_state.num_lights != num_lights)) { // Doesn't really happen in gameplay
+            rendering_state.num_lights = num_lights;
+
+            gfx_rapi_set_num_lights(num_lights);
 
             // If numlights has changed, our current lights are invalid.
-            rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS + 1);
+            // This isn't actually true, since the API is zero-indexed, but removing this line loses 200us to perf lottery.
+            lights_changed_bitfield = SET_BITS(MAX_LIGHTS);
         }
 
         // Configure directional lights
-        for (int i = 0; i < rsp.current_num_lights; i++) {
-            Light_t* light = rsp.current_lights[rsp.current_num_lights - 1 - i]; // Reverse the order so that ambient is sent as 0
+        for (int i = 0; i < num_lights; i++) {
+            Light_t* light = rsp.lights[num_lights - 1 - i]; // Reverse the order so that ambient is sent as 0
 
-            if (rsp.lights_changed_bitfield & BIT(i))
+            if (lights_changed_bitfield & BIT(i))
                 gfx_rapi_configure_light(i, light);
         }
 
@@ -878,7 +884,7 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
     if (LIKELY(index == G_MV_LIGHT)) {
         gfx_flush(27);
         const int light_index = (offset / 24) - 2;
-        rsp.current_lights[light_index] = (Light_t*) data;
+        rsp.lights[light_index] = (Light_t*) data;
         rsp.lights_changed_bitfield |= BIT(light_index);
     } else { // G_MV_VIEWPORT
         gfx_calc_and_set_viewport((const Vp_t*) data);
@@ -902,7 +908,7 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
             // NOTE: reads out of bounds if it is an ambient light
             gfx_flush(27);
             const int light_index = (index - G_MV_L0) / 2;
-            rsp.current_lights[light_index] = (Light_t*) data;
+            rsp.lights[light_index] = (Light_t*) data;
             rsp.lights_changed_bitfield |= BIT(light_index);
             break;
     }
@@ -914,11 +920,11 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
         case G_MW_NUMLIGHT:
             gfx_flush(26);
 #ifdef F3DEX_GBI_2
-            rsp.current_num_lights = data / 24 + 1; // add ambient light
+            rsp.num_lights = data / 24 + 1; // add ambient light
 #else
             // Ambient light is included
             // Bit 31 is a flag that lights should be recalculated
-            rsp.current_num_lights = (data - 0x80000000U) / 32;
+            rsp.num_lights = (data - 0x80000000U) / 32;
 #endif
             break;
         case G_MW_FOG:
@@ -1115,7 +1121,7 @@ static void rendering_state_init(struct RenderingState* rs)
     rs->mv_mtx_changed = true;
     rs->stereo_3d_mode = STEREO_MODE_COUNT;
     rs->iod_mode = IOD_COUNT;
-    rs->current_num_lights = MAX_LIGHTS + 1;
+    rs->num_lights = MAX_LIGHTS;
     rs->enable_lighting = ~0;
     rs->enable_texgen = ~0;
     rs->texture_scaling_factor.s = INT32_MAX;
@@ -1631,8 +1637,8 @@ static void gfx_run_dl(Gfx* cmd) {
 
 static void gfx_sp_reset() {
     rsp.modelview_matrix_stack_size = 1;
-    rsp.current_num_lights = 2;
-    rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS + 1);
+    rsp.num_lights = 2;
+    rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS);
 }
 
 void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {
@@ -1659,8 +1665,8 @@ void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool star
     rsp.rect_vertices[3].position.z = -1;
 
     // Initialize lights to all black
-    for (int i = 0; i < MAX_LIGHTS + 1; i++)
-        rsp.current_lights[i] = &LIGHT_DEFAULT;
+    for (int i = 0; i < MAX_LIGHTS; i++)
+        rsp.lights[i] = &LIGHT_DEFAULT;
 
     // Initialize the matstack to identity
     for (int i = 0; i < MAT_STACK_SIZE; i++)
