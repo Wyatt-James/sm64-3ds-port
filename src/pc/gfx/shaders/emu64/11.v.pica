@@ -5,12 +5,16 @@
 .fvec rsp_color_selection ; Enum { col1_rgb, col1_alpha, col2_rgb, col2_alpha }
 .fvec vertex_load_flags   ; { num_lights, enable_texgen, tex_scale_s, tex_scale_t }
 
+; ----- Constant Uniforms -----
+.fvec emu64_const_1       ; {   0,   1, 1/127,  1/255 }
+
 ; At least one const must be present in each DVLE thanks to a libctru (or c3d?) bug.
 .constf dummy_const (0.0, 0.0, 0.0, 0.0)
 
 ; ----- Aliases -----
-.alias texture_load_scale  vertex_load_flags.zw ; {tex_scale_s, tex_scale_t}
-.alias enable_texgen       vertex_load_flags.y  ; {enable_texgen}
+.alias texture_load_scale vertex_load_flags.zw ; {tex_scale_s, tex_scale_t}
+.alias enable_texgen      vertex_load_flags.y  ; {enable_texgen}
+.alias color_scale        emu64_const_1.wwww   ; Vector full of 1/255
 
 ; ----- Subroutine Registers -----
 ; These are intended purposes, but they may vary betwen subroutines.
@@ -60,7 +64,7 @@ texture:
 color:
 
     mov sub_param_1, innorm
-    mov sub_param_1.a, inalpha.x
+    mul sub_param_1.a, color_scale, inalpha.x
     call calculate_lighting
 
     ; Resolve color

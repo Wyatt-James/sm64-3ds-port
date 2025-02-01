@@ -11,6 +11,7 @@
 
 ; ----- Aliases -----
 .alias zeros       emu64_const_1.xxxx ; Vector full of zeros
+.alias color_scale emu64_const_1.wwww ; Vector full of 1/255
 
 ; ----- Subroutine Registers -----
 ; These are intended purposes, but they may vary betwen subroutines.
@@ -49,7 +50,7 @@ texture:
 color:
 
     mov sub_param_1, innorm
-    mov sub_param_1.a, inalpha.x
+    mul sub_param_1.a, color_scale, inalpha.x
     call calculate_lighting
 
     ; Resolve color
