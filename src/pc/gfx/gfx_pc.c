@@ -427,10 +427,10 @@ static void gfx_apply_texgen()
     }
 }
 
-static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id)) {
+static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id))
+{
     granular_log_time(0);
 
-    // Over 50% of calls are pointless
     if (UNLIKELY(buf_vbo_num_verts > 0)) {
         GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += buf_vbo_num_verts / 3);
         GRANULAR_FLUSH_DO(flushes[flush_id]++);
@@ -444,7 +444,7 @@ static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id)) {
     } else 
         GRANULAR_FLUSH_DO(flush_avoids[flush_id]++);
 
-    granular_log_time(12); // gfx_flush
+    granular_log_time(8); // gfx_flush
 }
 
 static void gfx_set_2d(int mode_2d)
@@ -714,9 +714,8 @@ static void gfx_sp_tri_update_state()
     if (rendering_state.cc_id != shader_state.cc_id) {
         rendering_state.cc_id  = shader_state.cc_id;
 
-        granular_log_time(10); // gfx_sp_tri_update_state
+        granular_log_time(6); // gfx_sp_tri_update_state
         gfx_flush(5);
-        granular_log_time(0);
 
         const size_t cc_index = gfx_rapi_lookup_or_create_color_combiner(shader_state.cc_id);
         gfx_rapi_color_combiner_get_info(cc_index, &shader_state.num_inputs, shader_state.used_textures.bools);
@@ -725,17 +724,15 @@ static void gfx_sp_tri_update_state()
 
     if (UNLIKELY(rendering_state.prim_color.u32 != rdp.prim_color.u32)) {
         rendering_state.prim_color.u32           = rdp.prim_color.u32;
-        granular_log_time(10); // gfx_sp_tri_update_state
+        granular_log_time(6); // gfx_sp_tri_update_state
         gfx_flush(6);
-        granular_log_time(0);
         gfx_rapi_set_cc_prim_color(rdp.prim_color.u32);
     }
 
     if (UNLIKELY(rendering_state.env_color.u32 != rdp.env_color.u32)) {
         rendering_state.env_color.u32           = rdp.env_color.u32;
-        granular_log_time(10); // gfx_sp_tri_update_state
+        granular_log_time(6); // gfx_sp_tri_update_state
         gfx_flush(7);
-        granular_log_time(0);
         gfx_rapi_set_cc_env_color(rdp.env_color.u32);
     }
         
@@ -743,17 +740,15 @@ static void gfx_sp_tri_update_state()
         const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
         if (rendering_state.linear_filter != linear_filter) {
             rendering_state.linear_filter  = linear_filter;
-            granular_log_time(10); // gfx_sp_tri_update_state
+            granular_log_time(6); // gfx_sp_tri_update_state
             gfx_flush(8);
-            granular_log_time(0);
             gfx_rapi_set_uv_offset(linear_filter ? 0.5f : 0.0f);
         }
 
         if (rendering_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
             rendering_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
-            granular_log_time(10); // gfx_sp_tri_update_state
+            granular_log_time(6); // gfx_sp_tri_update_state
             gfx_flush(9);
-            granular_log_time(0);
             gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
         }
 
@@ -761,9 +756,8 @@ static void gfx_sp_tri_update_state()
             if (shader_state.used_textures.bools[i]) {
                 if (rdp.textures_changed.bools[i]) {
                     rdp.textures_changed.bools[i] = false;
-                    granular_log_time(10); // gfx_sp_tri_update_state
+                    granular_log_time(6); // gfx_sp_tri_update_state
                     gfx_flush(10);
-                    granular_log_time(0);
                     upload_texture_to_rendering_api(i);
                 }
 
@@ -774,9 +768,8 @@ static void gfx_sp_tri_update_state()
                     rendering_state.textures[i]->linear_filter = linear_filter;
                     rendering_state.textures[i]->cms = rdp.texture_tile.cms;
                     rendering_state.textures[i]->cmt = rdp.texture_tile.cmt;
-                    granular_log_time(10); // gfx_sp_tri_update_state
+                    granular_log_time(6); // gfx_sp_tri_update_state
                     gfx_flush(11);
-                    granular_log_time(0);
                     gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 }
             }
@@ -788,6 +781,7 @@ static void gfx_sp_tri_update_state()
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
     if (rendering_state.culling_mode != culling_mode) {
         rendering_state.culling_mode  = culling_mode;
+        granular_log_time(6); // gfx_sp_tri_update_state
         gfx_flush(12);
         gfx_rapi_set_backface_culling_mode(culling_mode);
     }
@@ -797,6 +791,7 @@ static void gfx_sp_tri_update_state()
     const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
+        granular_log_time(6); // gfx_sp_tri_update_state
         gfx_flush(13);
         gfx_rapi_set_depth_test(depth_test);
     }
@@ -804,11 +799,12 @@ static void gfx_sp_tri_update_state()
     // Handled here to optimize rectangle drawing
     if (rendering_state.viewport.u64 != rdp.viewport.u64) {
         rendering_state.viewport      = rdp.viewport; // Struct copy
+        granular_log_time(6); // gfx_sp_tri_update_state
         gfx_flush(14);
         gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
 
-    granular_log_time(10); // gfx_sp_tri_update_state
+    granular_log_time(6); // gfx_sp_tri_update_state
 }
 
 static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], uint32_t numTris)
@@ -818,9 +814,8 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
     // WYATT_TODO fix this for very large batches. Fine for vanilla.
     const uint32_t numVerts = numTris * 3;
     if (buf_vbo_num_verts + numVerts >= MAX_BUFFERED_VERTS) {
-        granular_log_time(11); // gfx_tri_create_vbo
+        granular_log_time(7); // gfx_tri_create_vbo
         gfx_flush(15);
-        granular_log_time(0);
     }
     buf_vbo_num_verts += numVerts;
 
@@ -839,7 +834,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
             buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->color.u32;
     }
     
-    granular_log_time(11); // gfx_tri_create_vbo
+    granular_log_time(7); // gfx_tri_create_vbo
 }
 
 static void gfx_sp_tri_batched(struct LoadedVertex *restrict v_arr[restrict], uint32_t num_tris) {

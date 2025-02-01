@@ -301,6 +301,8 @@ void profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_until
 #define WORKER_BUF_LEN 31 // 30 chars + terminator
 #define FRAME_SEPARATOR "},\n"
 #define VALUE_SEPARATOR ", "
+#define FRAME_OPEN "{"
+#define FRAME_CLOSE "}"
 int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint32_t max_id_to_print) {
     log_string[0] = '\0';
     log_string[PROFILER_3DS_LOG_STRING_TERMINATOR] = '\0';
@@ -314,12 +316,14 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
     if (min_id_to_print > max_id_to_print)
         return 0;
 
-    int log_len = 0;
+    size_t log_len = 0;
     char worker[WORKER_BUF_LEN];
     worker[WORKER_BUF_LEN - 1] = '\0';
 
-    const int frame_sep_len = strlen(FRAME_SEPARATOR);
-    const int value_sep_len = strlen(VALUE_SEPARATOR);
+    static const size_t frame_sep_len = strlen(FRAME_SEPARATOR);
+    static const size_t value_sep_len = strlen(VALUE_SEPARATOR);
+    static const size_t frame_open_len = strlen(FRAME_OPEN);
+    static const size_t frame_close_len = strlen(FRAME_CLOSE);
 
     // for each frame...
     for (uint32_t i = 0; i < circ_num_frames; i++) {
@@ -327,7 +331,8 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
         volatile double *frame = circ_buffer[frame_num];
 
         if (!STR_HAS_SPACE(LOG_BUF_SIZE, log_len, 1)) goto too_long;
-        strcpy(&log_string[log_len++], "{");
+        strcpy(&log_string[log_len], FRAME_OPEN);
+        log_len += frame_open_len;
 
         // print each ID, separated by a comma
         for (uint32_t id = min_id_to_print; id <= max_id_to_print; id++) {
@@ -341,7 +346,7 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
 
             // Append value
             if (!STR_HAS_SPACE(LOG_BUF_SIZE, log_len, worker_len)) goto too_long;
-            strcat(log_string, worker);
+            strcpy(&log_string[log_len], worker);
             log_len += worker_len;
 
             // Append value separator
@@ -358,7 +363,8 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
             log_len += frame_sep_len;
         } else {
             if (!STR_HAS_SPACE(LOG_BUF_SIZE, log_len, 1)) goto too_long;
-            strcpy(&log_string[log_len++], "}");
+            strcpy(&log_string[log_len], FRAME_CLOSE);
+            log_len += frame_close_len;
         }
     }
     
@@ -374,34 +380,33 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
 #undef WORKER_BUF_LEN
 #undef FRAME_SEPARATOR
 #undef VALUE_SEPARATOR
+#undef FRAME_OPEN
+#undef FRAME_CLOSE
 
 // Computes some useful information for the timestamps. Intended for debugger use.
 void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
     // Useful GDB prints:
-    // p/f *lin_totals_per_id@20
-    // p/f *long_averages_per_id@20
-    // p/f *circ_averages_per_id@20
-    // p/f *circ_durations_per_id@20
+    // p/f *lin_totals_per_id@8
+    // p/d *lin_counts_per_id@8
+    // p/f *long_averages_per_id@8
+    // p/f *circ_averages_per_id@8
+    // p/f *circ_durations_per_id@8
     // printf "%s\n", log_string        // This can be slow. I get 1400 chars/min. Faster in single-core.
 
     // IDs:
-    // 0:  Misc
-    // 1:  Run Level Script
-    // 2:  Synchronous Audio Synthesis
-    // 3:  Build Display List
-    // 4:  GFX Rendering API Start Frame (VSync)
-    // 5:  GFX Run Display List
+    // 0: Misc
+    // 1: Run Level Script
+    // 2: Synchronous Audio Synthesis
+    // 3: Build Display List
+    // 4: GFX Rendering API Start Frame (VSync)
+    // 5: GFX Run Display List
 
     // Detailed IDs (replaces GFX Run Display List):
-    // 5:  Vertex Copy
-    // 6:  Light Recalculation
-    // 7:  Vertex Light Calculation
-    // 8:  Texgen Calculation
-    // 9:  Texcoord Copy
-    // 10: gfx_sp_tri_update_state
-    // 11: gfx_tri_create_vbo
-    // 12: gfx_flush
+    // 5: Vertex Copy
+    // 6: gfx_sp_tri_update_state
+    // 7: gfx_tri_create_vbo
+    // 8: gfx_flush
 
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;
@@ -421,7 +426,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 5);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 8);
                     
                     i += 5; // Place a breakpoint here
                     break;
