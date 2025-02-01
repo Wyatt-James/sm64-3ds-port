@@ -569,7 +569,7 @@ void gfx_rapi_set_use_alpha(bool use_alpha)
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
 }
 
-void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t buf_vbo_num_tris)
+void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris)
 {
     struct ColorCombiner* cc = current_color_combiner;
     struct CCFeatures* cc_features = &cc->cc_features;
@@ -610,7 +610,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_bytes, size_t b
 
     // Copy verts into the GPU buffer
     float* const vb_head = &vb_ptr[vb_num_verts * vb_stride];
-    memcpy(vb_head, buf_vbo, buf_vbo_num_bytes * VERTEX_BUFFER_UNIT_SIZE);
+    memcpy(vb_head, buf_vbo, buf_vbo_num_words * VERTEX_BUFFER_UNIT_SIZE);
 
     // Update vertex loading flags
     if (RFLAG_ON(RFLAG_VERT_LOAD_FLAGS_CHANGED) || OPT_DISABLED(optimize.consecutive_vertex_load_flags)) {

@@ -70,7 +70,7 @@ void                    gfx_rapi_set_zmode_decal            (bool zmode_decal); 
 void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                                // Sets the GPU viewport settings.
 void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                                // Sets the GPU scissor settings.
 void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                                     // Enables or disables alpha blending.
-void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris);                       // Draws the given triangles.
+void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris);                 // Draws the given triangles. Buf_vbo_num_units is how many words (32-bits) the VBO is.
 void                    gfx_rapi_init                       ();                                                                                   // Initializes the GFX Rendering API.
 void                    gfx_rapi_on_resize                  ();                                                                                   // Called when the window is resized.
 void                    gfx_rapi_start_frame                ();                                                                                   // Called at the start of a frame.
