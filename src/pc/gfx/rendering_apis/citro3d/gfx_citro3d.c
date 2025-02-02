@@ -698,7 +698,13 @@ void gfx_rapi_init()
     citro3d_helpers_configure_tex_env_slot_1(&texenv_slot_1);
 
     // Load a default shader. C3D requires this for many context-dependent operations.
-    union ShaderProgramFeatureFlags shader_features = {.position = true, .tex = false, .color = false, .normals = false };
+    const struct n3ds_shader_info default_shader = emu64_shader_3;
+    union ShaderProgramFeatureFlags shader_features = {
+        .position = default_shader.vbo_info.has_position,
+        .tex      = default_shader.vbo_info.has_texture,
+        .color    = default_shader.vbo_info.has_color,
+        .normals  = default_shader.vbo_info.has_normals
+    };
     internal_citro3d_load_shader(internal_citro3d_lookup_or_create_shader(shader_features));
 
     // Initialize constant uniforms

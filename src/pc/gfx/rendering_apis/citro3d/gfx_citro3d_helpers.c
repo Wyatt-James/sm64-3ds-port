@@ -118,10 +118,10 @@ const struct n3ds_shader_info* citro3d_helpers_get_shader_info(Emu64ShaderCode s
         default:
             shader = &emu64_shader_7;
             fprintf(stderr, "Invalid shader code: %c%c%c%c\n",
-            (shader_code & EMU64_VBO_POSITION) ? 'P' : '-',
-            (shader_code & EMU64_VBO_TEXTURE)  ? 'T' : '-',
-            (shader_code & EMU64_VBO_COLOR)    ? 'C' : '-',
-            (shader_code & EMU64_VBO_NORMALS)  ? 'N' : '-');
+                (shader_code & EMU64_VBO_POSITION) ? 'P' : '-',
+                (shader_code & EMU64_VBO_TEXTURE)  ? 'T' : '-',
+                (shader_code & EMU64_VBO_COLOR)    ? 'C' : '-',
+                (shader_code & EMU64_VBO_NORMALS)  ? 'N' : '-');
             break;
     }
 
