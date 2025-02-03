@@ -426,7 +426,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 8);
+                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 5);
                     
                     i += 5; // Place a breakpoint here
                     break;
