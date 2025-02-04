@@ -5,7 +5,8 @@
 #define MAX(a_, b_) ((a_ > b_) ? a_ : b_)
 #define MIN(a_, b_) ((a_ < b_) ? a_ : b_)
 
-void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features) {
+void gfx_cc_get_features(CCShaderId shader_id, struct CCFeatures *cc_features)
+{
     for (int i = 0; i < 4; i++) {
         cc_features->cc.arr[0][i] = (shader_id >> (i * 3)) & 7;
         cc_features->cc.arr[1][i] = (shader_id >> (12 + i * 3)) & 7;
@@ -49,8 +50,9 @@ void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features) {
     cc_features->color_alpha_same = (shader_id & 0xfff) == ((shader_id >> 12) & 0xfff);
 }
 
-void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id) {
-    uint32_t shader_id = (cc_id >> 24) << 24;
+void gfx_cc_generate_cc(ColorCombinerId cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id)
+{
+    CCShaderId shader_id = (cc_id >> 24) << 24;
     union CCInputMapping c = {{0}};
 
     bzero(out_shader_input_mappings, sizeof(*out_shader_input_mappings));

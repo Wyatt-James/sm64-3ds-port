@@ -75,11 +75,11 @@ extern "C" {
 #endif
 
 // Populates a CCFeatures struct from the given shader ID.
-void gfx_cc_get_features(uint32_t shader_id, struct CCFeatures *cc_features);
+void gfx_cc_get_features(CCShaderId shader_id, struct CCFeatures *cc_features);
 
 // Generates a set of CC shader-input mappings and a shader ID from a CC ID.
 // Unused mappings are set to CC_0.
-void gfx_cc_generate_cc(uint32_t cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id);
+void gfx_cc_generate_cc(ColorCombinerId cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id);
 
 #ifdef __cplusplus
 }
