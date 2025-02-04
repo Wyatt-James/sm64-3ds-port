@@ -97,7 +97,7 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 #define COMBINE_MODE(rgb, alpha) (((CombineMode) rgb) | (((CombineMode) alpha) << 12))
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 
-#define MAX_BUFFERED_TRIS 256
+#define MAX_BUFFERED_TRIS 512
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
 #define MAX_DIRECTIONAL_LIGHTS 2
 #define MAX_LIGHTS (MAX_DIRECTIONAL_LIGHTS + 1)
@@ -145,7 +145,6 @@ static Light_t LIGHT_DEFAULT = {
     .col = {0, 0, 0},
     .dir = {1, 1, 1}
 };
-
 
 // -------------------- TYPES --------------------
 
@@ -203,11 +202,27 @@ union XYWidthHeight {
     uint64_t u64;
 };
 
+// These parameters are stored as u0.16s in the DList,
+// but we use u16.16 here for a hack (see gfx_dp_texture_rectangle)
+union TextureScalingFactor {
+    struct {
+        // U16.16
+        uint32_t s, t;
+    };
+    uint64_t u64;
+};
+
 // Total size: 16 bytes
 struct LoadedVertex {
     union int16x4 position; // 8 bytes (w is unused, garbage value)
     union int16x2 uv;       // 4 bytes
     union RGBA32 color;     // 4 bytes. Also contains normals.
+};
+
+union VertexBuffer {
+    float as_float[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
+    uint32_t as_u32[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
+    uint8_t as_u8[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX * 4];
 };
 
 struct TextureHashmapNode {
@@ -221,25 +236,13 @@ struct TextureHashmapNode {
     bool linear_filter;
 };
 
-// These parameters are stored as u0.16s in the DList,
-// but we use u16.16 here for a hack (see gfx_dp_texture_rectangle)
-union TextureScalingFactor {
-    struct {
-        // U16.16
-        uint32_t s, t;
-    };
-    uint64_t u64;
-};
-
-// -------------------- GLOBAL VARIABLES --------------------
-
-static struct {
+struct TextureCache {
     struct TextureHashmapNode *hashmap[1024];
     struct TextureHashmapNode pool[512];
     uint32_t pool_pos;
-} gfx_texture_cache;
+};
 
-static struct RSP {
+struct RSP {
     uint32_t matrix_set;
     float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
     uint8_t modelview_matrix_stack_size;
@@ -255,9 +258,9 @@ static struct RSP {
 
     struct LoadedVertex* loaded_vertices[MAX_VERTICES];
     struct LoadedVertex rect_vertices[4]; // Used only for rectangle drawing
-} rsp;
+};
 
-static struct RDP {
+struct RDP {
     const uint8_t *palette;
     struct {
         const uint8_t *addr;
@@ -284,9 +287,9 @@ static struct RDP {
     union XYWidthHeight viewport;
     void *z_buf_address;
     void *color_image_address;
-} rdp;
+};
 
-static struct ShaderState {
+struct ShaderState {
     ColorCombinerId cc_id;
     bool use_alpha;
     bool use_fog;
@@ -294,9 +297,9 @@ static struct ShaderState {
     bool use_noise;
     uint8_t num_inputs;
     union boolx2 used_textures;
-} shader_state;
+};
 
-static struct RenderingState {
+struct RenderingState {
     uint32_t fog_settings;
     uint32_t matrix_set;
     bool p_mtx_changed, mv_mtx_changed;
@@ -320,18 +323,26 @@ static struct RenderingState {
     bool decal_mode;
     bool alpha_blend;
     struct TextureHashmapNode* textures[2];
-} rendering_state;
+};
+
+// -------------------- STATIC VARIABLES --------------------
+
+static struct TextureCache gfx_texture_cache;
+static struct RSP rsp;
+static struct RDP rdp;
+static struct ShaderState shader_state;
+static struct RenderingState rendering_state;
 
 struct GfxDimensions gfx_current_dimensions;
 
 static bool dropped_frame;
 
-static union VertexBuffer {
-    float as_float[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
-    uint32_t as_u32[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
-    uint8_t as_u8[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX * 4];
-} buf_vbo;
+// batches incoming G_TRI commands
+static struct LoadedVertex* tri_batch[MAX_BUFFERED_VERTS]; 
+static size_t num_verts_batched = 0;
 
+// contains unpacked vertex data ready to send to the Rendering API
+static union VertexBuffer buf_vbo;
 static size_t buf_vbo_len = 0;
 static size_t buf_vbo_num_verts = 0;
 
@@ -822,7 +833,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
     const bool use_texture = shader_state.used_textures.either;
     const bool use_color_or_normals = (shader_state.num_inputs > 0) || (rsp.geometry_mode & G_LIGHTING);
 
-    for (uint32_t vtx = 0; vtx < numVerts; vtx++) {
+    for (size_t vtx = 0; vtx < numVerts; vtx++) {
         // Struct copy
         *((union int16x4*) (&buf_vbo.as_u32[buf_vbo_len])) = v_arr[vtx]->position;
         buf_vbo_len += 2;
@@ -1388,14 +1399,11 @@ static inline void *seg_addr(uintptr_t w1) {
 #define C1(pos, width) ((cmd->words.w1 >> (pos)) & ((1U << width) - 1))
 
 static void gfx_run_dl(Gfx* cmd) {
-    static struct LoadedVertex *tri_batch[MAX_VERTICES * 3];
-    static uint32_t num_verts_batched = 0;
-
     for (;;) {
         uint32_t opcode = cmd->words.w0 >> 24;
         PC_METRIC_DO(num_rsp_commands_run++);
 
-        if (opcode != G_TRI1 && opcode != G_TRI2 && num_verts_batched) {
+        if (opcode != G_TRI1 && opcode != G_TRI2 && opcode != G_VTX && num_verts_batched) {
             gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
             num_verts_batched = 0;
         }
