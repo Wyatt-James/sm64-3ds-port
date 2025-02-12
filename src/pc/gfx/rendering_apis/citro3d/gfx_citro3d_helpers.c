@@ -283,6 +283,34 @@ GPU_TEVSRC citro3d_helpers_cc_input_to_tev_src(int cc_input, bool swap_input)
     }
 }
 
+static void configure_tev()
+{
+    /*
+                  RDP inputs                           3DS TexEnv Stuff
+         Combined Color (2cyc)   ->    GPU_PREVIOUS_BUFFER        + GPU_TEVOP_RGB_SRC_COLOR
+         Texel0 Color            ->    GPU_TEXTURE0               + GPU_TEVOP_RGB_SRC_COLOR
+         Texel1 Color            ->    GPU_TEXTURE1               + GPU_TEVOP_RGB_SRC_COLOR
+         Prim Color              ->    GPU_CONSTANT               + GPU_TEVOP_RGB_SRC_COLOR
+         Shade Color (Vertex)    ->    GPU_PRIMARY_COLOR          + GPU_TEVOP_RGB_SRC_COLOR
+         Env Color               ->    GPU_CONSTANT               + GPU_TEVOP_RGB_SRC_COLOR
+         Key Center              ->    ------------
+         Key Scale               ->    ------------
+         Combined Alpha (2cyc)   ->    GPU_PREVIOUS_BUFFER        + GPU_TEVOP_RGB_SRC_ALPHA
+         Texel0 Alpha            ->    GPU_TEXTURE0               + GPU_TEVOP_RGB_SRC_ALPHA
+         Texel1 Alpha            ->    GPU_TEXTURE1               + GPU_TEVOP_RGB_SRC_ALPHA
+         Prim Alpha              ->    GPU_CONSTANT               + GPU_TEVOP_RGB_SRC_ALPHA
+         Shade Alpha             ->    GPU_PRIMARY_COLOR          + GPU_TEVOP_RGB_SRC_ALPHA
+         Env Alpha               ->    GPU_CONSTANT               + GPU_TEVOP_RGB_SRC_ALPHA
+         LoD Fraction            ->    GPU_TEXTURE2 LUT (per-vertex)
+         Prim LoD Fraction       ->    ? Discarded
+         Noise                   ->    GPU_TEXTURE3
+         Convert: K4 (YUV)       ->    ------------
+         Convert: K5 (YUV)       ->    ------------
+         1.0                     ->    GPU_FRAGMENT_PRIMARY_COLOR + GPU_TEVOP_RGB_ONE_MINUS_SRC_COLOR
+         0.0                     ->    GPU_FRAGMENT_PRIMARY_COLOR
+    */
+}
+
 static void configure_tev_internal(struct CCFeatures* cc_features, C3D_TexEnv* texenv, bool swap_input, C3D_TexEnvMode mode)
 {
     if (cc_features->do_single[0])

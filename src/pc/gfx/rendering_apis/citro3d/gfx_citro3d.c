@@ -1096,13 +1096,13 @@ size_t gfx_rapi_lookup_or_create_color_combiner(ColorCombinerId cc_id)
     struct ColorCombiner* cc = &color_combiner_pool[cc_index];
     num_color_combiners = (num_color_combiners + 1) % MAX_COLOR_COMBINERS;
 
-    union CCInputMapping mapping;
-
-    {
-        CCShaderId shader_id;
-        gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
-        gfx_cc_get_features(shader_id, &cc->cc_features);
-    }
+    // Contains one PcPortCombinerSource for each SHADER_INPUT_N, in SHADER_INPUT_N order.
+    // In layman's terms, we select up to four "shader inputs," which are custom values
+    // sourced from the vertex shader itself. These can be different between RGB and Alpha.
+    // On 3DS, we're only allowed one color output from the vertex shader, so we only ever
+    // use c1, which is why we have to swap the order for goddard.
+    union CCInputMapping mapping; 
+    gfx_cc_generate_cc(cc_id, &mapping, &cc->cc_features);
 
     // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)
     // WYATT_TODO put something better here

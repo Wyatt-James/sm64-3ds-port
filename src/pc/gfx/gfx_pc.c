@@ -94,7 +94,7 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 #define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
 
-#define COMBINE_MODE(rgb, alpha) (((CombineMode) rgb) | (((CombineMode) alpha) << 12))
+#define COMBINE_MODE(rgb, alpha) (((CombineMode) rgb << 12) | (((CombineMode) alpha)))
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 
 #define MAX_BUFFERED_TRIS 512
@@ -129,6 +129,7 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 #define TEXFMT_I8     TEX_FORMAT(G_IM_FMT_I,    G_IM_SIZ_8b)  // Unused by SM64
 #define TEXFMT_CI4    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_4b)  // Unused by SM64
 #define TEXFMT_CI8    TEX_FORMAT(G_IM_FMT_CI,   G_IM_SIZ_8b)  // Unused by SM64
+#define TEXFMT_YUV16  TEX_FORMAT(G_IM_FMT_YUV,  G_IM_SIZ_16b) // Unused by SM64
 
 static float MTX_IDENTITY[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
                                    {0.0f, 1.0f, 0.0f, 0.0f},
@@ -193,6 +194,18 @@ union boolx2 {
     int16_t either;
 };
 
+/*
+    Structure of a CombineMode, MSB-first:
+    unused     : 8,
+    C1_RGB_a   : 3, // PcPortCombinerSource
+    C1_RGB_b   : 3,
+    C1_RGB_c   : 3,
+    C1_RGB_d   : 3,
+    C1_Alpha_a : 3,
+    C1_Alpha_b : 3,
+    C1_Alpha_c : 3,
+    C1_Alpha_d : 3;
+*/
 typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
 
 union XYWidthHeight {
@@ -1075,33 +1088,34 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
 }
 
-
-static uint8_t color_comb_component(uint32_t v) {
+// lower 3 bits
+static PcPortCombinerSource color_comb_component(uint32_t v) {
     switch (v) {
-        case G_CCMUX_TEXEL0:
+        case G_CCMUX_TEXEL0:       // 1 -> 1
             return CC_TEXEL0;
-        case G_CCMUX_TEXEL1:
+        case G_CCMUX_TEXEL1:       // 2 -> 2
             return CC_TEXEL1;
-        case G_CCMUX_PRIMITIVE:
+        case G_CCMUX_PRIMITIVE:    // 3 -> 3
             return CC_PRIM;
-        case G_CCMUX_SHADE:
+        case G_CCMUX_SHADE:        // 4 -> 4
             return CC_SHADE;
-        case G_CCMUX_ENVIRONMENT:
+        case G_CCMUX_ENVIRONMENT:  // 5 -> 5
             return CC_ENV;
-        case G_CCMUX_TEXEL0_ALPHA:
+        case G_CCMUX_TEXEL0_ALPHA: // 8 -> 6
             return CC_TEXEL0A;
-        case G_CCMUX_LOD_FRACTION:
+        case G_CCMUX_LOD_FRACTION: // 13 -> 7
             return CC_LOD;
         default:
-            return CC_0;
+            return CC_0;           // default 0
     }
 }
 
-static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-    return color_comb_component(a) |
-           (color_comb_component(b) << 3) |
-           (color_comb_component(c) << 6) |
-           (color_comb_component(d) << 9);
+// lower 12 bits, stored {a, b, c, d} in the output word
+static inline CombineMode color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+    return (color_comb_component(a) << 9) |
+           (color_comb_component(b) << 6) |
+           (color_comb_component(c) << 3) |
+            color_comb_component(d);
 }
 
 static void shader_state_init(struct ShaderState* ss)
@@ -1134,6 +1148,7 @@ static void rendering_state_init(struct RenderingState* rs)
     rs->texture_scaling_factor.t = INT32_MAX;
 }
 
+// CombineMode is bottom 24 bits
 static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
 {
     ColorCombinerId id = combine_mode;
@@ -1144,7 +1159,7 @@ static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool u
     if (use_alpha)
         id |= SHADER_OPT_ALPHA;
     else
-        id &= ~0xfff000;
+        id &= ~0xfff; // Zero out alpha sources
 
     return id;
 }
@@ -1395,6 +1410,27 @@ static inline void *seg_addr(uintptr_t w1) {
     return (void *) w1;
 }
 
+/* Structure of a G_SETCOMBINE command, in MSB-first order
+    uint32_t opcode     : 8, // Upper word
+             C1_RGB_a   : 4,
+             C1_RGB_c   : 5,
+             C1_Alpha_a : 3,
+             C1_Alpha_c : 3,
+             C2_RGB_a   : 4,
+             C2_RGB_c   : 5,
+
+             C1_RGB_b   : 4, // Lower word
+             C2_RGB_b   : 4,
+             C2_Alpha_a : 3,
+             C2_Alpha_c : 3,
+             C1_RGB_d   : 3,
+             C1_Alpha_b : 3,
+             C1_Alpha_d : 3,
+             C2_RGB_d   : 3,
+             C2_Alpha_b : 3,
+             C2_Alpha_d : 3;
+*/
+
 #define C0(pos, width) ((cmd->words.w0 >> (pos)) & ((1U << width) - 1))
 #define C1(pos, width) ((cmd->words.w1 >> (pos)) & ((1U << width) - 1))
 
@@ -1563,8 +1599,8 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_dp_set_combine_mode(COMBINE_MODE(
                     color_comb(C0(20, 4), C1(28, 4), C0(15, 5), C1(15, 3)),
                     color_comb(C0(12, 3), C1(12, 3), C0(9, 3), C1(9, 3))));
-                    /*color_comb(C0(5, 4), C1(24, 4), C0(0, 5), C1(6, 3)),
-                    color_comb(C1(21, 3), C1(3, 3), C1(18, 3), C1(0, 3)));*/
+                 // color_comb(C0(5, 4), C1(24, 4), C0(0, 5), C1(6, 3)),
+                 // color_comb(C1(21, 3), C1(3, 3), C1(18, 3), C1(0, 3)));
                 break;
             // G_SETPRIMCOLOR, G_CCMUX_PRIMITIVE, G_ACMUX_PRIMITIVE, is used by Goddard
             // G_CCMUX_TEXEL1, LOD_FRACTION is used in Bowser room 1

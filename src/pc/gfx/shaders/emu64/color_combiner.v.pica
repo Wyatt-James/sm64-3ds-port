@@ -9,7 +9,7 @@
 ; Color Selection Enum:
 ; -2 : EMU64_CC_LOD            LoD calculation
 ; -1 : EMU64_CC_SHADE          vertex color passthrough
-;  0 : EMU64_CC_PRIME          RDP PRIMITIVE color
+;  0 : EMU64_CC_PRIM           RDP PRIMITIVE color
 ;  1 : EMU64_CC_ENV            RDP ENV color
 ;  2 : EMU64_CC_0              { 0, 0, 0, 0 }
 ;  3 : EMU64_CC_1              { 1, 1, 1, 1 }
@@ -21,7 +21,7 @@
 .alias ones           cc_constants.zzzz ; Vector full of ones
 .alias zeros          cc_constants.wwww ; Vector full of zeros
 
-.alias color_prime    rsp_colors[0]   ; Vector with CC_PRIME
+.alias color_prim     rsp_colors[0]   ; Vector with CC_PRIM
 .alias color_env      rsp_colors[1]   ; Vector with CC_ENV
 .alias color_black    rsp_colors[2]   ; Vector with { 0, 0, 0, 0 }
 .alias color_white    rsp_colors[3]   ; Vector with { 1, 1, 1, 1 }
