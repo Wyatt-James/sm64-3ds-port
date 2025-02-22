@@ -45,6 +45,12 @@
 #define STR_HAS_SPACE(buf_len, cur, size) (STR_FREE_SPACE(buf_len, cur) >= size)
 #define CIRCULAR_ADJUST_FRAME(index) ((circ_cur_frame + i + 1) % PROFILER_3DS_NUM_CIRCULAR_FRAMES)
 
+typedef struct
+{
+    double t;
+    uint32_t c;
+} CircularEntry;
+
 // Times are stored in milliseconds
 
 static TickCounter tick_counter_average, tick_counter_linear, tick_counter_circular;
@@ -66,11 +72,12 @@ static volatile uint32_t lin_counts_per_id[PROFILER_3DS_NUM_IDS]; // Count per-i
 static volatile uint32_t lin_timestamp_count = 0;
 
 // A circular buffer of the most recent frames.
-static volatile double   circ_buffer[PROFILER_3DS_NUM_CIRCULAR_FRAMES][PROFILER_3DS_NUM_IDS]; // Circular buffer of durations
-static volatile double   circ_durations_per_id[PROFILER_3DS_NUM_IDS]; // Circular buffer of durations
-static volatile double   circ_averages_per_id[PROFILER_3DS_NUM_IDS]; // Average of contents of totals_per_id for each id, computed on-demand
-static volatile uint32_t circ_num_frames = 1; // Number of frames encountered in the circular buffer.
-static volatile uint32_t circ_cur_frame = 0, circ_next_frame = 0; // Circular buffer indices
+static volatile CircularEntry circ_buffer[PROFILER_3DS_NUM_CIRCULAR_FRAMES][PROFILER_3DS_NUM_IDS]; // Circular buffer of durations
+static volatile double        circ_durations_per_id[PROFILER_3DS_NUM_IDS]; // Circular buffer of durations
+static volatile double        circ_averages_per_id[PROFILER_3DS_NUM_IDS]; // Average of contents of totals_per_id for each id, computed on-demand
+static volatile uint32_t      circ_counts_per_id[PROFILER_3DS_NUM_IDS]; // Count per-ID
+static volatile uint32_t      circ_num_frames = 1; // Number of frames encountered in the circular buffer.
+static volatile uint32_t      circ_cur_frame = 0, circ_next_frame = 0; // Circular buffer indices
 
 // Updated per-snoop-ID each profiler_3ds_snoop_impl() call; used for breakpoints.
 static volatile uint8_t snoop_interval = 180;
@@ -121,7 +128,8 @@ static void update_circular_log(uint32_t id) {
     const double duration = osTickCounterRead(&tick_counter_circular);
 
     // Update circular log
-    circ_buffer[circ_cur_frame][id] += duration;
+    circ_buffer[circ_cur_frame][id].t += duration;
+    circ_buffer[circ_cur_frame][id].c++;
 }
 
 
@@ -161,7 +169,7 @@ void profiler_3ds_linear_calculate_averages_impl() {
 // Advances one frame in the circular log
 void profiler_3ds_circular_advance_frame_impl() {
     for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-        circ_buffer[circ_next_frame][id] = 0.0;
+        circ_buffer[circ_next_frame][id] = (CircularEntry) {};
     }
 
     circ_cur_frame = circ_next_frame;
@@ -184,7 +192,7 @@ void profiler_3ds_circular_calculate_averages_impl() {
             circ_durations_per_id[id] = 0.0;
 
             for (uint32_t frame = 0; frame < circ_num_frames; frame++)
-                circ_durations_per_id[id] += circ_buffer[frame][id];
+                circ_durations_per_id[id] += circ_buffer[frame][id].t;
 
             circ_averages_per_id[id] = circ_durations_per_id[id] / circ_num_frames;
         }
@@ -226,7 +234,7 @@ void profiler_3ds_linear_reset_impl() {
 void profiler_3ds_circular_reset_impl() {
     for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
         for (uint32_t frame = 0; frame < PROFILER_3DS_NUM_CIRCULAR_FRAMES; frame++)
-            circ_buffer[frame][id] = 0.0;
+            circ_buffer[frame][id].t = 0.0;
 
         circ_averages_per_id[id] = 0.0;
     }
@@ -274,7 +282,7 @@ double profiler_3ds_linear_get_average_impl(uint32_t id) {
 // Returns the duration for a given frame and ID from the circular log.
 double profiler_3ds_circular_get_duration_impl(uint32_t frame, uint32_t id) {
     if (frame < circ_cur_frame - 1 && id < PROFILER_3DS_NUM_IDS)
-        return circ_buffer[frame][id];
+        return circ_buffer[frame][id].t;
     
     return -1.0;
 }
@@ -303,9 +311,19 @@ void profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_until
 #define VALUE_SEPARATOR ", "
 #define FRAME_OPEN "{"
 #define FRAME_CLOSE "}"
-int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint32_t max_id_to_print) {
+enum PrintMode
+{
+    NONE,
+    TIME,
+    COUNT
+};
+
+int profiler_3ds_create_log_string_circular_internal(uint32_t min_id_to_print, uint32_t max_id_to_print, enum PrintMode print_mode) {
     log_string[0] = '\0';
     log_string[PROFILER_3DS_LOG_STRING_TERMINATOR] = '\0';
+
+    if (print_mode == NONE)
+        return 0;
         
     if (min_id_to_print > PROFILER_3DS_NUM_IDS)
         min_id_to_print = PROFILER_3DS_NUM_IDS;
@@ -328,7 +346,7 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
     // for each frame...
     for (uint32_t i = 0; i < circ_num_frames; i++) {
         int frame_num = CIRCULAR_ADJUST_FRAME(i);
-        volatile double *frame = circ_buffer[frame_num];
+        volatile CircularEntry *frame = circ_buffer[frame_num];
 
         if (!STR_HAS_SPACE(LOG_BUF_SIZE, log_len, 1)) goto too_long;
         strcpy(&log_string[log_len], FRAME_OPEN);
@@ -336,7 +354,16 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
 
         // print each ID, separated by a comma
         for (uint32_t id = min_id_to_print; id <= max_id_to_print; id++) {
-            const int worker_len = snprintf(worker, WORKER_BUF_LEN, "%lf", frame[id]);
+            int worker_len;
+            switch (print_mode) {
+                case TIME:
+                    worker_len = snprintf(worker, WORKER_BUF_LEN, "%lf", frame[id].t);
+                    break;
+                case COUNT:
+                    worker_len = snprintf(worker, WORKER_BUF_LEN, "%lu", frame[id].c);
+                default:
+                    break;
+            }
 
             if (worker_len >= WORKER_BUF_LEN) {
                 // Output was truncated
@@ -383,6 +410,13 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
 #undef FRAME_OPEN
 #undef FRAME_CLOSE
 
+int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint32_t max_id_to_print)
+{
+    profiler_3ds_create_log_string_circular_internal(min_id_to_print, max_id_to_print, TIME);
+}
+
+volatile enum PrintMode snoop_print_mode = TIME;
+
 // Computes some useful information for the timestamps. Intended for debugger use.
 void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
@@ -408,6 +442,30 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 7: gfx_tri_create_vbo
     // 8: gfx_flush
 
+    // C3D IDs
+    // 
+    // 6:  C3D_LogSlot_FrameBuf
+    // 7:  C3D_LogSlot_Viewport
+    // 8:  C3D_LogSlot_Scissor
+    // 9:  C3D_LogSlot_Program
+    // 10: C3D_LogSlot_AttrInfo
+    // 11: C3D_LogSlot_BufInfo
+    // 12: C3D_LogSlot_Effect
+    // 13: C3D_LogSlot_TexAll
+    // 14: C3D_LogSlot_TexStatus
+    // 15: C3D_LogSlot_ProcTex
+    // 16: C3D_LogSlot_TexEnvBuf
+    // 17: C3D_LogSlot_FogLut
+    // 18: C3D_LogSlot_Gas
+    // 19: C3D_LogSlot_TexEnvAll
+    // 20: C3D_LogSlot_LightEnv
+    // 21: C3D_LogSlot_FixedAttribDirty
+    // 22: C3D_LogSlot_UpdateUniforms
+    // 23: C3D_LogSlot_ImmediateDraw
+    // 24: C3D_LogSlot_DrawArrays
+    // 25: C3D_LogSlot_DrawElements
+
+
     // Use with conditional breakpoints in GDB
     UNUSED volatile int i = 0;
     i++;
@@ -426,7 +484,14 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                     profiler_3ds_average_calculate_average_impl();
                     profiler_3ds_linear_calculate_averages_impl();
                     profiler_3ds_circular_calculate_averages_impl();
-                    UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_impl(0, 5);
+                    snoop_print_mode = TIME;
+
+                    while (snoop_print_mode != NONE) {
+                        UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_internal(0, 5 /* + 20*/, snoop_print_mode);
+                        snoop_print_mode = NONE;
+
+                        i += 5; // Place a breakpoint here
+                    }
                     
                     i += 5; // Place a breakpoint here
                     break;

@@ -8,6 +8,8 @@
 
 #if PROFILER_3DS_ENABLE == 1
 
+#define PROFILER_3DS_ENABLED
+
 // Maximum ID number for a timestamp.
 // WYATT_TODO off-by-one: value of 32 gives 33 entries
 #define PROFILER_3DS_NUM_IDS 32
