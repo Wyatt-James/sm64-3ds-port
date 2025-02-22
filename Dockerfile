@@ -11,24 +11,41 @@ RUN wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/m
   -O makerom.zip && \
   echo 976c17a78617e157083a8e342836d35c47a45940f9d0209ee8fd210a81ba7bc0  makerom.zip | sha256sum --check
 
-# CREATES citro3d-derrekr.zip
-RUN wget https://github.com/derrekr/citro3d/archive/71f33882fb4e1e7ccda455ea187c1fab6dec64d4.zip \
-  -O citro3d-derrekr.zip && \
-  echo 4f36dfb3b0c41a1ea9161c57448674a6052bd84962210ecf99f0ffbd5a7af3d9  citro3d-derrekr.zip | sha256sum --check
+# CREATES citro3d-wyatt-james.zip
+RUN wget https://github.com/Wyatt-James/citro3d/archive/f714ddf4f0d1dffe4da6dd349a67938d0258b963.zip \
+  -O citro3d-wyatt-james.zip && \
+  echo 28590B21CFAF46A55398920D413968D4CEB2A98EB34C56EB7B3FDEAF67BCBB0D  citro3d-wyatt-james.zip | sha256sum --check
+
+# CREATES libctru-wyatt-james.zip
+RUN wget https://github.com/Wyatt-James/libctru/archive/c262112f9fcda7aa466d6a5d641bc9efe4cfe35e.zip \
+  -O libctru-wyatt-james.zip && \
+  echo 59CE5AA1B1D177D80D4B803022BD94C1178CA35B33B537B1AC949292B5AFF790  libctru-wyatt-james.zip | sha256sum --check
 
 # ----- Extract archives in-place, removing commit-specific container folders -----
   
-# CREATES citro3d-derrekr-temp, citro3d-derrekr
-RUN unzip -d ./citro3d-derrekr-temp citro3d-derrekr.zip
-RUN mv ./citro3d-derrekr-temp/citro3d-* ./citro3d-derrekr
+# CREATES citro3d-wyatt-james-temp, citro3d-wyatt-james
+RUN unzip -d ./citro3d-wyatt-james-temp citro3d-wyatt-james.zip
+RUN mv ./citro3d-wyatt-james-temp/citro3d-* ./citro3d-wyatt-james
+  
+# CREATES libctru-wyatt-james-temp, libctru-wyatt-james
+RUN unzip -d ./libctru-wyatt-james-temp libctru-wyatt-james.zip
+RUN mv ./libctru-wyatt-james-temp/libctru-* ./libctru-wyatt-james
 
 # ----- Install dependencies -----
 
-# Install derrekr's fork of Citro3D. Use the longer line to build with GDB-optimized debug data included.
+# Install wyatt-james's fork of libctru. Use the longer line to build with GDB-optimized debug data included.
 # Removing this will leave the official devkitPro version installed.
-WORKDIR /tmp/citro3d-derrekr
-RUN make install > /docker_logs/make_citro3d-derrekr.txt
-# RUN make install ARCH="-ggdb -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_citro3d-derrekr.txt
+WORKDIR /tmp/libctru-wyatt-james/libctru
+RUN make install > /docker_logs/make_libctru-wyatt-james.txt
+# RUN make install ARCH="-ggdb -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_libctru-wyatt-james.txt
+
+# Install wyatt-james's fork of Citro3D. Use the longer line to build with GDB-optimized debug data included.
+# Removing this will leave the official devkitPro version installed.
+# The profiler defaults to off.
+WORKDIR /tmp/citro3d-wyatt-james
+RUN make install ENABLE_PROFILER=0 ARCH="-DGPUCMD_INLINE_THRESH=0 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_citro3d-wyatt-james.txt
+# RUN make install ENABLE_PROFILER=0 > /docker_logs/make_citro3d-wyatt-james.txt
+# RUN make install ARCH="-ggdb -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_citro3d-wyatt-james.txt
 
 # Install makerom
 WORKDIR /tmp
@@ -37,10 +54,12 @@ RUN chmod +x /opt/devkitpro/tools/bin/makerom
 
 # ----- Clean up temporaries -----
 WORKDIR /tmp
-RUN rm citro3d-derrekr.zip
+RUN rm citro3d-wyatt-james.zip
 RUN rm makerom.zip
-RUN rm -rf citro3d-derrekr-temp
-RUN rm -rf citro3d-derrekr
+RUN rm -rf citro3d-wyatt-james-temp
+RUN rm -rf citro3d-wyatt-james
+RUN rm -rf libctru-wyatt-james-temp
+RUN rm -rf libctru-wyatt-james
 
 # ----- Set up environment variables -----
 ENV PATH="/opt/devkitpro/tools/bin/:/sm64/tools:${PATH}"
