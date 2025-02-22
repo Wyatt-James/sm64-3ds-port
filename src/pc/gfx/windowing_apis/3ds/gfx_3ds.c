@@ -313,6 +313,16 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
         
     // Initialize Shader Data
     shprog_emu64_init();
+
+#ifdef PROFILER_3DS_ENABLED
+    // C3D_ProfilerFunc(profiler_3ds_log_time_impl);
+
+    // const uint32_t profiler_id = 6; // Next available profiler slot
+
+    // C3D_ProfilerCategoryMapAll(profiler_id - 1); // We'll overwrite default after
+    // C3D_ProfilerCategoryEnableAll(true);
+    // C3D_ProfilerCategoryMap(C3D_ProfilerSlot_Misc, 0);
+#endif
 }
 
 static void gfx_set_keyboard_callbacks(UNUSED bool (*on_key_down)(int scancode), UNUSED bool (*on_key_up)(int scancode), UNUSED void (*on_all_keys_up)(void))
