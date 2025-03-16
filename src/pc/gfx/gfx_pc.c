@@ -1403,8 +1403,9 @@ static void gfx_run_dl(Gfx* cmd) {
         uint32_t opcode = cmd->words.w0 >> 24;
         PC_METRIC_DO(num_rsp_commands_run++);
 
-        if (opcode != G_TRI1 && opcode != G_TRI2 && opcode != G_VTX && num_verts_batched) {
-            gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
+        // GOTO actually happens to be faster here.
+        if (UNLIKELY(opcode != G_TRI1 && opcode != G_TRI2 && opcode != G_VTX && num_verts_batched)) {
+flush:      gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
             num_verts_batched = 0;
         }
 
@@ -1478,6 +1479,9 @@ static void gfx_run_dl(Gfx* cmd) {
                 break;
 #endif
             case (uint8_t)G_TRI1: {
+                if (UNLIKELY(num_verts_batched + 3 > ARRAY_COUNT(tri_batch)))
+                    goto flush;
+                
 #ifdef F3DEX_GBI_2
                 const uint8_t i1 = C0(16, 8) / 2,
                               i2 = C0(8, 8)  / 2,
@@ -1498,6 +1502,9 @@ static void gfx_run_dl(Gfx* cmd) {
             }
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
             case (uint8_t)G_TRI2: {
+                if (UNLIKELY(num_verts_batched + 6 > ARRAY_COUNT(tri_batch)))
+                    goto flush;
+
                 const uint8_t i1 = C0(16, 8) / 2,
                               i2 = C0(8, 8)  / 2,
                               i3 = C0(0, 8)  / 2,
