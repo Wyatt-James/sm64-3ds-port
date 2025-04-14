@@ -1,7 +1,11 @@
 #ifndef PROFILER_3DS_H
 #define PROFILER_3DS_H
 
-#include <types.h>
+/*
+ * An N3DS-specific profiler
+ */
+
+#include <stdint.h>
 
 #define PROFILER_3DS_ENABLE 0
 
@@ -27,7 +31,7 @@
 
 // Length of the log string.
 // For the circular log, estimate 10 * <max id> * num circular frames, plus some extra for formatting.
-#define PROFILER_3DS_LOG_STRING_LENGTH 20000
+#define PROFILER_3DS_LOG_STRING_LENGTH 25000
 
 // Convenience define. Represents where to place the buffer terminator.
 #define PROFILER_3DS_LOG_STRING_TERMINATOR (PROFILER_3DS_LOG_STRING_LENGTH - 1)

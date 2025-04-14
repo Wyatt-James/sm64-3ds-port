@@ -24,10 +24,11 @@
 #include "texture_conversion.h"
 #include "src/pc/pc_metrics.h"
 
-#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_emulator.h"
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/profiler_3ds.h"
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
+#include "src/pc/pc_macros.h"
 #include "src/pc/gfx/gfx_3ds_constants.h"
 
 /*
@@ -91,10 +92,6 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 #define HALF_SCREEN_WIDTH (SCREEN_WIDTH / 2)
 #define HALF_SCREEN_HEIGHT (SCREEN_HEIGHT / 2)
 
-#define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
-#define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
-
-#define COMBINE_MODE(rgb, alpha) (((CombineMode) rgb) | (((CombineMode) alpha) << 12))
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 
 #define MAX_BUFFERED_TRIS 512
@@ -109,11 +106,6 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 #define MATRIX_SET_SCALED_NDC 2
 #define MATRIX_SET_INVALID (~MATRIX_SET_NORMAL)
 #define NDC_SCALE (INT16_MAX / 4) // Scaling factor for s16 NDC coordinates. See gfx_dimensions.h for more info.
-
-#define ASSUME(cond) if (!(cond)) __builtin_unreachable()
-#define LIKELY(cond)              __builtin_expect(!!(cond), 1)
-#define UNLIKELY(cond)            __builtin_expect(!!(cond), 0)
-#define EXPECT(val, expected)     __builtin_expect(val, expected)
 
 // Supported Texture formats (see upload_texture_to_rendering_api)
 // Max val for format_: 0b100 (range [0-4])
@@ -192,8 +184,6 @@ union boolx2 {
     bool bools[2];
     int16_t either;
 };
-
-typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
 
 union XYWidthHeight {
     struct {
@@ -309,6 +299,7 @@ struct RenderingState {
     bool enable_lighting;
     bool enable_texgen;
     union TextureScalingFactor texture_scaling_factor; // Why is this slow as hell when in RenderingState instead of ShaderState? 7.01 vs 7.18ms in castle courtyard
+    uint32_t current_textures[2];
     
     ColorCombinerId cc_id;
     union RGBA32 prim_color;
@@ -325,6 +316,10 @@ struct RenderingState {
     struct TextureHashmapNode* textures[2];
 };
 
+// -------------------- NON-STATIC VARIABLES --------------------
+
+struct GfxDimensions gfx_current_dimensions;
+
 // -------------------- STATIC VARIABLES --------------------
 
 static struct TextureCache gfx_texture_cache;
@@ -332,8 +327,6 @@ static struct RSP rsp;
 static struct RDP rdp;
 static struct ShaderState shader_state;
 static struct RenderingState rendering_state;
-
-struct GfxDimensions gfx_current_dimensions;
 
 static bool dropped_frame;
 
@@ -351,6 +344,98 @@ static struct GfxWindowManagerAPI *gfx_wapi;
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
 static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id));
+
+COLD static void shader_state_init(struct ShaderState* ss)
+{
+    ss->cc_id = DELIBERATELY_INVALID_CC_ID;
+    ss->num_inputs = 0;
+    ss->texture_edge = false;
+    ss->use_alpha = false;
+    ss->use_fog = false;
+    ss->use_noise = false;
+    ss->used_textures.either = 0;
+}
+
+COLD static void rendering_state_init(struct RenderingState* rs)
+{
+    rs->cc_id = DELIBERATELY_INVALID_CC_ID;
+    rs->texture_settings.u64 = ~0;
+    rs->prim_color.u32 = ~rdp.prim_color.u32;
+    rs->env_color.u32  = ~rdp.env_color.u32;
+    rs->linear_filter = ~0;
+    rs->matrix_set = MATRIX_SET_INVALID;
+    rs->p_mtx_changed = true;
+    rs->mv_mtx_changed = true;
+    rs->stereo_3d_mode = STEREO_MODE_COUNT;
+    rs->iod_mode = IOD_COUNT;
+    rs->num_lights = MAX_LIGHTS;
+    rs->enable_lighting = ~0;
+    rs->enable_texgen = ~0;
+    rs->texture_scaling_factor.s = INT32_MAX;
+    rs->texture_scaling_factor.t = INT32_MAX;
+    rs->current_textures[0] = ~0;
+    rs->current_textures[1] = ~0;
+}
+
+COLD void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {
+    gfx_wapi = wapi;
+    gfx_wapi->init(game_name, start_in_fullscreen);
+    gfx_rapi_init();
+
+    // dimensions won't change on 3DS, so just do this once
+    gfx_wapi->get_dimensions(&gfx_current_dimensions.width, &gfx_current_dimensions.height);
+    gfx_current_dimensions.height       = MAX(gfx_current_dimensions.height, 1);
+    gfx_current_dimensions.aspect_ratio = gfx_current_dimensions.width  / (float) gfx_current_dimensions.height;
+    gfx_current_dimensions.ratio_x      = gfx_current_dimensions.width  / (float) SCREEN_WIDTH;
+    gfx_current_dimensions.ratio_y      = gfx_current_dimensions.height / (float) SCREEN_HEIGHT;
+
+    shader_state_init(&shader_state);
+    rendering_state_init(&rendering_state);
+
+    // Screen-space rect Z will always be -1.
+    rsp.rect_vertices[0].position.z =
+    rsp.rect_vertices[1].position.z =
+    rsp.rect_vertices[2].position.z =
+    rsp.rect_vertices[3].position.z = -1;
+
+    // Initialize lights to all black
+    for (int i = 0; i < MAX_LIGHTS; i++)
+        rsp.lights[i] = &LIGHT_DEFAULT;
+
+    // Initialize the matstack to identity
+    for (int i = 0; i < MAT_STACK_SIZE; i++)
+        memcpy(rsp.modelview_matrix_stack[i], MTX_IDENTITY, sizeof(MTX_IDENTITY));
+    
+    memcpy(rsp.P_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
+
+    // Initialize constant matrices and set normal MTX mode
+    gfx_rapi_select_matrix_set(MATRIX_SET_IDENTITY);
+    gfx_rapi_set_model_view_matrix(MTX_IDENTITY);
+    gfx_rapi_set_projection_matrix(MTX_IDENTITY);
+    
+    gfx_rapi_select_matrix_set(MATRIX_SET_SCALED_NDC);
+    gfx_rapi_set_model_view_matrix(MTX_NDC_DOWNSCALE);
+    gfx_rapi_set_projection_matrix(MTX_IDENTITY);
+
+    gfx_rapi_select_matrix_set(MATRIX_SET_NORMAL);
+    rsp.matrix_set = MATRIX_SET_NORMAL;
+}
+
+COLD void gfx_exit(void) {
+    gfx_rapi_exit();
+    gfx_wapi->exit();
+}
+
+COLD void gfx_start_frame(void) {
+    gfx_wapi->handle_events();
+}
+
+COLD void gfx_end_frame(void) {
+    if (!dropped_frame) {
+        gfx_rapi_finish_render();
+        gfx_wapi->swap_buffers_end();
+    }
+}
 
 static void gfx_apply_matrices()
 {
@@ -507,12 +592,16 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     struct TextureHashmapNode **node = &gfx_texture_cache.hashmap[hash];
     while (*node != NULL && *node - gfx_texture_cache.pool < (int)gfx_texture_cache.pool_pos) {
         if ((*node)->texture_addr == orig_addr && (*node)->fmt == fmt && (*node)->siz == siz) {
-            gfx_rapi_select_texture(tile, (*node)->texture_id);
+            if (rendering_state.current_textures[tile] != (*node)->texture_id) {
+                rendering_state.current_textures[tile]  = (*node)->texture_id;
+                gfx_rapi_select_texture(tile, (*node)->texture_id);
+            }
             *n = *node;
             return true;
         }
         node = &(*node)->next;
     }
+
     if (gfx_texture_cache.pool_pos == ARRAY_COUNT(gfx_texture_cache.pool)) {
         // Pool is full. We just invalidate everything and start over.
         gfx_texture_cache.pool_pos = 0;
@@ -536,7 +625,7 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     return false;
 }
 
-static void upload_texture_to_rendering_api(int tile) {
+COLD static void upload_texture_to_rendering_api(int tile) {
     uint8_t fmt = rdp.texture_tile.fmt;
     uint8_t siz = rdp.texture_tile.siz;
 
@@ -874,10 +963,10 @@ static void gfx_calc_and_set_viewport(const Vp_t *viewport_raw) {
     float x = (viewport_raw->vtrans[0] / 4.0f) - width / 2.0f;
     float y = SCREEN_HEIGHT - ((viewport_raw->vtrans[1] / 4.0f) + height / 2.0f);
 
-    width *= RATIO_X;
-    height *= RATIO_Y;
-    x *= RATIO_X;
-    y *= RATIO_Y;
+    width  *= gfx_current_dimensions.ratio_x;
+    height *= gfx_current_dimensions.ratio_y;
+    x      *= gfx_current_dimensions.ratio_x;
+    y      *= gfx_current_dimensions.ratio_y;
 
     union XYWidthHeight viewport = {{ x, y, width, height }};
     gfx_set_viewport(viewport);
@@ -956,10 +1045,10 @@ static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSE
 }
 
 static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly, uint32_t lrx, uint32_t lry) {
-    uint16_t x = ulx / 4.0f * RATIO_X,
-             y = (SCREEN_HEIGHT - lry / 4.0f) * RATIO_Y,
-             width = (lrx - ulx) / 4.0f * RATIO_X,
-             height = (lry - uly) / 4.0f * RATIO_Y;
+    uint16_t x      = ulx / 4.0f                   * gfx_current_dimensions.ratio_x,
+             y      = (SCREEN_HEIGHT - lry / 4.0f) * gfx_current_dimensions.ratio_y,
+             width  = (lrx - ulx) / 4.0f           * gfx_current_dimensions.ratio_x,
+             height = (lry - uly) / 4.0f           * gfx_current_dimensions.ratio_y;
 
     const union XYWidthHeight scissor = {{ x, y, width, height }};
     if (rendering_state.scissor.u64 != scissor.u64) {
@@ -1075,88 +1164,14 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
 }
 
-
-static uint8_t color_comb_component(uint32_t v) {
-    switch (v) {
-        case G_CCMUX_TEXEL0:
-            return CC_TEXEL0;
-        case G_CCMUX_TEXEL1:
-            return CC_TEXEL1;
-        case G_CCMUX_PRIMITIVE:
-            return CC_PRIM;
-        case G_CCMUX_SHADE:
-            return CC_SHADE;
-        case G_CCMUX_ENVIRONMENT:
-            return CC_ENV;
-        case G_CCMUX_TEXEL0_ALPHA:
-            return CC_TEXEL0A;
-        case G_CCMUX_LOD_FRACTION:
-            return CC_LOD;
-        default:
-            return CC_0;
-    }
-}
-
-static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-    return color_comb_component(a) |
-           (color_comb_component(b) << 3) |
-           (color_comb_component(c) << 6) |
-           (color_comb_component(d) << 9);
-}
-
-static void shader_state_init(struct ShaderState* ss)
+static void calculate_cc_id_wrapper()
 {
-    ss->cc_id = DELIBERATELY_INVALID_CC_ID;
-    ss->num_inputs = 0;
-    ss->texture_edge = false;
-    ss->use_alpha = false;
-    ss->use_fog = false;
-    ss->use_noise = false;
-    ss->used_textures.either = 0;
-}
-
-static void rendering_state_init(struct RenderingState* rs)
-{
-    rs->cc_id = DELIBERATELY_INVALID_CC_ID;
-    rs->texture_settings.u64 = ~0;
-    rs->prim_color.u32 = ~rdp.prim_color.u32;
-    rs->env_color.u32  = ~rdp.env_color.u32;
-    rs->linear_filter = ~0;
-    rs->matrix_set = MATRIX_SET_INVALID;
-    rs->p_mtx_changed = true;
-    rs->mv_mtx_changed = true;
-    rs->stereo_3d_mode = STEREO_MODE_COUNT;
-    rs->iod_mode = IOD_COUNT;
-    rs->num_lights = MAX_LIGHTS;
-    rs->enable_lighting = ~0;
-    rs->enable_texgen = ~0;
-    rs->texture_scaling_factor.s = INT32_MAX;
-    rs->texture_scaling_factor.t = INT32_MAX;
-}
-
-static ColorCombinerId calculate_cc_id_internal(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
-{
-    ColorCombinerId id = combine_mode;
-
-    if (use_fog)      id |= SHADER_OPT_FOG;
-    if (texture_edge) id |= SHADER_OPT_TEXTURE_EDGE;
-    if (use_noise)    id |= SHADER_OPT_NOISE;
-    if (use_alpha)
-        id |= SHADER_OPT_ALPHA;
-    else
-        id &= ~0xfff000;
-
-    return id;
-}
-
-static void calculate_cc_id()
-{
-    shader_state.cc_id = calculate_cc_id_internal(rdp.combine_mode, shader_state.use_fog, shader_state.texture_edge, shader_state.use_noise, shader_state.use_alpha);
+    shader_state.cc_id = calculate_cc_id(rdp.combine_mode, shader_state.use_fog, shader_state.texture_edge, shader_state.use_noise, shader_state.use_alpha);
 }
 
 static void gfx_dp_set_combine_mode(CombineMode combine_mode) {
     rdp.combine_mode = combine_mode;
-    calculate_cc_id();
+    calculate_cc_id_wrapper();
 }
 
 static void gfx_dp_set_env_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -1229,9 +1244,8 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     uint32_t geometry_mode_saved = rsp.geometry_mode;
     gfx_sp_geometry_mode(~0, 0);
 
-    union XYWidthHeight viewport_saved = rdp.viewport,
-                        viewport = {{ 0, 0, gfx_current_dimensions.width, gfx_current_dimensions.height }};
-    gfx_set_viewport(viewport);
+    union XYWidthHeight viewport_saved = rdp.viewport;
+    gfx_set_viewport((union XYWidthHeight) { .width = gfx_current_dimensions.width, .height = gfx_current_dimensions.height });
 
     static struct LoadedVertex* rect_triangles[] =
        {&rsp.rect_vertices[0],
@@ -1261,7 +1275,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         dsdx >>= 2;
 
         // Color combiner is turned off in copy mode
-        gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_TEXEL0), color_comb(0, 0, 0, G_ACMUX_TEXEL0)));
+        gfx_dp_set_combine_mode(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_TEXEL0), convert_color_combiner(0, 0, 0, G_ACMUX_TEXEL0)));
 
         // Per documentation one extra pixel is added in these modes to each edge
         // WYATT_TODO should we not adjust the top-left coordinates as well?
@@ -1291,16 +1305,16 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     ul->uv.v = ult;
     lr->uv.u = lrs;
     lr->uv.v = lrt;
-    if (!flip) {
-        ll->uv.u = uls;
-        ll->uv.v = lrt;
-        ur->uv.u = lrs;
-        ur->uv.v = ult;
-    } else {
+    if (flip) {
         ll->uv.u = lrs;
         ll->uv.v = ult;
         ur->uv.u = uls;
         ur->uv.v = lrt;
+    } else {
+        ll->uv.u = uls;
+        ll->uv.v = lrt;
+        ur->uv.u = lrs;
+        ur->uv.v = ult;
     }
 
     // Disable texture scaling by using a 1x scale. The other three parameters are unused.
@@ -1314,7 +1328,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
 
 static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
     if (UNLIKELY(rdp.color_image_address == rdp.z_buf_address)) {
-        // Don't clear Z buffer here since we already did it with glClear
+        // Don't clear Z buffer here since the rendering API always does at frame start
         return;
     }
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
@@ -1326,11 +1340,11 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
         lry += 1 << 2;
     }
 
-    for (int i = 0; i < ARRAY_COUNT(rsp.rect_vertices); i++)
+    for (size_t i = 0; i < ARRAY_COUNT(rsp.rect_vertices); i++)
         rsp.rect_vertices[i].color = rdp.fill_color; // Struct copy
 
     CombineMode saved_combine_mode = rdp.combine_mode;
-    gfx_dp_set_combine_mode(COMBINE_MODE(color_comb(0, 0, 0, G_CCMUX_SHADE), color_comb(0, 0, 0, G_ACMUX_SHADE)));
+    gfx_dp_set_combine_mode(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_SHADE), convert_color_combiner(0, 0, 0, G_ACMUX_SHADE)));
     gfx_draw_rectangle(ulx, uly, lrx, lry);
     gfx_dp_set_combine_mode(saved_combine_mode);
 }
@@ -1373,7 +1387,7 @@ static void set_other_mode_l(uint32_t other_mode_l)
         shader_state.use_alpha    = shader_state.texture_edge || ((rdp.other_mode_l & (G_BL_A_MEM << 18)) == 0);
         shader_state.use_noise    = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
 
-        calculate_cc_id();
+        calculate_cc_id_wrapper();
         
         if (shader_state.use_alpha != rendering_state.alpha_blend) {
             gfx_flush(23);
@@ -1568,10 +1582,10 @@ flush:      gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
                 break;
             case G_SETCOMBINE:
                 gfx_dp_set_combine_mode(COMBINE_MODE(
-                    color_comb(C0(20, 4), C1(28, 4), C0(15, 5), C1(15, 3)),
-                    color_comb(C0(12, 3), C1(12, 3), C0(9, 3), C1(9, 3))));
-                    /*color_comb(C0(5, 4), C1(24, 4), C0(0, 5), C1(6, 3)),
-                    color_comb(C1(21, 3), C1(3, 3), C1(18, 3), C1(0, 3)));*/
+                    convert_color_combiner(C0(20, 4), C1(28, 4), C0(15, 5), C1(15, 3)),
+                    convert_color_combiner(C0(12, 3), C1(12, 3), C0(9, 3), C1(9, 3))));
+                    /*convert_color_combiner(C0(5, 4), C1(24, 4), C0(0, 5), C1(6, 3)),
+                    convert_color_combiner(C1(21, 3), C1(3, 3), C1(18, 3), C1(0, 3)));*/
                 break;
             // G_SETPRIMCOLOR, G_CCMUX_PRIMITIVE, G_ACMUX_PRIMITIVE, is used by Goddard
             // G_CCMUX_TEXEL1, LOD_FRACTION is used in Bowser room 1
@@ -1649,59 +1663,13 @@ static void gfx_sp_reset() {
     rsp.modelview_matrix_stack_size = 1;
     rsp.num_lights = 2;
     rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS);
-}
 
-void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool start_in_fullscreen) {
-    gfx_wapi = wapi;
-    gfx_wapi->init(game_name, start_in_fullscreen);
-    gfx_rapi_init();
-
-    // dimensions won't change on 3DS, so just do this once
-    gfx_wapi->get_dimensions(&gfx_current_dimensions.width, &gfx_current_dimensions.height);
-    if (gfx_current_dimensions.height == 0) {
-        // Avoid division by zero
-        gfx_current_dimensions.height = 1;
-    }
-    gfx_current_dimensions.aspect_ratio = (float)gfx_current_dimensions.width / (float)gfx_current_dimensions.height;
-    gfx_current_dimensions.aspect_ratio_factor = (4.0f / 3.0f) * (1.0f / gfx_current_dimensions.aspect_ratio);
-
-    shader_state_init(&shader_state);
-    rendering_state_init(&rendering_state);
-
-    // Screen-space rect Z will always be -1.
-    rsp.rect_vertices[0].position.z =
-    rsp.rect_vertices[1].position.z =
-    rsp.rect_vertices[2].position.z =
-    rsp.rect_vertices[3].position.z = -1;
-
-    // Initialize lights to all black
-    for (int i = 0; i < MAX_LIGHTS; i++)
-        rsp.lights[i] = &LIGHT_DEFAULT;
-
-    // Initialize the matstack to identity
-    for (int i = 0; i < MAT_STACK_SIZE; i++)
-        memcpy(rsp.modelview_matrix_stack[i], MTX_IDENTITY, sizeof(MTX_IDENTITY));
+    gfx_rapi_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH); // WYATT_TODO necessary?
     
-    memcpy(rsp.P_matrix, MTX_IDENTITY, sizeof(MTX_IDENTITY));
-
-    // Initialize constant matrices and set normal MTX mode
-    gfx_rapi_select_matrix_set(MATRIX_SET_IDENTITY);
-    gfx_rapi_set_model_view_matrix(MTX_IDENTITY);
-    gfx_rapi_set_projection_matrix(MTX_IDENTITY);
-    
-    gfx_rapi_select_matrix_set(MATRIX_SET_SCALED_NDC);
-    gfx_rapi_set_model_view_matrix(MTX_NDC_DOWNSCALE);
-    gfx_rapi_set_projection_matrix(MTX_IDENTITY);
-
-    gfx_rapi_select_matrix_set(MATRIX_SET_NORMAL);
-    rsp.matrix_set = MATRIX_SET_NORMAL;
+    PC_METRIC_DO(num_rsp_commands_run = 0);
 }
 
-void gfx_start_frame(void) {
-    gfx_wapi->handle_events();
-}
-
-void gfx_run(Gfx *commands) {
+COLD void gfx_run(Gfx *commands) {
     gfx_sp_reset();
 
     if (!gfx_wapi->start_frame()) {
@@ -1713,7 +1681,6 @@ void gfx_run(Gfx *commands) {
     profiler_3ds_log_time(0);
     gfx_rapi_start_frame();
     profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
-    gfx_rapi_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH);
     last_mv_mtx_addr = last_p_mtx_addr = NULL;
 
     non_granular_log_time(0);
@@ -1731,11 +1698,4 @@ void gfx_run(Gfx *commands) {
     GRANULAR_FLUSH_DO(bzero(flushes, sizeof(flushes)));
     GRANULAR_FLUSH_DO(bzero(flush_avoids, sizeof(flush_avoids)));
     GRANULAR_FLUSH_DO(bzero(tris_per_flush, sizeof(tris_per_flush)));
-}
-
-void gfx_end_frame(void) {
-    if (!dropped_frame) {
-        gfx_rapi_finish_render();
-        gfx_wapi->swap_buffers_end();
-    }
 }

@@ -1,0 +1,54 @@
+; position, texture
+
+; ----- Uniforms -----
+; Due to LibCTRU weirdness, declare ALL uniforms in this first file.
+.fvec projection_mtx[4], model_view_mtx[4]
+.fvec tex_settings_1 ; { size_s, size_t, origin_s, origin_t }
+
+; ----- Constant Uniforms -----
+.fvec texture_const_1 ; {  0.0,     1.0,  1/65536,  1/(127 * 4) }
+
+; At least one const must be present in each DVLE thanks to a libctru (or c3d?) bug.
+.constf dummy_const (0.0, 0.0, 0.0, 0.0)
+
+; ----- Aliases -----
+.alias tex_size       tex_settings_1.xy ; Vector with {   size_s,   size_t }
+.alias tex_origin     tex_settings_1.zw ; Vector with { origin_s, origin_t }
+
+; ----- Inputs -----
+.in inpos v0 ; xyz, plus garbage for w
+.in intex v1 ; uv
+
+; ----- Outputs -----
+.out outpos position  ; xyzw
+.out outtc0 texcoord0 ; texture unit 0
+.out outtc1 texcoord1 ; texture unit 1
+
+.entry main_menu
+.proc main_menu
+
+projection:
+    ; r0 = model_view_mtx * inpos
+    ; Needs to be DPHI because 1.0 is appended to src1 (left input arg).
+    dphi r0.x, inpos, model_view_mtx[0]
+    dphi r0.y, inpos, model_view_mtx[1]
+    dphi r0.z, inpos, model_view_mtx[2]
+    dphi r0.w, inpos, model_view_mtx[3]
+    
+    ; outpos = projection_mtx * inpos
+    dp4 outpos.x, projection_mtx[0], r0
+    dp4 outpos.y, projection_mtx[1], r0
+    dp4 outpos.z, projection_mtx[2], r0
+    dp4 outpos.w, projection_mtx[3], r0
+
+texture:
+    ; outtex  = tex_origin + (tex_size * intex)
+    mul r0, tex_size, intex
+    add r0, tex_origin, r0
+
+    mov outtc0, r0
+    mov outtc1, outtc0
+
+    ; We're finished
+    end
+.end

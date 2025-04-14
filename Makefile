@@ -243,7 +243,7 @@ else
 	GFX_ROOT_DIR := src/pc/gfx
 	RENDERING_API_ROOT_DIR := $(GFX_ROOT_DIR)/rendering_apis
 	WINDOWING_API_ROOT_DIR := $(GFX_ROOT_DIR)/windowing_apis
-  SRC_DIRS := $(SRC_DIRS) src/pc $(GFX_ROOT_DIR) $(GFX_ROOT_DIR)/multi_viewport $(GFX_ROOT_DIR)/shader_programs src/pc/audio src/pc/controller src/pc/n3ds $(foreach rendering_api,$(RENDERING_APIS),$(RENDERING_API_ROOT_DIR)/$(rendering_api)) $(foreach windowing_api,$(WINDOWING_APIS),$(WINDOWING_API_ROOT_DIR)/$(windowing_api))
+  SRC_DIRS := $(SRC_DIRS) src/pc $(GFX_ROOT_DIR)/shader_programs src/pc/audio src/pc/controller src/pc/n3ds $(GFX_ROOT_DIR) $(foreach rendering_api,$(RENDERING_APIS),$(RENDERING_API_ROOT_DIR)/$(rendering_api)) $(foreach windowing_api,$(WINDOWING_APIS),$(WINDOWING_API_ROOT_DIR)/$(windowing_api))
   # If this is enabled, you can do ASM debugging on these files.
   # SRC_DIRS := $(SRC_DIRS) src/pc/mixer_implementations
   ASM_DIRS :=
@@ -513,9 +513,6 @@ ifeq ($(TARGET_N3DS),1)
   PLATFORM_LDFLAGS := $(LIBPATHS) -z noexecstack -lcitro3d -lctru -lm -specs=3dsx.specs -g -marm -mthumb-interwork -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
   ifeq ($(DISABLE_AUDIO),1)
     PLATFORM_CFLAGS += -DDISABLE_AUDIO
-  endif
-  ifeq ($(ENABLE_N3DS_FRAMESKIP),1)
-    PLATFORM_CFLAGS += -DENABLE_N3DS_FRAMESKIP
   endif
 endif
 
@@ -963,7 +960,8 @@ define bin2o
   bin2s -a 4 -H $(BUILD_DIR)/$(MINIMAP_TEXTURES)/`(echo $(<F) | tr . _)`.h $(BUILD_DIR)/$< | $(AS) -o $(BUILD_DIR)/$(MINIMAP_TEXTURES)/$(<F).o
 endef
 
-$(BUILD_DIR)/src/pc/gfx/gfx_3ds_menu.o: $(MINIMAP_T3X_HEADERS)
+$(BUILD_DIR)/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_menu_tex.o: $(MINIMAP_T3X_HEADERS)
+$(BUILD_DIR)/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_menu.o: $(BUILD_DIR)/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_menu_tex.o
 
 %.t3x.o $(BUILD_DIR)/%_t3x.h: %.t3x
 	$(bin2o)

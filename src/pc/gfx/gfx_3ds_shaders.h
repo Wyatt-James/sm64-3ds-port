@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "src/pc/n3ds/libctru_inc.h"
+
 // Held in an array.
 struct n3ds_emu64_vertex_attribute {
    GPU_FORMATS format;

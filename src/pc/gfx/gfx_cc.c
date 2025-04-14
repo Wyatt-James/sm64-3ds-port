@@ -1,9 +1,8 @@
-#include <string.h>
-
 #include "gfx_cc.h"
 
-#define MAX(a_, b_) ((a_ > b_) ? a_ : b_)
-#define MIN(a_, b_) ((a_ < b_) ? a_ : b_)
+#include <string.h>
+
+#include "src/pc/pc_macros.h"
 
 void gfx_cc_get_features(CCShaderId shader_id, struct CCFeatures *cc_features)
 {

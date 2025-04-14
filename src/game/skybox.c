@@ -233,7 +233,7 @@ static int get_top_left_tile_idx(s8 player) {
  * grid is not enough to see 4 tiles on screen at once. Since an extra tile is needed in all directions, the
  * grid is being changed to 5x5 when 3D mode is enabled. This calculates the new upper left tile position.  */
 
-    if (gGfx3DEnabled) {
+    if (g3dsGfxState.stereo_3d_active) {
         if (tileCol == 8) // checks for yaw = 360.0, the game treats this as the end of the 8th column
             sSkyBoxInfo[player].tileCol = 6; // our shift moves yaw = 360.0 to the end of the 7th column
         else
@@ -276,7 +276,7 @@ Vtx *make_skybox_rect(s32 tileIndex, s8 colorIndex) {
 Vtx *make_skybox_rect(s32 tileIndex, s8 colorIndex, s8 player) {
     Vtx *verts = alloc_display_list(4 * sizeof(*verts));
     s16 x, y, z;
-    if (gGfx3DEnabled) {
+    if (g3dsGfxState.stereo_3d_active) {
         s16 tileColTotal = sSkyBoxInfo[player].tileCol + sSkyBoxInfo[player].tileColCur;
         s16 tileRowTotal = sSkyBoxInfo[player].tileRow + sSkyBoxInfo[player].tileRowCur;
         if (sSkyBoxInfo[player].tileCol == 7 && sSkyBoxInfo[player].tileColCur == 0) // check wrap around
@@ -320,11 +320,11 @@ void draw_skybox_tile_grid(Gfx **dlist, s8 background, s8 player, s8 colorIndex)
     s32 col;
 
 #ifdef TARGET_N3DS
-    s16 grid = (gGfx3DEnabled) ? 5 : 3; // 5x5 only if 3D is on
+    s16 grid = (g3dsGfxState.stereo_3d_active) ? 5 : 3; // 5x5 only if 3D is on
     for (row = 0; row < grid; row++) {
         for (col = 0; col < grid; col++) {
             s32 tileIndex;
-            if (gGfx3DEnabled) {
+            if (g3dsGfxState.stereo_3d_active) {
                 sSkyBoxInfo[player].tileColCur = col; // tracking the position in the current 5x5 grid
                 sSkyBoxInfo[player].tileRowCur = row;
                 s16 tileColTotal = sSkyBoxInfo[player].tileCol + col;
@@ -383,7 +383,7 @@ void *create_skybox_ortho_matrix(s8 player) {
  */
 Gfx *init_skybox_display_list(s8 player, s8 background, s8 colorIndex) {
 #ifdef TARGET_N3DS
-    s32 dlCommandCount = (gGfx3DEnabled) ? 5 + (5 * 5) * 7 : 5 + (3 * 3) * 7; // 5x5 only if 3D is on
+    s32 dlCommandCount = (g3dsGfxState.stereo_3d_active) ? 5 + (5 * 5) * 7 : 5 + (3 * 3) * 7; // 5x5 only if 3D is on
 #else
     s32 dlCommandCount = 5 + (3 * 3) * 7; // 5 for the start and end, plus 9 skybox tiles
 #endif

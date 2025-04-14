@@ -1,364 +1,98 @@
 #ifdef TARGET_N3DS
 
+#include "gfx_3ds.h"
+
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "macros.h"
 
-#include "gfx_3ds.h"
-#include "src/pc/gfx/gfx_3ds_menu.h"
-#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
+
+#include "src/pc/n3ds/libctru_inc.h"
+
 #include "src/pc/gfx/gfx_rendering_api.h"
 
 #include "src/pc/n3ds/n3ds_system_info.h"
-#include "src/pc/n3ds/n3ds_threading_common.h"
+#include "src/pc/n3ds/n3ds_threading.h"
 #include "src/pc/audio/audio_3ds.h"
 #include "src/pc/profiler_3ds.h"
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
+#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_screens.h"
+#include "src/pc/n3ds/n3ds_system_info.h"
+#include "src/pc/n3ds/n3ds_hid.h"
+#include "src/pc/n3ds/n3ds_config.h"
 
-#define u64 __3ds_u64
-#define s64 __3ds_s64
-#define u32 __3ds_u32
-#define vu32 __3ds_vu32
-#define vs32 __3ds_vs32
-#define s32 __3ds_s32
-#define u16 __3ds_u16
-#define s16 __3ds_s16
-#define u8 __3ds_u8
-#define s8 __3ds_s8
-#include <3ds/services/apt.h>
-#undef u64
-#undef s64
-#undef u32
-#undef vu32
-#undef vs32
-#undef s32
-#undef u16
-#undef s16
-#undef u8
-#undef s8
+#define GX_REGION(addr_, val_, end_addr_, control_) (__3ds_u32*) (addr_), (val_), (__3ds_u32*) (end_addr_), (control_)
+#define GX_REGION_NONE GX_REGION(NULL, 0, NULL, 0)
+#define GX_MEMORYFILL_SINGLE(addr_, val_, end_addr_, control_) GX_MemoryFill(GX_REGION((addr_), (val_), (end_addr_), (control_)), GX_REGION_NONE)
 
-#define DEFAULT_GXQUEUE_SIZE 32 // This is the default used by C3D.
+static const N3DS_DisplayModeInfo display_mode_info[N3DS_DISPLAY_COUNT] = {
+    [N3DS_DISPLAY_2D_400_240] = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_400_240" },
+    [N3DS_DISPLAY_2D_800_240] = {.width = 800, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_800_240" },
+    [N3DS_DISPLAY_2D_800_480] = {.width = 800, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X),  .name = "N3DS_DISPLAY_2D_800_480" },
+    [N3DS_DISPLAY_3D]         = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_3D"         },
+ };
 
-// wait a quarter second between mashing
-#ifdef VERSION_EU
-#define DEBOUNCE_FRAMES 6
-#else
-#define DEBOUNCE_FRAMES 8
-#endif
+Gfx3DSState g3dsGfxState = {
+    .bottom_screen_needs_render = false,
+    .stereo_3d_active           = false,
+    .reinitialize_top_screen    = true,
+    .reinitialize_bottom_screen = true,
+    .display_mode               = N3DS_DISPLAY_2D_800_480,
+};
 
-C3D_RenderTarget *gTarget;
-C3D_RenderTarget *gTargetRight;
-C3D_RenderTarget *gTargetBottom;
-
-bool gBottomScreenNeedsRender;
-
-float gSliderLevel;
-
-Gfx3DSMode gGfx3DSMode;
-bool gGfx3DEnabled = false;
-
-bool gShowConfigMenu = false;
-bool gShouldRun = true;
-bool gUpdateSliderFlag = false;
-
-uint32_t frames_touch_screen_held = 0;
-
-static u8 debounce = 0;
-static s32 appSuspendCounter = 0; // > 0 when the 3DS lid is closed or home button is pressed
-static aptHookCookie apt_hook_cookie;
-
-static bool checkN3DS()
+// Synchronously clears the entirety of N3DS VRAM.
+static void clear_vram()
 {
-    bool isNew3DS = false;
-    if (R_SUCCEEDED(APT_CheckNew3DS(&isNew3DS)))
-        return isNew3DS;
-
-    return false;
+    GX_MEMORYFILL_SINGLE(OS_VRAM_VADDR, 0, (OS_VRAM_VADDR + OS_VRAM_SIZE), BIT(0) | (2 << 8));
+    gspWaitForEvent(GSPGPU_EVENT_PSC0, true);
 }
 
-static void deinitialise_screens()
+// Initializes the console, based on g3dsConfig. Does nothing if VRAM framebuffers are enabled.
+static void init_console()
 {
-    if (gTarget != NULL)
+    if (!g3dsConfig.vram_framebuffers)
     {
-        C3D_RenderTargetDelete(gTarget);
-        gTarget = NULL;
-    }
-    if (gTargetRight != NULL)
-    {
-        C3D_RenderTargetDelete(gTargetRight);
-        gTargetRight = NULL;
-    }
-    if (gTargetBottom != NULL)
-    {
-        C3D_RenderTargetDelete(gTargetBottom);
-        gTargetBottom = NULL;
-    }
-    C3D_Fini();
-}
-
-static void initialise_screens()
-{
-    C3D_InitEx(C3D_DEFAULT_CMDBUF_SIZE, DEFAULT_GXQUEUE_SIZE, true);
-
-    bool useAA   = gfx_config.useAA   && n3ds_supports_800px_mode; // old 2DS does not support 800px
-    bool useWide = gfx_config.useWide && n3ds_supports_800px_mode; // old 2DS does not support 800px
-
-    u32 transferFlags = DISPLAY_TRANSFER_FLAGS;
-
-    if (useAA && useWide)
-        transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X);
-    else if (useAA && !useWide)
-        transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_XY);
-    else
-        transferFlags |= GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO);
-
-    int width = useAA || useWide ? 800 : 400;
-    int height = useAA ? 480 : 240;
-
-    gTarget = C3D_RenderTargetCreate(height, width, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
-    C3D_RenderTargetSetOutput(gTarget, GFX_TOP, GFX_LEFT, transferFlags);
-
-    if (!useWide)
-    {
-        gfxSetWide(false); // Set mode to 2D
-
-        if (gGfx3DEnabled) {
-            gTargetRight = C3D_RenderTargetCreate(height, width, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
-            C3D_RenderTargetSetOutput(gTargetRight, GFX_TOP, GFX_RIGHT, transferFlags);
-            gfxSet3D(true); // ...then set mode to 3D?
+        switch (g3dsConfig.console_screen)
+        {
+            default:                 // Default to none
+            case N3DS_SCREEN_NONE:   break;
+            case N3DS_SCREEN_BOTTOM: consoleInit(GFX_BOTTOM, NULL); break;
+            case N3DS_SCREEN_TOP:    consoleInit(GFX_TOP,    NULL); break;
         }
-    }
-    else
-    {
-        gfxSetWide(true); // Just set mode to wide
-    }
-
-    // used to determine scissoring
-    if (!useAA && !useWide)
-        gGfx3DSMode = GFX_3DS_MODE_NORMAL;     // 400px no AA
-    else if (useAA && !useWide)
-        gGfx3DSMode = GFX_3DS_MODE_AA_22;      // 400px + AA (unused, crashes)
-    else if (!useAA && useWide)
-        gGfx3DSMode = GFX_3DS_MODE_WIDE;       // 800px no AA
-    else // (useAA && useWide)
-        gGfx3DSMode = GFX_3DS_MODE_WIDE_AA_12; // 800px + AA
-
-    // TODO: refactor; this is (also) set in gfx_rapi_init,
-    C3D_CullFace(GPU_CULL_NONE);
-    C3D_DepthMap(true, -1.0f, 0);
-    C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
-    C3D_AlphaTest(true, GPU_GREATER, 0x00);
-
-    gTargetBottom = C3D_RenderTargetCreate(240, 320, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
-    C3D_RenderTargetSetOutput(gTargetBottom, GFX_BOTTOM, GFX_LEFT,
-        DISPLAY_TRANSFER_FLAGS | GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
-
-    // Required for cake screen
-    gfx_rapi_enable_viewport_clear_buffer_flag(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
-
-    // WYATT_TODO will crash if framebuffers are set to load in VRAM! See gfxInit in this file.
-    // consoleInit(GFX_BOTTOM, NULL);
-}
-
-static void gfx_3ds_update_stereoscopy(void)
-{
-	if(gSliderLevel > 0.0)
-    {
-		gfx_config.useAA = false;
-		gfx_config.useWide = false;
-        gGfx3DEnabled = true;
-	} else
-    {
-        // default to 800px + AA
-		gfx_config.useAA = true;
-		gfx_config.useWide = true;
-        gGfx3DEnabled = false;
-	}
-
-    gBottomScreenNeedsRender = true;
-
-	deinitialise_screens();
-    initialise_screens();
-}
-
-static void gfx_3ds_handle_touch() {
-    hidScanInput();
-    touchPosition pos;
-    hidTouchRead(&pos);
-
-    if (debounce > 0)
-        debounce--;
-
-    bool touched = (pos.px || pos.py);
-
-    if (touched)
-        frames_touch_screen_held++;
-    else
-        frames_touch_screen_held = 0;
-
-    if (debounce == 0 && touched)
-    {
-        debounce = DEBOUNCE_FRAMES; // wait quarter second between mashing
-        menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
-
-        switch (res) {
-            case CONFIG_CHANGED: {
-                gBottomScreenNeedsRender = true;
-                deinitialise_screens();
-                initialise_screens();
-                break;
-            }
-
-            case SHOW_MENU: {
-                gBottomScreenNeedsRender = true;
-                gShowConfigMenu = true;
-                break;
-            }
-
-            case EXIT_MENU: {
-                gBottomScreenNeedsRender = true;
-                gShowConfigMenu = false;
-                break;
-            }
-
-            default:
-            case DO_NOTHING: {
-                break;
-            }
-        }
-    }
-}
-
-// Called whenever a 3DS OS event is fired. Runs synchronously on thread5.
-static void gfx_3ds_apt_hook(APT_HookType hook, UNUSED void* param)
-{
-    char* eventName = "unknown";
-
-    switch (hook) {
-        case APTHOOK_ONSLEEP: // Lid closed
-            eventName = "sleep";
-            appSuspendCounter++;
-            break;
-
-        case APTHOOK_ONSUSPEND: // Home menu opened
-            eventName = "suspend";
-            appSuspendCounter++;
-            break;
-
-        case APTHOOK_ONWAKEUP: // Lid opened
-            eventName = "wake-up";
-            appSuspendCounter--;
-            break;
-
-        case APTHOOK_ONRESTORE: // Home menu closed
-            eventName = "restore";
-            appSuspendCounter--;
-            break;
-
-        case APTHOOK_ONEXIT: // Application exit
-            eventName = "exit";
-            break;
-        
-        case APTHOOK_COUNT: // Unused - should never happen
-            perror("Invalid APT hook type: count.\n");
-            return;
-            
-        default: // Should never happen
-            fprintf(stderr, "Unknown APT hook type %d.\n", hook);
-            return;
-    }
-
-    printf("AptHook caught: %s.\n", eventName);
-
-    // Mute audio when sleeping, unmute when waking
-    const float vol = appSuspendCounter > 0 ? 0.0f : 1.0f;
-    printf("Setting NDSP volume to: %f\n", vol);
-    audio_3ds_set_dsp_volume(vol, vol);
-
-    // Lower CPU priority only if applicable
-    if (n3ds_old_core_1_is_available) {
-        const u8 limit = appSuspendCounter > 0 ? N3DS_CORE_1_LIMIT_IDLE : N3DS_CORE_1_LIMIT;
-
-        // WYATT_TODO move me
-        if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(limit)))
-            printf("AppCpuTimeLimit set to %hhd.\n", limit);
-        else
-            fprintf(stderr, "Error: AppCpuTimeLimit failed to set to %hhd.\n", limit);
-    } else {
-        printf("Not altering speed of disabled OLD_CORE_1.\n");
     }
 }
 
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)
 {
-    if (checkN3DS())
-        osSetSpeedupEnable(true);
-
-    // Allocating to VRAM instead of Linear Memory is faster.
-    // WYATT_TODO fix the garbage displayed on boot caused by this change.
-    // WYATT_TODO Crashes on boot if console is enabled!
-    gfxInit(GSP_BGR8_OES, GSP_BGR8_OES, true);
-
-    gfx_3ds_menu_init();
-
-    initialise_screens();
-    gSliderLevel = osGet3DSliderState();
-    gfx_3ds_update_stereoscopy();
+    gspInit();
+    clear_vram();
+    gspExit();
     
-    // Clear all framebuffers.
-    C3D_RenderTargetClear(gTarget, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-    C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-    if (gTargetRight != NULL)
-        C3D_RenderTargetClear(gTargetRight, C3D_CLEAR_ALL, 0x000000FF, 0xFFFFFFFF);
-        
-    // Initialize Shader Data
+    gfxInit(GSP_BGR8_OES, GSP_BGR8_OES, g3dsConfig.vram_framebuffers);
+    init_console();
     shprog_emu64_init();
-
-#ifdef PROFILER_3DS_ENABLED
-    // C3D_ProfilerFunc(profiler_3ds_log_time_impl);
-
-    // const uint32_t profiler_id = 6; // Next available profiler slot
-
-    // C3D_ProfilerCategoryMapAll(profiler_id - 1); // We'll overwrite default after
-    // C3D_ProfilerCategoryEnableAll(true);
-    // C3D_ProfilerCategoryMap(C3D_ProfilerSlot_Misc, 0);
-#endif
 }
 
-static void gfx_set_keyboard_callbacks(UNUSED bool (*on_key_down)(int scancode), UNUSED bool (*on_key_up)(int scancode), UNUSED void (*on_all_keys_up)(void))
+static void gfx_3ds_exit(void)
 {
-}
-
-static void gfx_set_fullscreen_changed_callback(UNUSED void (*on_fullscreen_changed)(bool is_now_fullscreen))
-{
-}
-
-static void gfx_set_fullscreen(UNUSED bool enable)
-{
-}
-
-static void gfx_3ds_main_loop(void (*run_one_game_iter)(void))
-{
-    aptHook(&apt_hook_cookie, gfx_3ds_apt_hook, NULL);
-    aptSetSleepAllowed(true);
-    profiler_3ds_init();
-
-    while (aptMainLoop() && gShouldRun)
-    {
-        if (appSuspendCounter == 0) {
-            profiler_3ds_linear_reset();
-            profiler_3ds_circular_advance_frame();
-            run_one_game_iter();
-            profiler_3ds_snoop(0);
-        } else
-            N3DS_SLEEP_FUNC(N3DS_MILLIS_TO_NANOS(33));
-    }
-
-    aptSetSleepAllowed(false);
-    aptUnhook(&apt_hook_cookie);
-    appSuspendCounter = 0;
-    C3D_Fini();
     gfxExit();
+}
+
+N3DS_TopScreenMode gfx_3ds_convert_top_mode(N3DS_DisplayMode mode)
+{
+    switch (mode) {
+        default:                       // Same as 400x240
+        case N3DS_DISPLAY_2D_400_240:  return MODE_2D;
+        case N3DS_DISPLAY_2D_800_240:  return MODE_WIDE;
+        case N3DS_DISPLAY_2D_800_480:  return MODE_WIDE;
+        case N3DS_DISPLAY_3D:          return MODE_3D;
+    }
+}
+
+const N3DS_DisplayModeInfo* gfx_3ds_display_mode_info(N3DS_DisplayMode mode)
+{
+    return &display_mode_info[ENUM_CLAMP(mode, N3DS_DISPLAY_COUNT)];
 }
 
 static void gfx_3ds_get_dimensions(uint32_t *width, uint32_t *height)
@@ -367,74 +101,26 @@ static void gfx_3ds_get_dimensions(uint32_t *width, uint32_t *height)
     *height = 240;
 }
 
-static void gfx_3ds_handle_events(void)
-{
-    float prevSliderLevel = gSliderLevel;
+// Stub functions
+void gfx_3ds_set_keyboard_callbacks(UNUSED bool (*on_key_down)(int scancode), UNUSED bool (*on_key_up)(int scancode), UNUSED void (*on_all_keys_up)(void)) {}
+void gfx_3ds_set_fullscreen_changed_callback(UNUSED void (*on_fullscreen_changed)(bool is_now_fullscreen)) {}
+void gfx_3ds_set_fullscreen(UNUSED bool enable) {}
+bool gfx_3ds_start_frame(void) { return true; }
+void gfx_3ds_swap_buffers_begin(void) {}
+void gfx_3ds_swap_buffers_end(void) {} // Citro3D handles swapping automatically in C3D_FrameEnd()
+double gfx_3ds_get_time(void) { return 0.0; }
 
-    // as good a time as any
-    gSliderLevel = osGet3DSliderState();
-
-    // Debounce is handled inside of this function
-    gfx_3ds_handle_touch();
-
-    // if (prev > 0.0 > curr) OR (curr > 0.0 > prev)
-    float st = 0.0;
-    if ((prevSliderLevel > st && gSliderLevel <= st) || (prevSliderLevel <= st && gSliderLevel > st))
-    {
-		gfx_3ds_update_stereoscopy();
-    }
-
-    if (gBottomScreenNeedsRender)
-        gfx_rapi_enable_viewport_clear_buffer_flag(VIEW_BOTTOM_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
-}
-
-float cpu_time, gpu_time;
-uint8_t skip_debounce;
-
-static bool gfx_3ds_start_frame(void)
-{
-#ifdef ENABLE_N3DS_FRAMESKIP
-    if (skip_debounce)
-    {
-        skip_debounce--;
-        return true;
-    }
-    // skip if frame took longer than 1 / 30 = 33.3 ms
-    if (cpu_time + gpu_time > 33.3f)
-    {
-        skip_debounce = 3; // skip a max of once every 4 frames
-        cpu_time = 0, gpu_time = 0;
-        return false;
-    }
-#endif
-    return true;
-}
-
-static void gfx_3ds_swap_buffers_begin(void)
-{
-    // Citro3D handles swapping automatically in C3D_FrameEnd()
-}
-
-static void gfx_3ds_swap_buffers_end(void)
-{
-    cpu_time = C3D_GetProcessingTime();
-    gpu_time = C3D_GetDrawingTime();
-}
-
-static double gfx_3ds_get_time(void)
-{
-    return 0.0;
-}
-
-struct GfxWindowManagerAPI gfx_3ds =
+#include "src/pc/n3ds/n3ds_main.h"
+struct GfxWindowManagerAPI gfx_wapi_3ds =
 {
     gfx_3ds_init,
-    gfx_set_keyboard_callbacks,
-    gfx_set_fullscreen_changed_callback,
-    gfx_set_fullscreen,
-    gfx_3ds_main_loop,
+    gfx_3ds_exit,
+    gfx_3ds_set_keyboard_callbacks,
+    gfx_3ds_set_fullscreen_changed_callback,
+    gfx_3ds_set_fullscreen,
+    n3ds_main_loop,
     gfx_3ds_get_dimensions,
-    gfx_3ds_handle_events,
+    n3ds_handle_events,
     gfx_3ds_start_frame,
     gfx_3ds_swap_buffers_begin,
     gfx_3ds_swap_buffers_end,

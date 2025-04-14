@@ -28,7 +28,7 @@
 #include "gfx_cc.h"
 #include "src/pc/gfx/gfx_rendering_api.h"
 
-struct ShaderProgram {
+typedef struct {
     uint32_t shader_id;
     GLuint opengl_program_id;
     uint8_t num_inputs;
@@ -40,9 +40,9 @@ struct ShaderProgram {
     bool used_noise;
     GLint frame_count_location;
     GLint window_height_location;
-};
+} ShaderProgram;
 
-static struct ShaderProgram shader_program_pool[64];
+static ShaderProgram shader_program_pool[64];
 static uint8_t shader_program_pool_size;
 static GLuint opengl_vbo;
 
@@ -53,7 +53,7 @@ static bool gfx_rapi_z_is_from_0_to_1(void) {
     return false;
 }
 
-static void gfx_opengl_vertex_array_set_attribs(struct ShaderProgram *prg) {
+static void gfx_opengl_vertex_array_set_attribs(ShaderProgram *prg) {
     size_t num_floats = prg->num_floats;
     size_t pos = 0;
 
@@ -64,14 +64,14 @@ static void gfx_opengl_vertex_array_set_attribs(struct ShaderProgram *prg) {
     }
 }
 
-static void gfx_opengl_set_uniforms(struct ShaderProgram *prg) {
+static void gfx_opengl_set_uniforms(ShaderProgram *prg) {
     if (prg->used_noise) {
         glUniform1i(prg->frame_count_location, frame_count);
         glUniform1i(prg->window_height_location, current_height);
     }
 }
 
-static void gfx_rapi_unload_shader(struct ShaderProgram *old_prg) {
+static void gfx_rapi_unload_shader(ShaderProgram *old_prg) {
     if (old_prg != NULL) {
         for (int i = 0; i < old_prg->num_attribs; i++) {
             glDisableVertexAttribArray(old_prg->attrib_locations[i]);
@@ -79,7 +79,7 @@ static void gfx_rapi_unload_shader(struct ShaderProgram *old_prg) {
     }
 }
 
-static void gfx_rapi_load_shader(struct ShaderProgram *new_prg) {
+static void gfx_rapi_load_shader(ShaderProgram *new_prg) {
     glUseProgram(new_prg->opengl_program_id);
     gfx_opengl_vertex_array_set_attribs(new_prg);
     gfx_opengl_set_uniforms(new_prg);
@@ -164,7 +164,7 @@ static void append_formula(char *buf, size_t *len, uint8_t c[2][4], bool do_sing
     }
 }
 
-static struct ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader_id) {
+static ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader_id) {
     struct CCFeatures cc_features;
     gfx_cc_get_features(shader_id, &cc_features);
 
@@ -326,7 +326,7 @@ static struct ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader
 
     size_t cnt = 0;
 
-    struct ShaderProgram *prg = &shader_program_pool[shader_program_pool_size++];
+    ShaderProgram *prg = &shader_program_pool[shader_program_pool_size++];
     prg->attrib_locations[cnt] = glGetAttribLocation(shader_program, "aVtxPos");
     prg->attrib_sizes[cnt] = 4;
     ++cnt;
@@ -381,7 +381,7 @@ static struct ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader
     return prg;
 }
 
-static struct ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
+static ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
     for (size_t i = 0; i < shader_program_pool_size; i++) {
         if (shader_program_pool[i].shader_id == shader_id) {
             return &shader_program_pool[i];
@@ -390,7 +390,7 @@ static struct ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
     return NULL;
 }
 
-static void gfx_rapi_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
+static void gfx_rapi_shader_get_info(ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
     *num_inputs = prg->num_inputs;
     used_textures[0] = prg->used_textures[0];
     used_textures[1] = prg->used_textures[1];

@@ -5,7 +5,7 @@
 #include <string.h>
 #include <ultra64.h>
 #include <arm_acle.h>
-#include "macros.h"
+#include "src/pc/pc_macros.h"
 
 /*
  * 3DS-optimized mixer.c software implementation, using SIMD32 extensions.
@@ -26,10 +26,7 @@
 #define ROUND_UP_16(v) (((v) + 15) & ~15)
 #define ROUND_UP_32(v) (((v) + 31) & ~31)
 
-#define INT16x2_LOAD(upper, lower) (int16x2_t) ((upper << 16) | ((uint16_t) lower))
-
-#define ASSUME(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
-#define ALWAYS_INLINE __attribute__((always_inline)) inline
+#define INT16x2_LOAD(upper, lower) (int16x2_t) (((upper) << 16) | ((uint16_t) (lower)))
 
 static struct {
     uint16_t in;
@@ -219,10 +216,10 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
  *  9 bytes length
  *  Byte 1, upper nibble: shift magnitude, range [0-12]
  *  Byte 1, lower nibble: table index, range [0-7]
- *  Bytes 2-9: data
+ *  Bytes 2-9: data, 1 nibble per output sample
  * 
  * Each ADPCM packet produces 16 PCM samples.
- * Each PCM sample produced depends on the prior two PCM samples.
+ * Each ADPCM packet depends on the prior two PCM samples.
  * Data is decoded one ADPCM packet at a time.
 */
 static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int16_t* out, int nbytes) {
@@ -239,46 +236,47 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
 
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
-        const uint8_t shift = *in >> 4; // should be in 0..12
-        const uint8_t table_index = *in++ & 0xf; // should be in 0..7
+        const uint8_t shift = *in >> 4; // range 0..12
+        const uint8_t table_index = *in++ & 0xf; // range 0..7
         const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
         const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
         const int16x2_t* const tbl_simd = (int16x2_t*) tbl_1;
 
-        // Decompress 8 PCM samples twice
+        // Output 8 PCM samples per-loop
         for (int i = 0; i < 2; i++) {
-            const int16x2_t prev = *((int16x2_t*) (out - 2)); // Loaded in reverse order due to endianness
+            const int16x2_t prev = *((int16x2_t*) (out - 2)); // Reverse order due to endianness
             int16_t ins[8];
             int32_t acc_tbl[8];
 
-            // Load 4 bytes from *in (total of 8) and calculate initial values
+            // Load, extend, and shift 8 nibbles from in, and calculate initial accumulators
             #pragma GCC unroll 4
             for (int j = 0; j < 8; j += 2, in++) {
-                ins[j] =     (((*in >> 4) << 28) >> 28) << shift;
-                acc_tbl[j] = __smlad(INT16x2_LOAD(tbl_1[j], tbl_0[j]), prev, ins[j] << 11);
-                
+                ins[j]     = (((*in >> 4)  << 28) >> 28) << shift;
                 ins[j + 1] = (((*in & 0xf) << 28) >> 28) << shift;
+
+                acc_tbl[j]     = __smlad(INT16x2_LOAD(tbl_1[j],     tbl_0[j]),     prev, ins[j]     << 11);
                 acc_tbl[j + 1] = __smlad(INT16x2_LOAD(tbl_1[j + 1], tbl_0[j + 1]), prev, ins[j + 1] << 11);
             }
 
-            int16x2_t ins_val = INT16x2_LOAD(ins[0], ins[1]);
+            int16x2_t inputs = INT16x2_LOAD(ins[0], ins[1]);
 
             // Meat and potatoes
             // Touch the funny numbers and you shall surely perish
-            acc_tbl[2] = __smlad(tbl_simd[0],  ins_val,                                  acc_tbl[2]); // tbl = 1,0
-            acc_tbl[4] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[4]); // tbl = 3,2
-            acc_tbl[6] = __smlad(tbl_simd[2],  ins_val,                                  acc_tbl[6]); // tbl = 5,4
-            acc_tbl[3] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[2])), acc_tbl[3]); // tbl = 1,0
-            acc_tbl[5] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[5]); // tbl = 3,2
-            acc_tbl[7] = __smlad(tbl_simd[2],  ins_val,                                  acc_tbl[7]); // tbl = 5,4
-            acc_tbl[4] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[3])), acc_tbl[4]); // tbl = 1,0
-            acc_tbl[6] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[6]); // tbl = 3,2
-            acc_tbl[5] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[4])), acc_tbl[5]); // tbl = 1,0
-            acc_tbl[7] = __smlad(tbl_simd[1],  ins_val,                                  acc_tbl[7]); // tbl = 3,2
-            acc_tbl[6] = __smlad(tbl_simd[0], (ins_val = INT16x2_LOAD(ins_val, ins[5])), acc_tbl[6]); // tbl = 1,0
-            acc_tbl[7] = __smlad(tbl_simd[0],            INT16x2_LOAD(ins_val, ins[6]),  acc_tbl[7]); // tbl = 1,0
+            // acc_tbl += tbl_simd * inputs
+            acc_tbl[2] = __smlad(tbl_simd[0],  inputs,                                 acc_tbl[2]); // tbl = 1,0
+            acc_tbl[4] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[4]); // tbl = 3,2
+            acc_tbl[6] = __smlad(tbl_simd[2],  inputs,                                 acc_tbl[6]); // tbl = 5,4
+            acc_tbl[3] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[2])), acc_tbl[3]); // tbl = 1,0
+            acc_tbl[5] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[5]); // tbl = 3,2
+            acc_tbl[7] = __smlad(tbl_simd[2],  inputs,                                 acc_tbl[7]); // tbl = 5,4
+            acc_tbl[4] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[3])), acc_tbl[4]); // tbl = 1,0
+            acc_tbl[6] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[6]); // tbl = 3,2
+            acc_tbl[5] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[4])), acc_tbl[5]); // tbl = 1,0
+            acc_tbl[7] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[7]); // tbl = 3,2
+            acc_tbl[6] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[5])), acc_tbl[6]); // tbl = 1,0
+            acc_tbl[7] = __smlad(tbl_simd[0],           INT16x2_LOAD(inputs, ins[6]),  acc_tbl[7]); // tbl = 1,0
             
-            // Add the stragglers
+            // Add the stragglers that we can't SIMD
             acc_tbl[1] += tbl_1[0] * ins[0];
             acc_tbl[3] += tbl_1[2] * ins[0];
             acc_tbl[5] += tbl_1[4] * ins[0];
@@ -291,6 +289,8 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
         }
         nbytes -= 16 * sizeof(int16_t);
     }
+
+    // Save the last 16 samples for decoding the next chunk
     memcpy(state, out - 16, 16 * sizeof(int16_t));
 }
 

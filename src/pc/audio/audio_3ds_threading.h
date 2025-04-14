@@ -1,7 +1,7 @@
 #ifndef AUDIO_3DS_THREADING_H
 #define AUDIO_3DS_THREADING_H
 
-#include "src/pc/n3ds/n3ds_threading_common.h"
+#include "src/pc/n3ds/n3ds_threading.h"
 
 // Set to 1 to enable sleep, or 0 to disable.
 #define N3DS_AUDIO_ENABLE_SLEEP_FUNC true
@@ -21,7 +21,7 @@
 #endif
 
 extern struct N3dsThreadInfo n3ds_audio_thread_info;
-extern enum N3dsCpu n3ds_desired_audio_cpu;
+extern N3DS_Processor n3ds_desired_audio_cpu;
 
 // Controls when Thread5 is allowed to skip waiting for the audio thread.
 extern bool s_thread5_wait_for_audio_to_finish;
