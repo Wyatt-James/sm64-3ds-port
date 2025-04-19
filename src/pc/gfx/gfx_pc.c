@@ -293,6 +293,7 @@ struct RenderingState {
     uint32_t fog_settings;
     uint32_t matrix_set;
     bool p_mtx_changed, mv_mtx_changed;
+    const float *last_mv_mtx_addr, *last_p_mtx_addr;
     enum Stereoscopic3dMode stereo_3d_mode;
     enum IodMode iod_mode;
     uint8_t num_lights;
@@ -694,6 +695,16 @@ COLD static void upload_texture_to_rendering_api(int tile) {
     }
 }
 
+// Copies src to dst. We do it manually because it's faster than memcpy.
+static inline void gfx_copy_matrix(float* restrict dst, float* restrict src)
+{
+    // memcpy(dst, src, sizeof(float[4][4]));
+    for (size_t i = 0; i < 4; i++)
+        for (size_t j = 0; j < 4; j++)
+            dst[i*4 + j] = src[i*4 + j];
+}
+
+
 // Multiplies the whole matrix. When both funcs are inline, saves ~200us.
 // Matrices are column-major.
 static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* restrict a, const float* restrict  b) {
@@ -714,11 +725,9 @@ static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* 
 static inline void gfx_matrix_mul_safe(float res[4][4], const float* a, const float* b) {
     float tmp[4][4];
     gfx_matrix_mul_unsafe(tmp, a, b);
-    memcpy(res, tmp, sizeof(tmp));
+    gfx_copy_matrix((float*) res, (float*) tmp);
 }
-
-const float *last_mv_mtx_addr = NULL, *last_p_mtx_addr = NULL;
-static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
+static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
 
 #ifndef GBI_FLOATS
     const float matrix[4][4];
@@ -740,16 +749,16 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
 
-        bool matrix_updated = !(last_p_mtx_addr == matrix && is_load);
+        bool matrix_updated = !(rendering_state.last_p_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
             gfx_flush(2);
-            last_p_mtx_addr = matrix;
+            rendering_state.last_p_mtx_addr = matrix;
         }
 
         if (is_load) {
             if (matrix_updated) {
-                memcpy(rsp.P_matrix, matrix, sizeof(float[4][4]));
+                gfx_copy_matrix((float*) rsp.P_matrix, (float*) matrix);
                 rendering_state.p_mtx_changed = true;
             }
         }
@@ -761,11 +770,11 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
     } else { // G_MTX_MODELVIEW
         float* src = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
         
-        bool matrix_updated = !(last_mv_mtx_addr == matrix && is_load);
+        bool matrix_updated = !(rendering_state.last_mv_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
             gfx_flush(3);
-            last_mv_mtx_addr = matrix;
+            rendering_state.last_mv_mtx_addr = matrix;
         }
         
         if (is_push && rsp.modelview_matrix_stack_size < 11)
@@ -774,7 +783,7 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t *addr) {
         if (is_load) {
             if (matrix_updated) {
                 rendering_state.mv_mtx_changed = true;
-                memcpy(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, sizeof(float[4][4]));
+                gfx_copy_matrix((float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], (float*) matrix);
             }
         } else {
             rendering_state.mv_mtx_changed = true;
@@ -1681,7 +1690,7 @@ COLD void gfx_run(Gfx *commands) {
     profiler_3ds_log_time(0);
     gfx_rapi_start_frame();
     profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
-    last_mv_mtx_addr = last_p_mtx_addr = NULL;
+    rendering_state.last_mv_mtx_addr = rendering_state.last_p_mtx_addr = NULL;
 
     non_granular_log_time(0);
     gfx_run_dl(commands);
