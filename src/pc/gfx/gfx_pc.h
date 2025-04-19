@@ -3,6 +3,9 @@
 
 #include <stdbool.h>
 
+#define MAX_DIRECTIONAL_LIGHTS 2
+#define MAX_LIGHTS (MAX_DIRECTIONAL_LIGHTS + 1)
+
 struct GfxRenderingAPI;
 struct GfxWindowManagerAPI;
 

@@ -96,8 +96,6 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 
 #define MAX_BUFFERED_TRIS 512
 #define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
-#define MAX_DIRECTIONAL_LIGHTS 2
-#define MAX_LIGHTS (MAX_DIRECTIONAL_LIGHTS + 1)
 #define MAX_VERTICES 64
 #define MAT_STACK_SIZE 11
 

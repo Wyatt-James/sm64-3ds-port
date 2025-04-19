@@ -19,6 +19,7 @@
 
 #include "src/pc/n3ds/n3ds_hid.h"
 
+#include "src/pc/gfx/gfx_pc.h"
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
 
@@ -252,7 +253,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
 
         // We use SetFrameBuf because it doesn't overwrite viewport or scissor settings.
         C3D_SetFrameBuf(&gTarget->frameBuf);
-        C3D_DrawArrays(GPU_TRIANGLES, vb->num_verts, num_verts_this_drawcall);
+        C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts_this_drawcall);
 
         // right screen
         if (stereo_3d_mode != STEREO_MODE_2D)
@@ -262,7 +263,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
         // Fall through
     }
 
-    C3D_DrawArrays(GPU_TRIANGLES, vb->num_verts, num_verts_this_drawcall);
+    C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts_this_drawcall);
 
     vb->num_verts = vb_num_verts_after;
 }
@@ -331,7 +332,6 @@ void gfx_rapi_set_fog(uint16_t from, uint16_t to)
             // Fall-through
         case FOGCACHE_HIT:
             C3D_FogLutBind(fog_cache_current(&fog_cache));
-
             break;
     }
 }
@@ -372,9 +372,11 @@ void gfx_rapi_configure_light(int light_id, Light_t* light)
         .u32 = *(uint32_t*) &light->col // Alpha is ignored, so we can put garbage there.
     };
 
+    ASSUME(light_id < MAX_LIGHTS && light_id >= 0);
+
     C3DW_FVUnifSetRGB(GPU_VERTEX_SHADER, EMU64_ULOC_light_colors(light_id), color);
 
-    // We don't need to scale the direction to [-1, 1] because it will be normalized
+    // We don't need to scale the direction to [-1, 1] because it will be normalized in the shader
     if (light_id != 0)
         C3D_FVUnifSet(GPU_VERTEX_SHADER, EMU64_ULOC_light_directions(light_id - 1), light->dir[0], light->dir[1], light->dir[2], 0.f);
 }
