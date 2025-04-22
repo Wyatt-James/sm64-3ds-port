@@ -933,8 +933,9 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
                           use_texture ? 3 :
                           2;
 
-    // It's faster to write the full vertex and then only advance by stride, overwriting unused attributes
-    // of the prior vertex, because cached writes are much cheaper than conditionals inside the loop body.
+    // It's faster to unconditionally write the full vertex and then advance by vertex stride.
+    // For smaller vertex formats, this will overwrite unused attributes of the prior vertex,
+    // but this is good because cached writes are much cheaper than conditionals inside the loop body.
     for (size_t vtx = 0; vtx < numVerts; vtx++) {
         // Struct copy
         *((struct LoadedVertex*) (&buf_vbo.as_u32[buf_vbo_len])) = *v_arr[vtx];
