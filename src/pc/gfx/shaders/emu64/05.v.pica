@@ -26,7 +26,8 @@
 
 ; ----- Inputs -----
 .in inpos v0 ; xyz, plus garbage for w
-.in inclr v1 ; rgba, scale [0,255]
+.in inclr v2 ; rgba, scale [0,255]
+; v1 contains texcoords, but they're unused. This is done to optimize gfx_tri_create_vbo.
 
 ; ----- Outputs -----
 .out outpos position  ; xyzw

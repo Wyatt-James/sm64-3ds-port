@@ -91,12 +91,12 @@ struct n3ds_shader_binary
     emu64_shader_binary = { emu64_shbin, 0, NULL };
 
 const struct n3ds_emu64_vertex_attribute
-   emu64_vertex_format_3[]     = { VBO_POS, VBO_TEX                                  },
-   emu64_vertex_format_5[]     = { VBO_POS,          VBO_RGBA                        },
-   emu64_vertex_format_7[]     = { VBO_POS, VBO_TEX, VBO_RGBA                        },
-   emu64_vertex_format_9[]     = { VBO_POS,                   VBO_NORMALS, VBO_ALPHA },
-   emu64_vertex_format_11[]    = { VBO_POS, VBO_TEX,          VBO_NORMALS, VBO_ALPHA },
-   emu64_vertex_format_menu[]  = { VBO_POS, VBO_TEX                                  };
+   emu64_vertex_format_3[]     = { VBO_POS, VBO_TEX                                   },
+   emu64_vertex_format_5[]     = { VBO_POS, VBO_TEX, VBO_RGBA                         }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
+   emu64_vertex_format_7[]     = { VBO_POS, VBO_TEX, VBO_RGBA                         },
+   emu64_vertex_format_9[]     = { VBO_POS, VBO_TEX,           VBO_NORMALS, VBO_ALPHA }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
+   emu64_vertex_format_11[]    = { VBO_POS, VBO_TEX,           VBO_NORMALS, VBO_ALPHA },
+   emu64_vertex_format_menu[]  = { VBO_POS, VBO_TEX                                   };
 
 const struct n3ds_shader_info
     emu64_shader_3        = { &emu64_shader_binary, DVLE_03,   1, VBO_INFO(V_POS | V_TEX              , emu64_vertex_format_3)    }, // position, texture

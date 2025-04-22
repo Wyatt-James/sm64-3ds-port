@@ -929,18 +929,18 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
     const bool use_texture = shader_state.used_textures.either;
     const bool use_color_or_normals = (shader_state.num_inputs > 0) || (rsp.geometry_mode & G_LIGHTING);
 
+    const size_t stride = use_color_or_normals ? 4:
+                          use_texture ? 3 :
+                          2;
+
+    // It's faster to write the full vertex and then only advance by stride, overwriting unused attributes
+    // of the prior vertex, because cached writes are much cheaper than conditionals inside the loop body.
     for (size_t vtx = 0; vtx < numVerts; vtx++) {
         // Struct copy
-        *((union int16x4*) (&buf_vbo.as_u32[buf_vbo_len])) = v_arr[vtx]->position;
-        buf_vbo_len += 2;
-
-        if (use_texture)
-            buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->uv.u32;
-
-        if (use_color_or_normals)
-            buf_vbo.as_u32[buf_vbo_len++] = v_arr[vtx]->color.u32;
+        *((struct LoadedVertex*) (&buf_vbo.as_u32[buf_vbo_len])) = *v_arr[vtx];
+        buf_vbo_len += stride;
     }
-    
+
     granular_log_time(7); // gfx_tri_create_vbo
 }
 
