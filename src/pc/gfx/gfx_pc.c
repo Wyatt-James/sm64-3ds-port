@@ -50,7 +50,7 @@
 
 #define GRANULAR_PROFILING 0 // Enables fine-grained performance profiling of various things.
 #define GRANULAR_FLUSHES   0 // Enables fine-grained profiling of flush hit/avoid rate.
-#define FLUSH_COUNTERS    29 // Number of gfx_flush calls to log.
+#define FLUSH_COUNTERS    31 // Number of gfx_flush calls to log.
 #define ENABLE_ASSERTIONS  0 // Enables or disables assertions. Leave off for release.
 
 
@@ -65,7 +65,7 @@
 #endif
 
 #if GRANULAR_FLUSHES == 1
-#define GRANULAR_FLUSH_PARAM_DECLARATION(params_) params_  /* Passes the given parameters through                  */
+#define GRANULAR_FLUSH_PARAM_DECLARATION(...) __VA_ARGS__  /* Passes the given parameters through                  */
 #define GRANULAR_FLUSH_DO(stmt_) do { stmt_; } while (0)   /* Executes a statement if granular flushes are enabled */
 #define gfx_flush(id_) gfx_flush_impl(id_)                 /* Passes the flush ID if granular flushes are enabled  */
 
@@ -73,7 +73,7 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
            flush_avoids[FLUSH_COUNTERS],
            tris_per_flush[FLUSH_COUNTERS][255];
 #else
-#define GRANULAR_FLUSH_PARAM_DECLARATION(params_)  /* Dummies out the given parameters.                    */
+#define GRANULAR_FLUSH_PARAM_DECLARATION(...)      /* Dummies out the given parameters.                    */
 #define GRANULAR_FLUSH_DO(stmt_) do {} while (0)   /* Executes a statement if granular flushes are enabled */
 #define gfx_flush(id_) gfx_flush_impl()            /* Passes the flush ID if granular flushes are enabled  */
 #endif
@@ -1276,8 +1276,11 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 }
 
 static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, UNUSED uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
+    gfx_flush(29);
+
+    bool is_copy = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY;
     CombineMode saved_combine_mode = rdp.combine_mode;
-    if ((rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY) {
+    if (is_copy) {
         // Per RDP Command Summary Set Tile's shift s and this dsdx should be set to 4 texels
         // Divide by 4 to get 1 instead
         dsdx >>= 2;
@@ -1330,8 +1333,10 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     gfx_sp_texture(0x10000, 0x10000, 0, 0, 0);
 
     gfx_draw_rectangle(ulx, uly, lrx, lry);
-    gfx_dp_set_combine_mode(saved_combine_mode);
+
     gfx_sp_texture(saved_scaling_factor.s, saved_scaling_factor.t, 0, 0, 0);
+    if (is_copy)
+        gfx_dp_set_combine_mode(saved_combine_mode);
 }
 
 static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
@@ -1339,6 +1344,9 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
         // Don't clear Z buffer here since the rendering API always does at frame start
         return;
     }
+
+    gfx_flush(30);
+
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
 
     if (cycle_type == G_CYC_COPY || cycle_type == G_CYC_FILL) {
