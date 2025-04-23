@@ -81,7 +81,7 @@ N3DS_ButtonState* n3ds_hid_buttons(void)
     try_poll_mid_frame(POLL_BUTTONS);
 
     hidCircleRead(&hid_state.buttons.circle_pad);
-    hid_state.buttons.c_stick = (circlePosition) {}; // WYATT_TODO implement c-stick
+    hidCstickRead(&hid_state.buttons.c_stick);
     hid_state.buttons.held = hidKeysHeld();
     
     return &hid_state.buttons;
