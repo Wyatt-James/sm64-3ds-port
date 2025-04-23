@@ -409,6 +409,11 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 4: GFX Rendering API Start Frame (VSync)
     // 5: GFX Run Display List
 
+    // 60fps IDs:
+    
+    // 6: GFX Rendering API Start Frame Interpolated (VSync)
+    // 7: GFX Run Display List Interpolated
+
     // Detailed IDs (replaces GFX Run Display List):
     // 5: Vertex Copy
     // 6: gfx_sp_tri_update_state
