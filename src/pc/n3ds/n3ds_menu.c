@@ -99,9 +99,7 @@ static void toggle_aa(UNUSED Click_Button* button)
     if (!g3dsGfxState.stereo_3d_active && g3dsMenuConfig.use_wide)
     {
         g3dsGfxState.reinitialize_top_screen = true;
-        g3dsGfxState.reinitialize_bottom_screen = true; // WYATT_TODO this is
         g3dsMenuConfig.use_aa = !g3dsMenuConfig.use_aa;
-        // gfx_3ds_queue_event(GFX_3DS_EVENT_INIT_TOP_LCD);
     }
 }
 
@@ -110,10 +108,8 @@ static void toggle_width(UNUSED Click_Button* button)
     if (!g3dsGfxState.stereo_3d_active)
     {
         g3dsGfxState.reinitialize_top_screen = true;
-        g3dsGfxState.reinitialize_bottom_screen = true;
         g3dsMenuConfig.use_wide = !g3dsMenuConfig.use_wide;
         g3dsMenuConfig.use_aa = false;
-        // gfx_3ds_queue_event(GFX_3DS_EVENT_INIT_TOP_LCD);
     }
 }
 

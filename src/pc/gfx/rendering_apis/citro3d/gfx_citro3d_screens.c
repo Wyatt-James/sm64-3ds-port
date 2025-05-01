@@ -92,7 +92,7 @@ void initialize_top_screen(void)
         printf("Init top LCD to %s\n", display_mode_info->name);
         
         // Required for cake screen
-        queue_clear_screen(GFX_C3D_VIEWPORT_TOP, C3D_CLEAR_COLOR);
+        queue_screen_clear(GFX_C3D_VIEWPORT_TOP, C3D_CLEAR_COLOR);
     }
     top_screen_initialized = true;
     g3dsGfxState.reinitialize_top_screen = false;
@@ -172,15 +172,15 @@ void clear_render_targets(void)
 
     // Reset flags
     for (size_t i = 0; i < GFX_C3D_VIEWPORT_COUNT; i++)
-        overwrite_clear_screen(i, 0);
+        overwrite_screen_clear(i, 0);
 }
 
-void queue_clear_screen(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits)
+void queue_screen_clear(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits)
 {
     screen_clear_bits[viewport_id] |= clear_bits;
 }
 
-void overwrite_clear_screen(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits)
+void overwrite_screen_clear(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits)
 {
     screen_clear_bits[viewport_id] = clear_bits;
 }

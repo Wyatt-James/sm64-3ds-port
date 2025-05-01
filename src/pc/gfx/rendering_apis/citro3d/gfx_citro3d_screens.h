@@ -30,6 +30,6 @@ void reinitialize_screens(void);
 
 void update_stereoscopy(void);
 
-void clear_render_targets(void);                                                     // Clears screens based on their current clear bits.
-void queue_clear_screen(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits);     // Enables clear bits for a screen.
-void overwrite_clear_screen(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits); // Overwrites the clear bits for a screen.
+void clear_render_targets(void);                                                 // Clears screens based on their current clear bits.
+void queue_screen_clear(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits); // Enables clear bits for a screen.
+void overwrite_screen_clear(GFX_C3D_VIEWPORT viewport_id, C3D_ClearBits clear_bits);   // Overwrites the clear bits for a screen.

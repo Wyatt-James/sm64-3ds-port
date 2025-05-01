@@ -29,24 +29,25 @@ static ShaderProgram default_program;
 
 void gfx_rapi_start_frame(void)
 {
-    // if we just enabled or disabled stereo 3D, reset the LCDs
+    // if we just enabled or disabled stereo 3D, reinitialize the top screen
     bool cur_on  = n3ds_hid_3d_slider() > 0.0f,
          prev_on = n3ds_hid_prev_3d_slider() > 0.0f;
     if (cur_on != prev_on)
         update_stereoscopy();
 
-    // Due to hardware differences, the PC port always clears the depth buffer.
-    queue_clear_screen(GFX_C3D_VIEWPORT_TOP, C3D_CLEAR_DEPTH);
-
-    if (g3dsGfxState.bottom_screen_needs_render)
-        queue_clear_screen(GFX_C3D_VIEWPORT_BOTTOM, C3D_CLEAR_COLOR);
-        
-    clear_render_targets();
-
     if (g3dsGfxState.reinitialize_top_screen) reinitialize_top_screen();
     if (g3dsGfxState.reinitialize_bottom_screen) reinitialize_bottom_screen();
-
+    
+    // Must occur after screen init
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+
+    // Due to hardware differences, the PC port always clears the depth buffer.
+    queue_screen_clear(GFX_C3D_VIEWPORT_TOP, C3D_CLEAR_DEPTH);
+
+    if (g3dsGfxState.bottom_screen_needs_render)
+        queue_screen_clear(GFX_C3D_VIEWPORT_BOTTOM, C3D_CLEAR_COLOR);
+
+    clear_render_targets();
 
     gfx_citro3d_emulator_start_frame();
 }
@@ -61,9 +62,12 @@ void gfx_rapi_end_frame(void)
 void gfx_rapi_init(void)
 {
     C3D_InitEx(C3D_DEFAULT_CMDBUF_SIZE, DEFAULT_GXQUEUE_SIZE, true);
-    update_stereoscopy();
-    initialize_screens();
     C3D_FrameRate(FRAME_RATE);
+
+    // We do init before stereoscopy to fix a crash caused by
+    // VRAM alloc when the game is booted with 3D enabled.
+    initialize_screens();
+    update_stereoscopy();
 
     // A default shader is required for many context-dependent actions.
     // We won't be drawing with it, so don't allocate a buffer.
@@ -72,7 +76,7 @@ void gfx_rapi_init(void)
     
     // Prep viewport settings
     for (uint32_t i = 0; i < GFX_C3D_VIEWPORT_COUNT; i++)
-        overwrite_clear_screen(i, 0);
+        overwrite_screen_clear(i, 0);
     
     // Initialize the components
     gfx_citro3d_emulator_init();
