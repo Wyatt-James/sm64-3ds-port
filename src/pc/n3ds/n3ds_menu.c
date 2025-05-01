@@ -39,11 +39,11 @@ static void release_c_button(Click_Button* button);
     .on_hold         = NULL,                                                                                                        \
     .on_slide_off    = slide_off_func_,                                                                                             \
     .on_release      = release_func_,                                                                                               \
-    .render          = (void (*)(Click_Button *, void *)) draw_func_,                                                               \
+    .render          = draw_func_,                                                                                                  \
     .custom_data.u32 = custom_data_,                                                                                                \
     .name            = name_                                                                                                        \
 }
-/*                                                                                                                                                   draw        slide on        slide off        release                                   */
+/*                                                                                                                                                    draw        slide on        slide off        release                                   */
 #define S_BUTTON(x_, y_, w_, h_, graphic_, draw_func_, slide_on_func_, slide_off_func_, custom_data_, group_, name_) BUTTON(x_, y_, w_, h_, graphic_, draw_func_, slide_on_func_, slide_off_func_, NULL,           group_, custom_data_, name_)
 #define R_BUTTON(x_, y_, w_, h_, graphic_, draw_func_, release_func_,                   custom_data_, group_, name_) BUTTON(x_, y_, w_, h_, graphic_, draw_func_, redraw_wrapper, redraw_wrapper,  release_func_,  group_, custom_data_, name_)
 
