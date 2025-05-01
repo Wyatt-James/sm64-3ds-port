@@ -17,7 +17,7 @@
 #include "src/pc/auto_addr.h"
 
 // Forward declarations
-static void redraw();
+static void redraw(void);
 static void show_menu(Click_Button* button);
 static void toggle_aa(Click_Button* button);
 static void toggle_width(Click_Button* button);
@@ -45,7 +45,7 @@ static void release_c_button(Click_Button* button);
 }
 /*                                                                                                                                                   draw        slide on        slide off        release                                   */
 #define S_BUTTON(x_, y_, w_, h_, graphic_, draw_func_, slide_on_func_, slide_off_func_, custom_data_, group_, name_) BUTTON(x_, y_, w_, h_, graphic_, draw_func_, slide_on_func_, slide_off_func_, NULL,           group_, custom_data_, name_)
-#define R_BUTTON(x_, y_, w_, h_, graphic_, draw_func_, release_func_,                   custom_data_, group_, name_) BUTTON(x_, y_, w_, h_, graphic_, draw_func_, redraw,         redraw,          release_func_,  group_, custom_data_, name_)
+#define R_BUTTON(x_, y_, w_, h_, graphic_, draw_func_, release_func_,                   custom_data_, group_, name_) BUTTON(x_, y_, w_, h_, graphic_, draw_func_, redraw_wrapper, redraw_wrapper,  release_func_,  group_, custom_data_, name_)
 
 enum
 {
@@ -74,7 +74,7 @@ static Click_Button buttons[] = {
     S_BUTTON(207,  79,  64,  32, &menu_cup_tex,          draw_button_basic, press_c_button, release_c_button, U_CBUTTONS, GROUP_C_BUTTONS,       "C-Up"),
 };
 
-static void redraw()
+static void redraw(void)
 {
     g3dsGfxState.bottom_screen_needs_render = true;
 }
@@ -99,6 +99,7 @@ static void toggle_aa(UNUSED Click_Button* button)
     if (!g3dsGfxState.stereo_3d_active && g3dsMenuConfig.use_wide)
     {
         g3dsGfxState.reinitialize_top_screen = true;
+        g3dsGfxState.reinitialize_bottom_screen = true; // WYATT_TODO this is
         g3dsMenuConfig.use_aa = !g3dsMenuConfig.use_aa;
         // gfx_3ds_queue_event(GFX_3DS_EVENT_INIT_TOP_LCD);
     }
@@ -109,6 +110,7 @@ static void toggle_width(UNUSED Click_Button* button)
     if (!g3dsGfxState.stereo_3d_active)
     {
         g3dsGfxState.reinitialize_top_screen = true;
+        g3dsGfxState.reinitialize_bottom_screen = true;
         g3dsMenuConfig.use_wide = !g3dsMenuConfig.use_wide;
         g3dsMenuConfig.use_aa = false;
         // gfx_3ds_queue_event(GFX_3DS_EVENT_INIT_TOP_LCD);
