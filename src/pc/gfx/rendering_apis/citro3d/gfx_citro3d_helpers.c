@@ -546,7 +546,6 @@ void citro3d_helpers_init_cc(ColorCombiner* cc, ColorCombinerId cc_id)
     }
 
     // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)
-    // WYATT_TODO put something better here
     if (cc->cc_features.num_inputs >= 2) {
         union CCInputMapping mapping_temp;
         for (int i = 0; i <= 1; i++) {
@@ -566,7 +565,7 @@ void citro3d_helpers_init_cc(ColorCombiner* cc, ColorCombinerId cc_id)
     cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[0], cc->cc_features.opt_fog);
     cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[1], cc->cc_features.opt_fog);
 
-    // WYATT_TODO this is probably incorrect, but it works for now. Fixes the pause tint being too light.
+    // Fixes the pause tint being too light.
     cc->use_env_color = mapping.rgb[1] == CC_ENV;
 
     // N3DS only cares about the first two mappings, so we want to make an identifier for specifically this to enhance performance

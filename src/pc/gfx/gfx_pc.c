@@ -1288,8 +1288,7 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         // Color combiner is turned off in copy mode
         gfx_dp_set_combine_mode(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_TEXEL0), convert_color_combiner(0, 0, 0, G_ACMUX_TEXEL0)));
 
-        // Per documentation one extra pixel is added in these modes to each edge
-        // WYATT_TODO should we not adjust the top-left coordinates as well?
+        // Per documentation, in these modes, bounds are inclusive, so we add 1px (U10.2 format)
         lrx += 1 << 2;
         lry += 1 << 2;
     }
@@ -1350,8 +1349,7 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
 
     if (cycle_type == G_CYC_COPY || cycle_type == G_CYC_FILL) {
-        // Per documentation one extra pixel is added in these modes to each edge
-        // WYATT_TODO should we not adjust the top-left coordinates as well?
+        // Per documentation, in these modes, bounds are inclusive, so we add 1px (U10.2 format)
         lrx += 1 << 2;
         lry += 1 << 2;
     }
