@@ -173,10 +173,27 @@ void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
 
 // Interleaves into dest
 static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, const int count) {
-    #pragma GCC unroll 8
-    for (int i = count * 8; i != 0; i--) {
-        *dest++ = *l++;
-        *dest++ = *r++;
+    typedef struct
+    {
+        uint16_t samples[16];
+    } sample_batch;
+
+    sample_batch* dest_batch = (sample_batch*) dest;
+    for (int i = count; i != 0; i--) {
+        __builtin_prefetch(((void*)l) + 32);
+        __builtin_prefetch(((void*)r) + 32);
+        *dest_batch++ = (sample_batch) {{
+            l[0], r[0],
+            l[1], r[1],
+            l[2], r[2],
+            l[3], r[3],
+            l[4], r[4],
+            l[5], r[5],
+            l[6], r[6],
+            l[7], r[7]
+        }};
+        l += 8;
+        r += 8;
     }
 }
 
