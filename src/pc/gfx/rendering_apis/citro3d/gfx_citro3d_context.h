@@ -60,8 +60,8 @@ typedef struct
     struct VertexLoadConfig vertex_load_flags;
     struct ViewportConfig viewport_config;
     struct ScissorConfig scissor_config;
-    struct TexHandle* gpu_textures[2];
-    struct TexHandle* current_texture;
+    TexHandle* gpu_textures[CTX_TEXTURE_COUNT];
+    TexHandle* current_texture;
 
     bool zmode_decal,
          use_alpha,
@@ -120,7 +120,11 @@ static inline void gfx_citro3d_update_context(RenderContext* ctx)
     for (int i = 0; i < CTX_TEXTURE_COUNT; i++)
     {
         if (flags & CTX_TEXTURE(i))
-            C3D_TexBind(i, &ctx->gpu_textures[i]->c3d_tex);
+        {
+            TexHandle* tex = ctx->gpu_textures[i];
+            // if (tex->load_status != TEX_UNINITIALIZED) // Disabling this isn't kosher but c'mon
+                C3D_TexBind(i, &tex->c3d_tex);
+        }
     }
 
     if (flags & (CTX_UV_OFFSET | CTX_CURRENT_TEXTURE))

@@ -112,8 +112,19 @@ union f32x2
     double f64;
 };
 
-struct TexHandle
+typedef enum
+{
+    TEX_UNINITIALIZED,  // Not yet uploaded, or upload failed
+    TEX_FCRAM,          // Uploaded to FCRAM only
+    TEX_ENQUEUED,       // Uploaded to FCRAM, queued for VRAM
+    TEX_VRAM,           // Uploaded to both FCRAM and VRAM
+} TexLoadStatus;
+
+typedef struct
 {
     C3D_Tex c3d_tex;
     union f32x2 scale;
-};
+    void* addr_fcram;
+    void* addr_vram;
+    TexLoadStatus load_status;
+} TexHandle;

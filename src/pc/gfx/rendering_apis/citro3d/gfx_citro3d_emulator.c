@@ -18,6 +18,7 @@
 #include "src/pc/pc_macros.h"
 
 #include "src/pc/n3ds/n3ds_hid.h"
+#include "src/pc/n3ds/n3ds_config.h"
 
 #include "src/pc/gfx/gfx_pc.h"
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
@@ -32,7 +33,8 @@
 
 #define VERTEX_BUFFER_NUM_UNITS (256 * 1024) // 1MB
 #define VERTEX_BUFFER_NUM_BYTES (VERTEX_BUFFER_NUM_UNITS * EMU64_STRIDE_UNIT_SIZE) // 1MB
-#define MAX_TEXTURES        4096
+#define MAX_TEXTURES 4096
+#define MAX_ASYNC_TEXTURE_COPIES_PER_FRAME 4
 #define MAX_VERTEX_BUFFERS  EMU64_NUM_VERTEX_FORMATS
 #define MAX_SHADER_PROGRAMS 32
 #define MAX_COLOR_COMBINERS 64
@@ -100,8 +102,10 @@ static ColorCombiner color_combiner_pool[MAX_COLOR_COMBINERS];
 static uint8_t num_color_combiners;
 
 // If we run out, wraps to 0.
-static struct TexHandle texture_pool[MAX_TEXTURES];
+static TexHandle texture_pool[MAX_TEXTURES];
 static uint32_t api_texture_index;
+static uint8_t num_textures_to_upload_to_vram;
+static TexHandle* texture_upload_queue[MAX_ASYNC_TEXTURE_COPIES_PER_FRAME];
 
 // Miscellaneous stuff
 static struct FogCache fog_cache;
@@ -140,6 +144,7 @@ static void internal_citro3d_recalculate_stereo_matrices();
 static void internal_citro3d_update_3d_slider();
 static void internal_citro3d_init_rendering_state();
 static void internal_citro3d_load_default_texture();
+static void internal_citro3d_upload_textures_to_vram();
 
 // --------------- Internal-use functions ---------------
 
@@ -270,9 +275,15 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
 
 void gfx_rapi_select_texture(int tex_slot, uint32_t texture_id)
 {
-    ctx.current_texture = &texture_pool[texture_id];
-    ctx.gpu_textures[tex_slot]  = ctx.current_texture;
+    TexHandle* tex = &texture_pool[texture_id];
+    ctx.current_texture = ctx.gpu_textures[tex_slot] = tex;
     CTX_NOTIFY(CTX_TEXTURE(tex_slot) | CTX_CURRENT_TEXTURE);
+    
+    if (UNLIKELY(tex->load_status == TEX_FCRAM && num_textures_to_upload_to_vram < MAX_ASYNC_TEXTURE_COPIES_PER_FRAME))
+    {
+        tex->load_status = TEX_ENQUEUED;
+        texture_upload_queue[num_textures_to_upload_to_vram++] = tex;
+    }
 }
 
 void gfx_rapi_set_sampler_parameters(int tex_slot, bool linear_filter, uint32_t clamp_mode_s, uint32_t clamp_mode_t)
@@ -492,6 +503,9 @@ void gfx_rapi_apply_projection_matrix(void)
 
 // --------------- Uncommonly-used Functions ---------------
 
+// WYATT_TODO there's a leak somewhere that's related to this, since
+// textures seemingly keep getting allocated but never used.
+// Check the gfx_pc hash function?
 COLD uint32_t gfx_rapi_new_texture(void)
 {
     if (api_texture_index == MAX_TEXTURES)
@@ -502,7 +516,7 @@ COLD uint32_t gfx_rapi_new_texture(void)
     return api_texture_index++;
 }
 
-#include "gfx_citro3d_texture_upload.c_inc"
+#include "inc/gfx_citro3d_texture_upload.inc.c"
 
 COLD static void internal_citro3d_init_rendering_state()
 {
@@ -579,17 +593,13 @@ COLD static void internal_citro3d_init_rendering_state()
 COLD static void internal_citro3d_load_default_texture()
 {
     // Upload a default texture
-    uint32_t tex = gfx_rapi_new_texture();
-    if (C3D_TexInit(&texture_pool[tex].c3d_tex, 8, 8, GPU_L4))
-    {
-        C3D_TexFlush(&texture_pool[tex].c3d_tex);
-        gfx_rapi_select_texture(0, tex);
-        gfx_rapi_select_texture(1, tex);
-    }
-    else
-    {
-        fprintf(stderr, "Couldn't initialize default texture.\n");
-    }
+    uint32_t tex_id = gfx_rapi_new_texture();
+    uint8_t data[8 * 8] = {0};
+
+    gfx_rapi_select_texture(0, tex_id);
+    gfx_rapi_select_texture(1, tex_id);
+
+    gfx_rapi_upload_texture_i8(data, 8, 8); // We use i8 because PICA200 hates textures smaller than 64 bytes
 }
 
 COLD void gfx_citro3d_emulator_init(void)
@@ -598,7 +608,6 @@ COLD void gfx_citro3d_emulator_init(void)
     internal_citro3d_select_color_combiner(&color_combiner_pool[gfx_rapi_lookup_or_create_color_combiner(DEFAULT_CC_ID)]);
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
     internal_citro3d_load_default_texture();
-    gfx_citro3d_force_update_context(&ctx);
 
     // Initialize constant uniforms
     C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, EMU64_CONST_ULOC_texture_const_1, (float*) &emu64_const_uniform_defaults.texture_const_1);
@@ -609,6 +618,7 @@ COLD void gfx_citro3d_emulator_init(void)
     C3D_FVUnifSet(GPU_VERTEX_SHADER, EMU64_ULOC_rsp_colors(EMU64_CC_0), 0, 0, 0, 0);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, EMU64_ULOC_rsp_colors(EMU64_CC_1), 1, 1, 1, 1);
 
+    gfx_citro3d_force_update_context(&ctx);
     gfx_citro3d_save_context_uniforms(&ctx, GPU_VERTEX_SHADER);
 }
 
@@ -648,6 +658,9 @@ COLD void gfx_citro3d_emulator_end_frame(void)
 {
     if (num_rejected_draw_calls)
         printf("Drawcalls rejected from full VBO: %u\n", num_rejected_draw_calls);
+
+    if (g3dsConfig.vram_textures)
+        internal_citro3d_upload_textures_to_vram();
 
     gfx_citro3d_save_context_uniforms(&ctx, GPU_VERTEX_SHADER);
     gfx_citro3d_alt_reset_api_state();

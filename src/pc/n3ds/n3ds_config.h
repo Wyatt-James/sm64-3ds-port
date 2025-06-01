@@ -26,7 +26,7 @@ typedef struct
 {
     bool run,                        // Set to false to exit the game.
          vram_framebuffers,          // Gives a nice performance boost.
-         vram_textures,              // Gives a nice performance boost, but not currently supported.
+         vram_textures,              // Gives a nice performance boost, but not quite finished. WYATT_TODO disabled for now, since we still need persistent rendertargets
          enable_new_3ds_speedup,     // Ignored on old models.
          print_menu_interactions,    // If enabled, touch menu interactions are printed.
          enable_multi_threading;     // If enabled, audio runs on a separate core.
@@ -36,5 +36,5 @@ typedef struct
     N3DS_HidPollMode input_poll_mode;
 } N3DSConfig;
 
-extern N3DSConfig g3dsConfig;             // General options
+extern N3DSConfig g3dsConfig;          // General options
 extern N3DS_MenuConfig g3dsMenuConfig; // Touch screen menu options

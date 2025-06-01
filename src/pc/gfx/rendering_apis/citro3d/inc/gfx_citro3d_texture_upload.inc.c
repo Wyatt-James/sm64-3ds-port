@@ -20,19 +20,84 @@ static ALIGNED(32) union RGBA32 tex_scaling_buffer[16 * 1024];    // For padding
         internal_citro3d_upload_texture_common((type_*) tex_scaling_buffer, input_size, output_size, format);                                    \
     }
 
+COLD static void internal_citro3d_upload_textures_to_vram()
+{
+    bool failed = false;
+
+    for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
+    {
+        TexHandle* tex = texture_upload_queue[i];
+        C3D_Tex temp;
+
+        if(C3D_TexInitVRAM(&temp, tex->c3d_tex.width, tex->c3d_tex.height, tex->c3d_tex.fmt))
+        {
+            tex->addr_vram = tex->c3d_tex.data = temp.data;
+            tex->load_status = TEX_VRAM;
+
+            C3D_TexUpload(&tex->c3d_tex, tex->addr_fcram);
+            C3D_TexFlush(&tex->c3d_tex);
+        }
+        else
+        {
+            failed = true;
+            break;
+        }
+    }
+
+    // If any failed, we assume that VRAM is full, so clear it
+    if (failed)
+    {
+        printf("Failed to upload a texture to VRAM.\n");
+        for (size_t i = 0; i < api_texture_index; i++)
+        {
+            TexHandle* tex = &texture_pool[i];
+
+            switch (tex->load_status)
+            {
+                case TEX_VRAM:
+                    C3D_TexDelete(&tex->c3d_tex);        // Free the VRAM data
+                    tex->c3d_tex.data = tex->addr_fcram; // Swap back to FCRAM
+                case TEX_ENQUEUED:
+                    tex->load_status = TEX_FCRAM;        // Reset to FCRAM mode
+                default:
+                    break;
+            }
+        }
+    }
+
+    num_textures_to_upload_to_vram = 0;
+}
+
 COLD static void internal_citro3d_upload_texture_common(void* data, struct TextureSize input_size, struct TextureSize output_size, GPU_TEXCOLOR format)
 {
-    C3D_Tex* tex = &ctx.current_texture->c3d_tex;
+    TexHandle* handle = ctx.current_texture;
+    C3D_Tex* tex = &handle->c3d_tex;
 
     ctx.current_texture->scale.s =   input_size.width  / (float) output_size.width;
     ctx.current_texture->scale.t = -(input_size.height / (float) output_size.height);
 
+    switch (handle->load_status)
+    {
+        case TEX_VRAM:
+            C3D_TexDelete(tex);
+            tex->data = handle->addr_fcram; // Delete VRAM texture and swap back to FCRAM
+        case TEX_ENQUEUED:
+        case TEX_FCRAM:
+            C3D_TexDelete(tex);             // Delete FCRAM texture because the size might be different
+        case TEX_UNINITIALIZED:
+            break;
+    }
+
     if (C3D_TexInit(tex, output_size.width, output_size.height, format)) {
         C3D_TexUpload(tex, data);
         C3D_TexFlush(tex);
-    } else
-       printf("Tex init failed! Size: %d, %d\n", (int) output_size.width, (int) output_size.height);
-       
+        handle->addr_fcram = tex->data;
+        handle->load_status = TEX_FCRAM;
+    } else {
+        printf("Tex init failed! Size: %d, %d\n", (int) output_size.width, (int) output_size.height);
+        handle->load_status = TEX_UNINITIALIZED;
+    }
+
     CTX_NOTIFY(CTX_CURRENT_TEXTURE);
 }
 
