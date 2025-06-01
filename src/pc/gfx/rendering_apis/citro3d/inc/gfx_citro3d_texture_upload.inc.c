@@ -32,10 +32,6 @@ COLD static void internal_citro3d_upload_textures_to_vram()
         if(C3D_TexInitVRAM(&temp, tex->c3d_tex.width, tex->c3d_tex.height, tex->c3d_tex.fmt))
         {
             tex->addr_vram = tex->c3d_tex.data = temp.data;
-            tex->load_status = TEX_VRAM;
-
-            C3D_TexUpload(&tex->c3d_tex, tex->addr_fcram);
-            C3D_TexFlush(&tex->c3d_tex);
         }
         else
         {
@@ -44,8 +40,20 @@ COLD static void internal_citro3d_upload_textures_to_vram()
         }
     }
 
-    // If any failed, we assume that VRAM is full, so clear it
-    if (failed)
+    // Deferred to avoid transferring to textures that will be deallocated.
+    if (!failed)
+    {
+        for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
+        {
+            TexHandle* tex = texture_upload_queue[i];
+            tex->load_status = TEX_VRAM;
+            C3D_TexUpload(&tex->c3d_tex, tex->addr_fcram);
+            C3D_TexFlush(&tex->c3d_tex);
+        }
+    }
+    
+    // If any failed, assume that VRAM is full and clear it
+    else
     {
         printf("Failed to upload a texture to VRAM.\n");
         for (size_t i = 0; i < api_texture_index; i++)
@@ -134,7 +142,8 @@ COLD void gfx_rapi_upload_texture_ia16(const uint8_t *data, int width, int heigh
     UPLOAD_TEXTURE_TEMPLATE(uint16_t, citro3d_helpers_pad_and_tile_texture_u16, GPU_LA8)
 }
 
-// Untested because it's unused in SM64
+// Untested because it's unused in SM64. This will also probably crash with VRAM textures enabled;
+// it seems that L4 is extremely buggy when read from VRAM.
 COLD void gfx_rapi_upload_texture_i4(const uint8_t *data, int width, int height)
 {
     UPLOAD_TEXTURE_TEMPLATE(uint8_t, citro3d_helpers_pad_and_tile_texture_u8, GPU_L4)

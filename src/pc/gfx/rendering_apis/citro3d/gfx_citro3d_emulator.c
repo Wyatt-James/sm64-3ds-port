@@ -599,7 +599,7 @@ COLD static void internal_citro3d_load_default_texture()
     gfx_rapi_select_texture(0, tex_id);
     gfx_rapi_select_texture(1, tex_id);
 
-    gfx_rapi_upload_texture_i8(data, 8, 8); // We use i8 because PICA200 hates textures smaller than 64 bytes
+    gfx_rapi_upload_texture_i8(data, 8, 8); // We use i8 because PICA200 seemingly hates L4 textures in VRAM
 }
 
 COLD void gfx_citro3d_emulator_init(void)
