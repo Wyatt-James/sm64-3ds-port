@@ -3,6 +3,9 @@
  * This just simplifies gfx_citro3d_emulator.c a bit.
  */
 
+#define MAX_VRAM_TEX 256
+#define VRAM_POOL_SIZE KIB_TO_BYTE(MAX_VRAM_TEX * 2) // 2KiB per-texture seems like a good match for vanilla
+
 static ALIGNED(32) union RGBA32 tex_conversion_buffer[16 * 1024]; // For converting textures between formats
 static ALIGNED(32) union RGBA32 tex_scaling_buffer[16 * 1024];    // For padding and tiling textures
 
@@ -20,62 +23,92 @@ static ALIGNED(32) union RGBA32 tex_scaling_buffer[16 * 1024];    // For padding
         internal_citro3d_upload_texture_common((type_*) tex_scaling_buffer, input_size, output_size, format);                                    \
     }
 
+typedef struct
+{
+    void* vram_pool_base;                    // Base pointer as returned by vramAlloc
+    void* vram_pool_offset;                  // Current position within the data pool
+    size_t num_vram_tex;                     // Number of currently allocated VRAM textures
+    size_t data_size;                        // Total number of bytes allocated to textures, including padding
+    TexHandle* vram_textures[MAX_VRAM_TEX];  // Array of TexHandles present in VRAM, used to optimize deallocation
+} VramAllocationPool;
+
+VramAllocationPool vram_texture_pool;
+
+COLD static void internal_citro3d_init_vram_texture_pools()
+{
+    VramAllocationPool* p = &vram_texture_pool;
+    
+    if (!(p->vram_pool_base = p->vram_pool_offset = vramAlloc(VRAM_POOL_SIZE)))
+    {
+        printf("Failed to allocate VRAM pool of %luKiB\nVRAM textures have been disabled\n", BYTE_TO_KIB(VRAM_POOL_SIZE));
+        g3dsConfig.vram_textures = false;
+    }
+    p->num_vram_tex = p->data_size = 0;
+}
+
+/**
+ * Uploads the currently queued textures to VRAM. If the VRAM pool is full,
+ * the pool and queue are both cleared instead.
+ */
 COLD static void internal_citro3d_upload_textures_to_vram()
 {
-    bool failed = false;
+    VramAllocationPool* p = &vram_texture_pool;
+    size_t data_size_to_upload = 0;
 
+    // Sum up size of all textures
     for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
     {
-        TexHandle* tex = texture_upload_queue[i];
-        C3D_Tex temp;
-
-        if(C3D_TexInitVRAM(&temp, tex->c3d_tex.width, tex->c3d_tex.height, tex->c3d_tex.fmt))
-        {
-            tex->addr_vram = tex->c3d_tex.data = temp.data;
-        }
-        else
-        {
-            failed = true;
-            break;
-        }
+        data_size_to_upload += ROUND_UP(128, texture_upload_queue[i]->c3d_tex.size);
     }
 
-    // Deferred to avoid transferring to textures that will be deallocated.
-    if (!failed)
+    // If we have slots available and VRAM space, upload all textures
+    if (p->num_vram_tex + num_textures_to_upload_to_vram < MAX_VRAM_TEX &&  p->data_size + data_size_to_upload < VRAM_POOL_SIZE)
     {
         for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
         {
-            TexHandle* tex = texture_upload_queue[i];
-            tex->load_status = TEX_VRAM;
-            C3D_TexUpload(&tex->c3d_tex, tex->addr_fcram);
-            C3D_TexFlush(&tex->c3d_tex);
+            TexHandle* handle = texture_upload_queue[i];
+
+            handle->c3d_tex.data = p->vram_pool_offset;
+            handle->load_status = TEX_VRAM;
+            
+            p->vram_textures[p->num_vram_tex++] = handle;
+            p->vram_pool_offset += ROUND_UP(128, handle->c3d_tex.size);
+
+            C3D_TexUpload(&handle->c3d_tex, handle->addr_fcram);
+            C3D_TexFlush(&handle->c3d_tex);
         }
+        p->data_size += data_size_to_upload;
     }
-    
-    // If any failed, assume that VRAM is full and clear it
+
+    // If our pool is full, clear it and the queue
     else
     {
-        printf("Failed to upload a texture to VRAM.\n");
-        for (size_t i = 0; i < api_texture_index; i++)
+        // Clear pool
+        for (size_t i = 0; i < p->num_vram_tex; i++)
         {
-            TexHandle* tex = &texture_pool[i];
-
-            switch (tex->load_status)
-            {
-                case TEX_VRAM:
-                    C3D_TexDelete(&tex->c3d_tex);        // Free the VRAM data
-                    tex->c3d_tex.data = tex->addr_fcram; // Swap back to FCRAM
-                case TEX_ENQUEUED:
-                    tex->load_status = TEX_FCRAM;        // Reset to FCRAM mode
-                default:
-                    break;
-            }
+            TexHandle* handle = p->vram_textures[i];
+            handle->c3d_tex.data = handle->addr_fcram;
+            handle->load_status = TEX_FCRAM;
         }
+
+        // Clear upload queue
+        for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
+        {
+            texture_upload_queue[i]->load_status = TEX_FCRAM;
+        }
+
+        p->num_vram_tex = p->data_size = 0;
+        p->vram_pool_offset = p->vram_pool_base;
     }
 
     num_textures_to_upload_to_vram = 0;
 }
 
+/**
+ * Allocates a C3D_Tex for the context's current texture and uploads data if needed.
+ * Handles replacement of existing textures.
+ * If the texture is in VRAM mode, it is reverted to FCRAM mode.
+ */
 COLD static void internal_citro3d_upload_texture_common(void* data, struct TextureSize input_size, struct TextureSize output_size, GPU_TEXCOLOR format)
 {
     TexHandle* handle = ctx.current_texture;
@@ -87,8 +120,7 @@ COLD static void internal_citro3d_upload_texture_common(void* data, struct Textu
     switch (handle->load_status)
     {
         case TEX_VRAM:
-            C3D_TexDelete(tex);
-            tex->data = handle->addr_fcram; // Delete VRAM texture and swap back to FCRAM
+            tex->data = handle->addr_fcram; // Swap back to FCRAM. We'll leave a hole in the VRAM pool, but that's OK.
         case TEX_ENQUEUED:
         case TEX_FCRAM:
             C3D_TexDelete(tex);             // Delete FCRAM texture because the size might be different
@@ -96,12 +128,15 @@ COLD static void internal_citro3d_upload_texture_common(void* data, struct Textu
             break;
     }
 
-    if (C3D_TexInit(tex, output_size.width, output_size.height, format)) {
+    if (C3D_TexInit(tex, output_size.width, output_size.height, format))
+    {
         C3D_TexUpload(tex, data);
         C3D_TexFlush(tex);
         handle->addr_fcram = tex->data;
         handle->load_status = TEX_FCRAM;
-    } else {
+    }
+    else
+    {
         printf("Tex init failed! Size: %d, %d\n", (int) output_size.width, (int) output_size.height);
         handle->load_status = TEX_UNINITIALIZED;
     }

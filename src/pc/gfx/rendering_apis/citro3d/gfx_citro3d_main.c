@@ -34,9 +34,8 @@ void gfx_rapi_start_frame(void)
          prev_on = n3ds_hid_prev_3d_slider() > 0.0f;
     if (cur_on != prev_on)
         update_stereoscopy();
-
-    if (g3dsGfxState.reinitialize_top_screen) reinitialize_top_screen();
-    if (g3dsGfxState.reinitialize_bottom_screen) reinitialize_bottom_screen();
+    
+    reconfigure_screens(false);
     
     // Must occur after screen init
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
@@ -68,6 +67,7 @@ void gfx_rapi_init(void)
     // VRAM alloc when the game is booted with 3D enabled.
     initialize_screens();
     update_stereoscopy();
+    reconfigure_screens(true);
 
     // A default shader is required for many context-dependent actions.
     // We won't be drawing with it, so don't allocate a buffer.

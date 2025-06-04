@@ -26,19 +26,19 @@
 #define GX_REGION_NONE GX_REGION(NULL, 0, NULL, 0)
 #define GX_MEMORYFILL_SINGLE(addr_, val_, end_addr_, control_) GX_MemoryFill(GX_REGION((addr_), (val_), (end_addr_), (control_)), GX_REGION_NONE)
 
-static const N3DS_DisplayModeInfo display_mode_info[N3DS_DISPLAY_COUNT] = {
-    [N3DS_DISPLAY_2D_400_240] = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_400_240" },
-    [N3DS_DISPLAY_2D_800_240] = {.width = 800, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_800_240" },
-    [N3DS_DISPLAY_2D_800_480] = {.width = 800, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X),  .name = "N3DS_DISPLAY_2D_800_480" },
-    [N3DS_DISPLAY_3D]         = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_3D"         },
- };
-
 Gfx3DSState g3dsGfxState = {
     .bottom_screen_needs_render = false,
     .stereo_3d_active           = false,
-    .reinitialize_top_screen    = true,
-    .reinitialize_bottom_screen = true,
+    .reinitialize_top_screen    = false,
+    .reinitialize_bottom_screen = false,
     .display_mode               = N3DS_DISPLAY_2D_800_480,
+};
+
+static const N3DS_DisplayModeInfo display_mode_info[N3DS_DISPLAY_COUNT] = {
+    [N3DS_DISPLAY_2D_400_240] = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_400_240", .top_mode = MODE_2D},
+    [N3DS_DISPLAY_2D_800_240] = {.width = 800, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_800_240", .top_mode = MODE_WIDE},
+    [N3DS_DISPLAY_2D_800_480] = {.width = 800, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X),  .name = "N3DS_DISPLAY_2D_800_480", .top_mode = MODE_WIDE},
+    [N3DS_DISPLAY_3D]         = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_3D",         .top_mode = MODE_3D},
 };
 
 // Synchronously clears the entirety of N3DS VRAM.
@@ -69,7 +69,7 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
     clear_vram();
     gspExit();
     
-    gfxInit(GSP_BGR8_OES, GSP_BGR8_OES, g3dsConfig.vram_framebuffers);
+    gfxInit(N3DS_TOP_FRAMEBUFFER_FORMAT, N3DS_BOTTOM_FRAMEBUFFER_FORMAT, g3dsConfig.vram_framebuffers);
     init_console();
     shprog_emu64_init();
 }
@@ -77,17 +77,6 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
 static void gfx_3ds_exit(void)
 {
     gfxExit();
-}
-
-N3DS_TopScreenMode gfx_3ds_convert_top_mode(N3DS_DisplayMode mode)
-{
-    switch (mode) {
-        default:                       // Same as 400x240
-        case N3DS_DISPLAY_2D_400_240:  return MODE_2D;
-        case N3DS_DISPLAY_2D_800_240:  return MODE_WIDE;
-        case N3DS_DISPLAY_2D_800_480:  return MODE_WIDE;
-        case N3DS_DISPLAY_3D:          return MODE_3D;
-    }
 }
 
 const N3DS_DisplayModeInfo* gfx_3ds_display_mode_info(N3DS_DisplayMode mode)

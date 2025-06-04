@@ -176,7 +176,7 @@ static bool audio_3ds_thread_should_sleep()
     return !(s_audio_frames_to_process > 0);
 }
 
-static void audio_3ds_thread_teardown()
+static void audio_3ds_thread_teardown(struct N3dsThreadInfo* thread_info)
 {
     // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_to_process = -9999;

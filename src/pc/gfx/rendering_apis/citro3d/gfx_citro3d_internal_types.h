@@ -125,6 +125,5 @@ typedef struct
     C3D_Tex c3d_tex;
     union f32x2 scale;
     void* addr_fcram;
-    void* addr_vram;
     TexLoadStatus load_status;
 } TexHandle;

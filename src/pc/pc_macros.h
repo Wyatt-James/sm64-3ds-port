@@ -22,6 +22,11 @@
 #undef NUM_ONES
 #undef VARARGS_COUNT
 #undef NTSC_FRAMERATE
+#undef ROUND_UP
+#undef KIB_TO_BYTE
+#undef MIB_TO_BYTE
+#undef BYTE_TO_KIB
+#undef BYTE_TO_MIB
 #undef UNUSED
 #undef USED
 #undef ALWAYS_INLINE
@@ -47,6 +52,13 @@
 #define NUM_ONES(v_) (__builtin_popcount(v_)) // Returns the number of 1-bits in a 32-bit uint.
 #define VARARGS_COUNT(type, ...) (sizeof(((type)[]){__VA_ARGS__})/sizeof((type))) // Returns the count of a variadic macro's varargs
 #define NTSC_FRAMERATE(fps_) ((float) (fps_) * (1000.0f / 1001.0f)) // Converts a framerate to its NTSC 1000/1001 equivalent.
+#define ROUND_UP(round_, val_) (((val_) + (round_)) & ~(round_))
+
+// Size calculations
+#define KIB_TO_BYTE(n_) (1024UL * n_)
+#define MIB_TO_BYTE(n_) (1024UL * 1024UL * n_)
+#define BYTE_TO_KIB(n_) (n_ / 1024UL)
+#define BYTE_TO_MIB(n_) (n_ / (1024UL * 1024UL))
 
 // Attributes
 #define UNUSED __attribute__((unused))

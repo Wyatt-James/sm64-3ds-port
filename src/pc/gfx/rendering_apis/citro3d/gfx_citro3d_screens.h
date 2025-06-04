@@ -18,15 +18,8 @@ extern C3D_RenderTarget *gTarget;
 extern C3D_RenderTarget *gTargetRight;
 extern C3D_RenderTarget *gTargetBottom;
 
-void deinitialize_top_screen(void);
-void deinitialize_bottom_screen(void);
-void deinitialize_screens(void);
-void initialize_top_screen(void);
-void initialize_bottom_screen(void);
+void reconfigure_screens(bool force);
 void initialize_screens(void);
-void reinitialize_top_screen(void);
-void reinitialize_bottom_screen(void);
-void reinitialize_screens(void);
 
 void update_stereoscopy(void);
 

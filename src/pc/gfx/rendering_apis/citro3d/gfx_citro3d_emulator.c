@@ -145,6 +145,7 @@ static void internal_citro3d_update_3d_slider();
 static void internal_citro3d_init_rendering_state();
 static void internal_citro3d_load_default_texture();
 static void internal_citro3d_upload_textures_to_vram();
+static void internal_citro3d_init_vram_texture_pools();
 
 // --------------- Internal-use functions ---------------
 
@@ -608,6 +609,9 @@ COLD void gfx_citro3d_emulator_init(void)
     internal_citro3d_select_color_combiner(&color_combiner_pool[gfx_rapi_lookup_or_create_color_combiner(DEFAULT_CC_ID)]);
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
     internal_citro3d_load_default_texture();
+    
+    if (g3dsConfig.vram_textures)
+        internal_citro3d_init_vram_texture_pools();
 
     // Initialize constant uniforms
     C3DW_FVUnifSetArray(GPU_VERTEX_SHADER, EMU64_CONST_ULOC_texture_const_1, (float*) &emu64_const_uniform_defaults.texture_const_1);

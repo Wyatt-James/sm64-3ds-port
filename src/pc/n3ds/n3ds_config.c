@@ -3,7 +3,7 @@
 N3DSConfig g3dsConfig = {
     .run                     = true,
     .vram_framebuffers       = true,
-    .vram_textures           = false,
+    .vram_textures           = true,
     .enable_new_3ds_speedup  = true,
     .print_menu_interactions = false,
     .syscore_limit           = 80,
