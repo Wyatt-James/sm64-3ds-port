@@ -19,8 +19,8 @@ GX_TRANSFER_FORMAT n3ds_gpu_colorbuf_to_gx(GPU_COLORBUF f)
     switch (f) {
 	    case GPU_RB_RGBA8:      return GX_TRANSFER_FMT_RGBA8;
 	    case GPU_RB_RGB8:       return GX_TRANSFER_FMT_RGB8;
-	    case GPU_RB_RGBA5551:   return GX_TRANSFER_FMT_RGB565;
-	    case GPU_RB_RGB565:     return GX_TRANSFER_FMT_RGB5A1;
+	    case GPU_RB_RGBA5551:   return GX_TRANSFER_FMT_RGB5A1;
+	    case GPU_RB_RGB565:     return GX_TRANSFER_FMT_RGB565;
 	    case GPU_RB_RGBA4:      return GX_TRANSFER_FMT_RGBA4;
         default:                return -1;
     }
