@@ -36,13 +36,13 @@ static C3D_RenderTarget* target_400_240_right;
 static C3D_RenderTarget* target_bottom;
 
 N3DS_RenderTargetConfiguration initializers_top[] = {
-    {&target_800_480,       800, 480, GPU_RB_RGB8, GPU_RB_DEPTH24_STENCIL8},
-    {&target_800_240,       800, 240, GPU_RB_RGB8, GPU_RB_DEPTH24_STENCIL8},
-    {&target_400_240_left,  400, 240, GPU_RB_RGB8, GPU_RB_DEPTH24_STENCIL8},
-    {&target_400_240_right, 400, 240, GPU_RB_RGB8, GPU_RB_DEPTH24_STENCIL8},
+    {&target_800_480,       800, 480, GPU_RB_RGB8, GPU_RB_DEPTH16},
+    {&target_800_240,       800, 240, GPU_RB_RGB8, GPU_RB_DEPTH16},
+    {&target_400_240_left,  400, 240, GPU_RB_RGB8, GPU_RB_DEPTH16},
+    {&target_400_240_right, 400, 240, GPU_RB_RGB8, GPU_RB_DEPTH16},
 };
 
-N3DS_RenderTargetConfiguration initializers_bottom[1] = {{&target_bottom, 320, 240, GPU_RB_RGB8, GPU_RB_DEPTH24_STENCIL8}};
+N3DS_RenderTargetConfiguration initializers_bottom[1] = {{&target_bottom, 320, 240, GPU_RB_RGB565, C3D_DEPTH_NONE}};
 
 TopScreenSetup top_screen_setups[] = {
     [N3DS_DISPLAY_2D_400_240] = {&target_400_240_left, NULL,                  N3DS_DISPLAY_2D_400_240},

@@ -2,8 +2,6 @@
 
 #include "c3d_inc.h"
 
-#define GPU_RB_DEPTH_NONE (-1) /* Pass this if you don't want to allocate a depth buffer. */
-
 typedef struct
 {
     C3D_RenderTarget** target;

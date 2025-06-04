@@ -12,9 +12,9 @@ RUN wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/m
   echo 976c17a78617e157083a8e342836d35c47a45940f9d0209ee8fd210a81ba7bc0  makerom.zip | sha256sum --check
 
 # CREATES citro3d-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/citro3d/archive/8827d74a4ce6d483912c9d69634c44fbafe8fb75.zip \
+RUN wget https://github.com/Wyatt-James/citro3d/archive/9da2c515e2a76e4454c3498a42395017ff3a46ae.zip \
   -O citro3d-wyatt-james.zip && \
-  echo C1089F4EBEBCA97D26266B1D823C79847A29FA313692CEBB944A54CBC3F542FD  citro3d-wyatt-james.zip | sha256sum --check
+  echo 715BC9F5CA22A512C85B378FE28BC078325C8DD13C7BEE2D6A4662D892955C6F  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
 RUN wget https://github.com/Wyatt-James/libctru/archive/00816d7643d86a901fc55228f8a5d352cadef02e.zip \

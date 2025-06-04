@@ -10,7 +10,7 @@
 #include "src/pc/gfx/gfx_window_manager_api.h"
 
 #define N3DS_TOP_FRAMEBUFFER_FORMAT    GSP_BGR8_OES
-#define N3DS_BOTTOM_FRAMEBUFFER_FORMAT GSP_BGR8_OES
+#define N3DS_BOTTOM_FRAMEBUFFER_FORMAT GSP_RGB565_OES
 
 typedef enum
 {

@@ -69,8 +69,8 @@ bool n3ds_allocate_overlapping_rendertargets(size_t num_targets, N3DS_RenderTarg
     {
         N3DS_RenderTargetConfiguration* c = &configs[i];
         C3D_RenderTarget* t = init_target(configs[i]);
-        size_t color_size = t->frameBuf.colorBuf != NULL ? C3D_CalcColorBufSize(c->width, c->height, c->color_format) : 0;
-        size_t depth_size = t->frameBuf.depthBuf != NULL ? C3D_CalcDepthBufSize(c->width, c->height, c->depth_format) : 0;
+        size_t color_size = t->ownsColor ? C3D_CalcColorBufSize(c->width, c->height, c->color_format) : 0;
+        size_t depth_size = t->ownsDepth ? C3D_CalcDepthBufSize(c->width, c->height, c->depth_format) : 0;
         largest_color_size = MAX(largest_color_size, color_size);
         largest_depth_size = MAX(largest_depth_size, depth_size);
         free_target_bufs(t);
