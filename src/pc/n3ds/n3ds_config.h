@@ -26,7 +26,7 @@ typedef struct
 {
     bool run,                        // Set to false to exit the game.
          vram_framebuffers,          // Gives a nice performance boost.
-         vram_textures,              // Gives a nice performance boost, but not quite finished. WYATT_TODO disabled for now, since we still need persistent rendertargets
+         vram_textures,              // Gives a nice performance boost.
          enable_new_3ds_speedup,     // Ignored on old models.
          print_menu_interactions,    // If enabled, touch menu interactions are printed.
          enable_multi_threading;     // If enabled, audio runs on a separate core.
