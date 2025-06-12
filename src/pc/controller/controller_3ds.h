@@ -5,7 +5,7 @@
 
 #include "controller_api.h" // also contains the definition of u16
 
-extern u16 controller_3ds_force_hold; // Forces N64 buttons to be held. See hid.h for definitions. WYATT_TODO this should be a u16.
+extern u16 controller_3ds_force_hold; // Forces N64 buttons to be held. See hid.h for definitions.
 extern struct ControllerAPI controller_3ds;
 
 #endif
