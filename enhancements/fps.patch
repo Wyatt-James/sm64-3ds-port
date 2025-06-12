@@ -1,8 +1,8 @@
 diff --git a/src/game/game_init.c b/src/game/game_init.c
-index e5552ec..b134990 100644
+index 2c933d3..252a2ce 100644
 --- a/src/game/game_init.c
 +++ b/src/game/game_init.c
-@@ -64,6 +64,29 @@ struct DemoInput *gCurrDemoInput = NULL; // demo input sequence
+@@ -59,6 +59,29 @@ struct DemoInput *gCurrDemoInput = NULL; // demo input sequence
  u16 gDemoInputListID = 0;
  struct DemoInput gRecordedDemoInput = { 0 }; // possibly removed in EU. TODO: Check
  
@@ -32,7 +32,7 @@ index e5552ec..b134990 100644
  /**
   * Initializes the Reality Display Processor (RDP).
   * This function initializes settings such as texture filtering mode,
-@@ -654,6 +677,8 @@ void game_loop_one_iteration(void) {
+@@ -649,6 +672,8 @@ void game_loop_one_iteration(void) {
          levelCommandAddr = level_script_execute(levelCommandAddr);
  
          display_and_vsync();

@@ -1,49 +1,23 @@
+#include "gfx_citro3d_helpers.h"
+
 #include <PR/gbi.h>
 #include <stdio.h>
 
-#include "gfx_citro3d_helpers.h"
 #include "src/pc/gfx/gfx_cc.h"
 #include "src/pc/gfx/shader_programs/gfx_n3ds_shprog_emu64.h"
-
-// I hate this library
-// hack for redefinition of types in libctru
-// All 3DS includes must be done inside of an equivalent
-// #define/undef block to avoid type redefinition issues.
-#define u64 __3ds_u64
-#define s64 __3ds_s64
-#define u32 __3ds_u32
-#define vu32 __3ds_vu32
-#define vs32 __3ds_vs32
-#define s32 __3ds_s32
-#define u16 __3ds_u16
-#define s16 __3ds_s16
-#define u8 __3ds_u8
-#define s8 __3ds_s8
-#include <c3d/maths.h>
-#undef u64
-#undef s64
-#undef u32
-#undef vu32
-#undef vs32
-#undef s32
-#undef u16
-#undef s16
-#undef u8
-#undef s8
+#include "src/pc/pc_macros.h"
 
 #define FAST_SINGLE_MOD(v_, max_) (((v_ >= max_) ? (v_ - max_) : (v_))) // v_ % max_, but only once.
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 #define U32_AS_FLOAT(v_) (*(float*) &v_)
 
-#define BSWAP32(v_) (__builtin_bswap32(v_))        // u32
-#define BSWAP16(v_) (__builtin_bswap16(v_))        // u16
-#define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_)) // u32
-#define NUM_ONES(v_) (__builtin_popcount(v_))      // u32
-
-const C3D_Mtx IDENTITY_MTX = C3D_STATIC_IDENTITY_MTX;
+typedef struct
+{
+    u32 x, y;
+} ScaleFactor;
 
 // Add W to Z coordinate
-const C3D_Mtx DEPTH_ADD_W_MTX = {
+static const C3D_Mtx DEPTH_ADD_W_MTX = {
                     .r = {
                         {.x = 1.0f},
                         {.y = 1.0f},
@@ -60,78 +34,6 @@ static const int texture_tile_order[4][4] =
     {8,  9,  12, 13},
     {10, 11, 14, 15}
 };
-
-Emu64ShaderCode citro3d_helpers_calculate_shader_code(union ShaderProgramFeatureFlags feature_flags)
-{
-    // 1 => position (always)
-    // 2 => texture
-    // 4 => color
-    // 8 => normals
-    // color and normals are mutually exclusive
-    const bool has_position = feature_flags.position,
-               has_texture = feature_flags.tex,
-               has_color = feature_flags.color,
-               has_normals = feature_flags.normals;
-
-    if (has_color && has_normals)
-        fprintf(stderr, "Has color and normals: %c%c%c%c\n",
-        has_position ? 'P' : '-',
-        has_texture  ? 'T' : '-',
-        has_color    ? 'C' : '-',
-        has_normals  ? 'N' : '-');
-
-    Emu64ShaderCode shader_code = 0;
-    
-    if (has_position)
-        shader_code |= EMU64_VBO_POSITION;
-    if (has_texture)
-        shader_code |= EMU64_VBO_TEXTURE;
-    if (has_color)
-        shader_code |= EMU64_VBO_COLOR;
-    if (has_normals)
-        shader_code |= EMU64_VBO_NORMALS;
-
-    return shader_code;
-}
-
-const struct n3ds_shader_info* citro3d_helpers_get_shader_info(Emu64ShaderCode shader_code)
-{
-    const struct n3ds_shader_info* shader = NULL;
-
-    switch(shader_code)
-    {
-        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE:
-            shader = &emu64_shader_3;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_COLOR:
-            shader = &emu64_shader_5;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_COLOR:
-            shader = &emu64_shader_7;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_NORMALS:
-            shader = &emu64_shader_9;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_NORMALS:
-            shader = &emu64_shader_11;
-            break;
-        default:
-            shader = &emu64_shader_7;
-            fprintf(stderr, "Invalid shader code: %c%c%c%c\n",
-                (shader_code & EMU64_VBO_POSITION) ? 'P' : '-',
-                (shader_code & EMU64_VBO_TEXTURE)  ? 'T' : '-',
-                (shader_code & EMU64_VBO_COLOR)    ? 'C' : '-',
-                (shader_code & EMU64_VBO_NORMALS)  ? 'N' : '-');
-            break;
-    }
-
-    return shader;
-}
-
-const struct n3ds_shader_info* citro3d_helpers_get_shader_info_from_flags(union ShaderProgramFeatureFlags feature_flags)
-{
-    return citro3d_helpers_get_shader_info(citro3d_helpers_calculate_shader_code(feature_flags)); 
-}
 
 struct TextureSize citro3d_helpers_adjust_texture_dimensions(struct TextureSize input_size, size_t unit_size, size_t buffer_size)
 {
@@ -191,7 +93,7 @@ void citro3d_helpers_pad_and_tile_texture_u32(uint32_t* src,
                 u32 in_index = ARR_INDEX_2D(src_x, src_y, src_w);
                 u32 out_index = texture_tile_order[tile_y % 4][tile_x % 4] + 16 * (tile_x / 4) + 32 * (tile_y / 4);
 
-                dest[out_index] = BSWAP32(src[in_index]);
+                dest[out_index] = BSWAP_32(src[in_index]);
             }
             dest += 64;
         }
@@ -221,7 +123,7 @@ void citro3d_helpers_pad_and_tile_texture_u16(uint16_t* src,
                 u32 in_index = ARR_INDEX_2D(src_x, src_y, src_w);
                 u32 out_index = texture_tile_order[tile_y % 4][tile_x % 4] + 16 * (tile_x / 4) + 32 * (tile_y / 4);
 
-                dest[out_index] = BSWAP16(src[in_index]);
+                dest[out_index] = BSWAP_16(src[in_index]);
             }
             dest += 64;
         }
@@ -318,8 +220,11 @@ static void configure_tev_internal(struct CCFeatures* cc_features, C3D_TexEnv* t
     }
 }
 
-void citro3d_helpers_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3D_TexEnv* texenv)
+C3D_TexEnv citro3d_helpers_configure_tex_env(struct CCFeatures* cc_features)
 {
+    C3D_TexEnv texenv_;
+    C3D_TexEnv* texenv = &texenv_;
+
     const bool swap_input = (cc_features->num_inputs == 2) ? true : false;
     union RGBA32 color = { .u32 = 0 };
 
@@ -369,16 +274,22 @@ void citro3d_helpers_configure_tex_env_slot_0(struct CCFeatures* cc_features, C3
     }
     
     C3D_TexEnvColor(texenv, color.u32);
+
+    return texenv_;
 }
 
-void citro3d_helpers_configure_tex_env_slot_1(C3D_TexEnv* texenv)
+C3D_TexEnv citro3d_helpers_configure_two_color_tex_env(void)
 {
-    C3D_TexEnvInit(texenv);
-    C3D_TexEnvColor(texenv, 0);
-    C3D_TexEnvFunc(texenv, C3D_Both, GPU_REPLACE);
-    C3D_TexEnvSrc(texenv, C3D_Both, GPU_CONSTANT, 0, 0);
-    C3D_TexEnvOpRgb(texenv, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
-    C3D_TexEnvOpAlpha(texenv, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA);
+    C3D_TexEnv texenv;
+
+    C3D_TexEnvInit(&texenv);
+    C3D_TexEnvColor(&texenv, 0);
+    C3D_TexEnvFunc(&texenv, C3D_Both, GPU_REPLACE);
+    C3D_TexEnvSrc(&texenv, C3D_Both, GPU_CONSTANT, 0, 0);
+    C3D_TexEnvOpRgb(&texenv, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
+    C3D_TexEnvOpAlpha(&texenv, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA);
+
+    return texenv;
 }
 
 GPU_TEXTURE_WRAP_PARAM citro3d_helpers_convert_texture_clamp_mode(uint32_t val)
@@ -486,55 +397,36 @@ void citro3d_helpers_apply_projection_mtx_preset(C3D_Mtx* mtx)
     Mtx_Multiply(mtx, mtx, &DEPTH_ADD_W_MTX);
 }
 
-void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
+// WYATT_TODO this scaling is ridiculous and should be done at the GFX WAPI level,
+// but testing that gives strange behavior.
+static inline ScaleFactor gfx_mode_scale_factor_x(N3DS_DisplayMode gfx_mode)
 {
-    if (gfx_mode == GFX_3DS_MODE_AA_22 || gfx_mode == GFX_3DS_MODE_WIDE_AA_12)
-    {
-        viewport_config->x = x * 2;
-        viewport_config->y = y * 2;
-        viewport_config->width = width * 2;
-        viewport_config->height = height * 2;
-    }
-    else if (gfx_mode == GFX_3DS_MODE_WIDE)
-    {
-        viewport_config->x = x * 2;
-        viewport_config->y = y;
-        viewport_config->width = width * 2;
-        viewport_config->height = height;
-    }
-    else // gfx_mode == GFX_3DS_MODE_NORMAL
-    {
-        viewport_config->x = x;
-        viewport_config->y = y;
-        viewport_config->width = width;
-        viewport_config->height = height;
+    switch (gfx_mode) {
+        default:                      // Same as 400x240
+        case N3DS_DISPLAY_3D:         // Same as 400x240
+        case N3DS_DISPLAY_2D_400_240: return (ScaleFactor) {1, 1};
+        case N3DS_DISPLAY_2D_800_240: return (ScaleFactor) {2, 1};
+        case N3DS_DISPLAY_2D_800_480: return (ScaleFactor) {2, 2};
     }
 }
 
-void citro3d_helpers_convert_scissor_settings(struct ScissorConfig* scissor_config, Gfx3DSMode gfx_mode, int x, int y, int width, int height)
+void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
 {
+    ScaleFactor scale = gfx_mode_scale_factor_x(gfx_mode);
+    viewport_config->x       = x      * scale.x;
+    viewport_config->y       = y      * scale.y;
+    viewport_config->width   = width  * scale.x;
+    viewport_config->height  = height * scale.y;
+}
+
+void citro3d_helpers_convert_scissor_settings(struct ScissorConfig* scissor_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
+{
+    ScaleFactor scale = gfx_mode_scale_factor_x(gfx_mode);
+    scissor_config->x1     = x * scale.x;
+    scissor_config->y1     = y * scale.y;
+    scissor_config->x2     = (x + width)  * scale.x;
+    scissor_config->y2     = (y + height) * scale.y;
     scissor_config->enable = true;
-    if (gfx_mode == GFX_3DS_MODE_AA_22 || gfx_mode == GFX_3DS_MODE_WIDE_AA_12)
-    {
-        scissor_config->x1 = x * 2;
-        scissor_config->y1 = y * 2;
-        scissor_config->x2 = (x + width) * 2;
-        scissor_config->y2 = (y + height) * 2;
-    }
-    else if (gfx_mode == GFX_3DS_MODE_WIDE)
-    {
-        scissor_config->x1 = x * 2;
-        scissor_config->y1 = y;
-        scissor_config->x2 = (x + width) * 2;
-        scissor_config->y2 = y + height;
-    }
-    else // gfx_mode == GFX_3DS_MODE_NORMAL
-    {
-        scissor_config->x1 = x;
-        scissor_config->y1 = y;
-        scissor_config->x2 = x + width;
-        scissor_config->y2 = y + height;
-    }
 }
 
 void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z, float w)
@@ -551,8 +443,11 @@ enum Stereoscopic3dMode citro3d_helpers_convert_2d_mode(int mode_2d)
     return (enum Stereoscopic3dMode) mode_2d;
 }
 
-// Converts a Color Combiner source to its Emu64 version.
-// Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
+GPU_FOGMODE citro3d_helpers_convert_fog_mode(bool enable)
+{
+    return enable ? GPU_FOG : GPU_NO_FOG;
+}
+
 enum Emu64ColorCombinerSource citro3d_helpers_convert_cc_mapping_to_emu64(uint8_t cc_mapping, bool fog_enabled)
 {
     // Note: the Peach painting uses LoD for RGB only, not alpha
@@ -575,21 +470,113 @@ enum Emu64ColorCombinerSource citro3d_helpers_convert_cc_mapping_to_emu64(uint8_
     }
 }
 
-// Converts a Color Combiner source to its Emu64 version, pre-cast to a float.
-// Important: Only pass TRUE for fog_enabled when converting mappings for the alpha channel!
 float citro3d_helpers_convert_cc_mapping_to_emu64_float(uint8_t cc_mapping, bool fog_enabled)
 {
     return citro3d_helpers_convert_cc_mapping_to_emu64(cc_mapping, fog_enabled);
 }
 
-void citro3d_helpers_init_attr_info(const struct n3ds_attribute_data* attributes, C3D_AttrInfo* out_attr_info)
+C3D_AttrInfo citro3d_helpers_init_attr_info(const struct n3ds_attribute_data* attributes)
 {
-    AttrInfo_Init(out_attr_info);
+    C3D_AttrInfo attr_info;
+
+    AttrInfo_Init(&attr_info);
 
     for (size_t i = 0; i < attributes->num_attribs; i++) {
         GPU_FORMATS format = attributes->data[i].format;
         int count = attributes->data[i].count;
-        AttrInfo_AddLoader(out_attr_info, i, format, count);
+        AttrInfo_AddLoader(&attr_info, i, format, count);
     }
-    printf("\n");
+
+    return attr_info;
+}
+
+ShaderProgram citro3d_helpers_init_shader(const struct n3ds_shader_info* shader_info, VertexBuffer* vb, size_t vbo_size)
+{
+    ShaderProgram prog;
+    prog.vertex_buffer = vb;
+
+    const struct n3ds_shader_vbo_info* vbo_info = &shader_info->vbo_info;
+    
+    if (vb)
+    {
+        vb->attr_info = citro3d_helpers_init_attr_info(&shader_info->vbo_info.attributes);
+
+        if (vbo_size > 0)
+            vb->ptr = linearAlloc(vbo_size);
+
+        
+        BufInfo_Init(&vb->buf_info);
+        BufInfo_Add(&vb->buf_info, vb->ptr, vbo_info->stride * EMU64_STRIDE_UNIT_SIZE, vb->attr_info.attrCount, vb->attr_info.permutation);
+    }
+    
+    // It is assumed that these will not fail
+    shaderProgramInit(&prog.pica_shader_program);
+    shaderProgramSetVsh(&prog.pica_shader_program, &shader_info->binary->dvlb->DVLE[shader_info->dvle_index]);
+    shaderProgramSetGsh(&prog.pica_shader_program, NULL, 0);
+
+    return prog;
+}
+
+void citro3d_helpers_free_shader(ShaderProgram* prog)
+{
+    if (prog->vertex_buffer != NULL && prog->vertex_buffer->ptr != NULL)
+    {
+        linearFree(prog->vertex_buffer->ptr);
+        prog->vertex_buffer->ptr = NULL;
+    }
+}
+
+bool citro3d_helpers_load_t3x_texture(C3D_Tex* tex, C3D_TexCube* cube, const void* data, size_t size)
+{
+    Tex3DS_Texture t3x = Tex3DS_TextureImport(data, size, tex, cube, false);
+    if (!t3x)
+        return false;
+    Tex3DS_TextureFree(t3x);
+    return true;
+}
+
+void citro3d_helpers_init_cc(ColorCombiner* cc, ColorCombinerId cc_id)
+{
+    union CCInputMapping mapping;
+
+    {
+        CCShaderId shader_id;
+        gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
+        gfx_cc_get_features(shader_id, &cc->cc_features);
+    }
+
+    // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)
+    if (cc->cc_features.num_inputs >= 2) {
+        union CCInputMapping mapping_temp;
+        for (int i = 0; i <= 1; i++) {
+            mapping_temp.arr[i][0] = mapping.arr[i][1];
+            mapping_temp.arr[i][1] = mapping.arr[i][0];
+
+            mapping.arr[i][0] = mapping_temp.arr[i][0];
+            mapping.arr[i][1] = mapping_temp.arr[i][1];
+        }
+    }
+
+    cc->cc_id = cc_id;
+
+    cc->c3d_shader_input_mapping.c1_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[0], false);
+    cc->c3d_shader_input_mapping.c2_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[1], false);
+
+    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[0], cc->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[1], cc->cc_features.opt_fog);
+
+    // Fixes the pause tint being too light.
+    cc->use_env_color = mapping.rgb[1] == CC_ENV;
+
+    // N3DS only cares about the first two mappings, so we want to make an identifier for specifically this to enhance performance
+    // RGBA32 works fine since it's four u8s
+    cc->cc_mapping_identifier = (union RGBA32) {
+        .r = mapping.rgb[0],
+        .g = mapping.rgb[1],
+        .b = mapping.alpha[0],
+        .a = mapping.alpha[1],
+    }.u32;
+
+    // Preconfigure TEV settings
+    cc->texenv = citro3d_helpers_configure_tex_env(&cc->cc_features);
 }

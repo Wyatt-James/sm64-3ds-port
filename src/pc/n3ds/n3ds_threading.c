@@ -1,11 +1,13 @@
+#include "n3ds_threading.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <macros.h>
-#include "n3ds_threading_common.h"
+
+#include "src/pc/n3ds/n3ds_config.h"
 
 #define DEFAULT_THREAD_NAME "unnamed"
 
-bool n3ds_enable_multi_threading = true;
 bool n3ds_old_core_1_is_available = false;
 
 
@@ -75,7 +77,7 @@ int32_t n3ds_thread_start(struct N3dsThreadInfo* thread_info)
     char* friendly_name = thread_info->friendly_name;
 
     int32_t desired_priority = thread_info->desired_priority;
-    enum N3dsCpu assigned_cpu = thread_info->assigned_cpu;
+    N3DS_Processor assigned_cpu = thread_info->assigned_cpu;
     size_t stack_size = thread_info->internal_stack_size;
     bool detached = thread_info->internal_detached;
 
@@ -150,7 +152,7 @@ int32_t n3ds_enable_old_core_1()
     if (has_run)
         return -2;
 
-    n3ds_old_core_1_is_available = R_SUCCEEDED(APT_SetAppCpuTimeLimit(N3DS_CORE_1_LIMIT));
-    printf("AppCpuTimeLimit is %d.\nAppCpuIdleLimit is %d.\n", N3DS_CORE_1_LIMIT, N3DS_CORE_1_LIMIT_IDLE);
+    n3ds_old_core_1_is_available = R_SUCCEEDED(APT_SetAppCpuTimeLimit(g3dsConfig.syscore_limit));
+    printf("Syscore limit is %d.\nIdle syscore limit is %d.\n", g3dsConfig.syscore_limit, g3dsConfig.syscore_limit_idle);
     return n3ds_old_core_1_is_available ? 0 : -1;
 }

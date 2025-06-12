@@ -1,30 +1,6 @@
 #ifdef TARGET_N3DS
 
-// hack for redefinition of types in libctru
-// All 3DS includes must be done inside of an equivalent
-// #define/undef block to avoid type redefinition issues.
-#define u64 __3ds_u64
-#define s64 __3ds_s64
-#define u32 __3ds_u32
-#define vu32 __3ds_vu32
-#define vs32 __3ds_vs32
-#define s32 __3ds_s32
-#define u16 __3ds_u16
-#define s16 __3ds_s16
-#define u8 __3ds_u8
-#define s8 __3ds_s8
-#include <3ds/types.h>
-#include <3ds.h>
-#undef u64
-#undef s64
-#undef u32
-#undef vu32
-#undef vs32
-#undef s32
-#undef u16
-#undef s16
-#undef u8
-#undef s8
+#include "src/pc/n3ds/libctru_inc.h"
 
 #include <ultra64.h>
 
@@ -36,44 +12,36 @@
 #include "controller_api.h"
 
 #include "../configfile.h"
+#include "src/pc/n3ds/n3ds_hid.h"
 
-static int button_mapping[10][2];
+typedef struct
+{
+    int n64, n3ds;
+} ButtonMapping;
+
+__3ds_u32 controller_3ds_force_hold = 0;
+static ButtonMapping button_mapping[10];
 
 static void set_button_mapping(int index, int mask_n64, int mask_3ds)
 {
-    button_mapping[index][0] = mask_3ds;
-    button_mapping[index][1] = mask_n64;
+    button_mapping[index].n3ds = mask_3ds;
+    button_mapping[index].n64 = mask_n64;
 }
 
-// From gfx_3ds_menu
-static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int height)
-{
-    return pos_x >= x && pos_x <= (x+width) && pos_y >= y && pos_y <= (y+height);
-}
-
-static u32 controller_3ds_get_held(void)
+static u16 controller_3ds_get_held(void)
 {
     u32 res = 0;
-    hidScanInput();
-    u32 kDown = keysHeld();
+    N3DS_ButtonState* buttons = n3ds_hid_buttons();
+    __3ds_u32 kHeld = buttons->held;
+
     for (size_t i = 0; i < sizeof(button_mapping) / sizeof(button_mapping[0]); i++)
     {
-        if (button_mapping[i][0] & kDown) {
-            res |= button_mapping[i][1];
+        if (button_mapping[i].n3ds & kHeld) {
+            res |= button_mapping[i].n64;
         }
     }
 
-    touchPosition pos;
-    hidTouchRead(&pos);
-
-    if (is_inside_box(pos.px, pos.py, 170, 122, 64, 64))
-        res |= L_CBUTTONS;
-    if (is_inside_box(pos.px, pos.py, 245, 122, 64, 64))
-        res |= R_CBUTTONS;
-    if (is_inside_box(pos.px, pos.py, 207, 197, 64, 32))
-        res |= D_CBUTTONS;
-    if (is_inside_box(pos.px, pos.py, 207, 79, 64, 32))
-        res |= U_CBUTTONS;
+    res |= controller_3ds_force_hold;
 
     return res;
 }
@@ -97,10 +65,9 @@ static void controller_3ds_read(OSContPad *pad)
 {
     pad->button = controller_3ds_get_held();
 
-    circlePosition pos;
-    hidCircleRead(&pos);
-    pad->stick_x = pos.dx / 2;
-    pad->stick_y = pos.dy / 2;
+    circlePosition* circle_pad = &n3ds_hid_buttons()->circle_pad;
+    pad->stick_x = circle_pad->dx / 2;
+    pad->stick_y = circle_pad->dy / 2;
 }
 
 struct ControllerAPI controller_3ds = {

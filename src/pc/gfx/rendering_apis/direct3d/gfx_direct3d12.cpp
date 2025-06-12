@@ -222,10 +222,10 @@ bool gfx_rapi_z_is_from_0_to_1(void) {
     return true;
 }
 
-void gfx_rapi_unload_shader(struct ShaderProgram *old_prg) {
+void gfx_rapi_unload_shader(ShaderProgram *old_prg) {
 }
 
-void gfx_rapi_load_shader(struct ShaderProgram *new_prg) {
+void gfx_rapi_load_shader(ShaderProgram *new_prg) {
     d3d.shader_program = (struct ShaderProgramD3D12 *)new_prg;
     d3d.must_reload_pipeline = true;
 }
@@ -263,19 +263,19 @@ ShaderProgram *gfx_rapi_create_and_load_new_shader(uint32_t shader_id) {
     //prg->num_attribs = cnt;
     
     d3d.must_reload_pipeline = true;
-    return (struct ShaderProgram *)(d3d.shader_program = prg);
+    return (ShaderProgram *)(d3d.shader_program = prg);
 }
 
-struct ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
+ShaderProgram *gfx_rapi_lookup_shader(uint32_t shader_id) {
     for (size_t i = 0; i < d3d.shader_program_pool_size; i++) {
         if (d3d.shader_program_pool[i].shader_id == shader_id) {
-            return (struct ShaderProgram *)&d3d.shader_program_pool[i];
+            return (ShaderProgram *)&d3d.shader_program_pool[i];
         }
     }
     return nullptr;
 }
 
-void gfx_rapi_shader_get_info(struct ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
+void gfx_rapi_shader_get_info(ShaderProgram *prg, uint8_t *num_inputs, bool used_textures[2]) {
     struct ShaderProgramD3D12 *p = (struct ShaderProgramD3D12 *)prg;
     
     *num_inputs = p->num_inputs;

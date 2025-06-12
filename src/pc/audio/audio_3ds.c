@@ -56,7 +56,7 @@ union NdspMix {
 };
 
 struct N3dsThreadInfo n3ds_audio_thread_info;
-enum N3dsCpu n3ds_desired_audio_cpu = OLD_CORE_0; // This will be overwritten externally
+N3DS_Processor n3ds_desired_audio_cpu = OLD_CORE_0; // This will be overwritten externally
 
 bool s_thread5_wait_for_audio_to_finish = true;
 
@@ -176,7 +176,7 @@ static bool audio_3ds_thread_should_sleep()
     return !(s_audio_frames_to_process > 0);
 }
 
-static void audio_3ds_thread_teardown()
+static void audio_3ds_thread_teardown(UNUSED struct N3dsThreadInfo* thread_info)
 {
     // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_to_process = -9999;

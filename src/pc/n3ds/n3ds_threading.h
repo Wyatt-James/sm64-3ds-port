@@ -1,36 +1,11 @@
-#ifndef N3DS_THREADING_COMMON_H
-#define N3DS_THREADING_COMMON_H
+#pragma once
 
-// I hate this library
-// hack for redefinition of types in libctru
-// All 3DS includes must be done inside of an equivalent
-// #define/undef block to avoid type redefinition issues.
-#define u64 __3ds_u64
-#define s64 __3ds_s64
-#define u32 __3ds_u32
-#define vu32 __3ds_vu32
-#define vs32 __3ds_vs32
-#define s32 __3ds_s32
-#define u16 __3ds_u16
-#define s16 __3ds_s16
-#define u8 __3ds_u8
-#define s8 __3ds_s8
-#include <3ds/types.h>
-#include <3ds.h>
-#include <3ds/svc.h>
-#undef u64
-#undef s64
-#undef u32
-#undef vu32
-#undef vs32
-#undef s32
-#undef u16
-#undef s16
-#undef u8
-#undef s8
+/*
+ * N3DS-specific multithreading API
+ */
 
-#define N3DS_CORE_1_LIMIT 80              // Limit during gameplay. Can be [10-80].
-#define N3DS_CORE_1_LIMIT_IDLE 10         // Limit when in the home menu, sleeping, etc. Can be [10-80].
+#include "src/pc/n3ds/libctru_inc.h"
+
 #define N3DS_DESIRED_PRIORITY_MAIN_THREAD 0x19  // Priority of thread5
 
 #define N3DS_SECONDS_TO_NANOS(t) (t * 1000000000)     // Calculate a duration in seconds
@@ -39,14 +14,15 @@
 #define N3DS_NANOS(t)            (t)                  // A duration in nanoseconds
 #define N3DS_SLEEP_FUNC(time)    svcSleepThread(time) // Allows us to conveniently replace the sleep func.
 
-enum N3dsCpu {
+typedef enum
+{
     OLD_CORE_0  = 0, // Main game core
     OLD_CORE_1  = 1, // System core
-    NEW_CORE_2  = 2
-};
+    NEW_CORE_2  = 2, // Only available on new 3DS
+    NEW_CORE_3  = 3, // Reserved for the kernel and not available for user-mode scehduling.
+} N3DS_Processor;
 
 // If true, runtime systems will avoid creating threads and using thread functions.
-extern bool n3ds_enable_multi_threading;
 extern bool n3ds_old_core_1_is_available;
 
 struct N3dsThreadInfo {
@@ -57,7 +33,7 @@ struct N3dsThreadInfo {
     void* misc_data;                  // Miscellaneous data. Put whatever you want in here.
     char friendly_name[16];           // Friendly name for printing.
 
-    enum N3dsCpu assigned_cpu;        // Which CPU this thread is assigned to.
+    N3DS_Processor assigned_cpu;        // Which CPU this thread is assigned to.
     int32_t desired_priority;         // Priority of this thread.
     int32_t actual_priority;          // Real priority of this thread, as obtained via a syscall. If the syscall fails, it is set to desired_priority.
     bool priority_retrieved;          // True if the thread priority syscall worked, false otherwise.
@@ -106,5 +82,3 @@ extern int32_t n3ds_thread_start(struct N3dsThreadInfo* thread_info);
  * -2: function was run twice
  */
 extern int32_t n3ds_enable_old_core_1();
-
-#endif

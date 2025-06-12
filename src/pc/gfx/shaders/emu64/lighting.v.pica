@@ -25,7 +25,7 @@
 .alias num_lights     vertex_load_flags.xxxx ; Vector full of num_lights. Includes ambient.
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary betwen subroutines.
+; These are intended purposes, but they may vary between subroutines\.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register

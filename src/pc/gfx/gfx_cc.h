@@ -3,8 +3,24 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <PR/gbi.h>
 
-enum {
+#define DELIBERATELY_INVALID_CC_ID ~0 // Represents an invalid color combiner, to be used for initial conditions.
+#define DEFAULT_CC_ID calculate_cc_id(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_0), convert_color_combiner(0, 0, 0, G_ACMUX_0)), false, false, false, false) // A real CC ID that produces only black pixels with alpha 0.
+
+#define SHADER_OPT_ALPHA        (1 << 24)
+#define SHADER_OPT_FOG          (1 << 25)
+#define SHADER_OPT_TEXTURE_EDGE (1 << 26)
+#define SHADER_OPT_NOISE        (1 << 27)
+
+#define COMBINE_MODE(rgb, alpha) (((CombineMode) rgb) | (((CombineMode) alpha) << 12))
+
+typedef uint32_t ColorCombinerId; // Contains the entire description of a color combiner, as per gfx_pc.c.
+typedef uint32_t CCShaderId;
+typedef uint32_t CombineMode; // To be used with the COMBINE_MODE macro.
+
+enum
+{
     CC_0,
     CC_TEXEL0,
     CC_TEXEL1,
@@ -15,7 +31,8 @@ enum {
     CC_LOD
 };
 
-enum {
+typedef enum
+{
     SHADER_0,
     SHADER_INPUT_1,
     SHADER_INPUT_2,
@@ -24,17 +41,7 @@ enum {
     SHADER_TEXEL0,
     SHADER_TEXEL0A,
     SHADER_TEXEL1
-};
-
-typedef uint32_t ColorCombinerId; // Contains the entire description of a color combiner, as per gfx_pc.c.
-typedef uint32_t CCShaderId;
-
-#define DELIBERATELY_INVALID_CC_ID ~0 // Represents an invalid color combiner, to be used for initial conditions.
-
-#define SHADER_OPT_ALPHA        (1 << 24)
-#define SHADER_OPT_FOG          (1 << 25)
-#define SHADER_OPT_TEXTURE_EDGE (1 << 26)
-#define SHADER_OPT_NOISE        (1 << 27)
+} ShaderSource;
 
 // (a - b) * c + d
 union CCInputMapping {
@@ -80,6 +87,53 @@ void gfx_cc_get_features(CCShaderId shader_id, struct CCFeatures *cc_features);
 // Generates a set of CC shader-input mappings and a shader ID from a CC ID.
 // Unused mappings are set to CC_0.
 void gfx_cc_generate_cc(ColorCombinerId cc_id, union CCInputMapping* out_shader_input_mappings, CCShaderId* out_shader_id);
+
+static uint8_t color_comb_component(uint32_t v)
+{
+    switch (v) {
+        case G_CCMUX_TEXEL0:
+            return CC_TEXEL0;
+        case G_CCMUX_TEXEL1:
+            return CC_TEXEL1;
+        case G_CCMUX_PRIMITIVE:
+            return CC_PRIM;
+        case G_CCMUX_SHADE:
+            return CC_SHADE;
+        case G_CCMUX_ENVIRONMENT:
+            return CC_ENV;
+        case G_CCMUX_TEXEL0_ALPHA:
+            return CC_TEXEL0A;
+        case G_CCMUX_LOD_FRACTION:
+            return CC_LOD;
+        default:
+            return CC_0;
+    }
+}
+
+static inline ColorCombinerId color_combiner_id(ShaderSource a, ShaderSource b, ShaderSource c, ShaderSource d)
+{
+    return (d << 9) | (c << 6) | (b << 3) | a;
+}
+
+static inline ColorCombinerId convert_color_combiner(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
+{
+    return color_combiner_id(color_comb_component(a), color_comb_component(b), color_comb_component(c), color_comb_component(d));
+}
+
+static inline ColorCombinerId calculate_cc_id(CombineMode combine_mode, bool use_fog, bool texture_edge, bool use_noise, bool use_alpha)
+{
+    ColorCombinerId id = combine_mode;
+
+    if (use_fog)      id |= SHADER_OPT_FOG;
+    if (texture_edge) id |= SHADER_OPT_TEXTURE_EDGE;
+    if (use_noise)    id |= SHADER_OPT_NOISE;
+    if (use_alpha)
+        id |= SHADER_OPT_ALPHA;
+    else
+        id &= ~0xfff000;
+
+    return id;
+}
 
 #ifdef __cplusplus
 }

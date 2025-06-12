@@ -234,10 +234,10 @@ void aSetLoopImpl(ADPCM_STATE *adpcm_loop_state) {
  *  9 bytes length
  *  Byte 1, upper nibble: shift magnitude, range [0-12]
  *  Byte 1, lower nibble: table index, range [0-7]
- *  Bytes 2-9: data
+ *  Bytes 2-9: data, 1 nibble per output sample
  * 
  * Each ADPCM packet produces 16 PCM samples.
- * Each PCM sample produced depends on the prior two PCM samples.
+ * Each ADPCM packet depends on the prior two PCM samples.
  * Data is decoded one ADPCM packet at a time.
 */
 static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int16_t* out, int nbytes) {
@@ -254,8 +254,8 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
 
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
-        const uint8_t shift = *in >> 4; // should be in 0..12
-        const uint8_t table_index = *in++ & 0xf; // should be in 0..7
+        const uint8_t shift = *in >> 4; // range 0..12
+        const uint8_t table_index = *in++ & 0xf; // range 0..7
         const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
         const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
 
@@ -265,28 +265,29 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
             const int16_t prev1 = out[-1];
             const int16_t prev2 = out[-2];
             
-            // Load 4 bytes from *in (total of 8)
+            // Load, extend, and shift 8 nibbles from in, and calculate initial accumulators
             #pragma GCC unroll 4
             for (int j = 0; j < 8; j += 2, in++) {
-                const uint8_t in_val = *in;
-                ins[j] =     (((in_val >> 4) << 28) >> 28) << shift;
-                ins[j + 1] = (((in_val & 0xf) << 28) >> 28) << shift;
+                ins[j] =     (((*in >> 4)  << 28) >> 28) << shift; // Upper nibble
+                ins[j + 1] = (((*in & 0xf) << 28) >> 28) << shift; // Lower nibble
             }
 
             #pragma GCC unroll 8
             for (int j = 0; j < 8; j++, out++) {
-                int32_t acc = tbl_0[j] * prev2 + tbl_1[j] * prev1 + (ins[j] << 11);
+                int32_t accumulator = tbl_0[j] * prev2 + tbl_1[j] * prev1 + (ins[j] << 11);
 
-                // Iterate tbl in descending order from [j-1, 0]
-                // Iterate ins in ascending order from  [0, j-1]
+                // Iterate tbl_1  in descending order from [j-1, 0]
+                // Iterate inputs in ascending order from  [0, j-1]
                 for (int k = 0; k < j; k++)
-                    acc += tbl_1[(j - k) - 1] * ins[k];
-                
-                *out = clamp16(acc >> 11);
+                    accumulator += tbl_1[(j - k) - 1] * ins[k];
+
+                *out = clamp16(accumulator >> 11);
             }
         }
         nbytes -= 16 * sizeof(int16_t);
     }
+
+    // Save the last 16 samples for decoding the next chunk
     memcpy(state, out - 16, 16 * sizeof(int16_t));
 }
 

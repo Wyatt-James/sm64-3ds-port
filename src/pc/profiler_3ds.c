@@ -6,38 +6,10 @@
 #include <string.h>
 #include <stdio.h>
 
-// We want to use the 3DS version of this function
-#define u64 __3ds_u64
-#define s64 __3ds_s64
-#define u32 __3ds_u32
-#define vu32 __3ds_vu32
-#define vs32 __3ds_vs32
-#define s32 __3ds_s32
-#define u16 __3ds_u16
-#define s16 __3ds_s16
-#define u8 __3ds_u8
-#define s8 __3ds_s8
-
+// We want to use the 3DS version of osGetTime
 #undef osGetTime
-#include <3ds/os.h>
-
-#undef u64
-#undef s64
-#undef u32
-#undef vu32
-#undef vs32
-#undef s32
-#undef u16
-#undef s16
-#undef u8
-#undef s8
-
-// Avoid compiler warnings for unused variables
-#ifdef __GNUC__
-#define UNUSED __attribute__((unused))
-#else
-#define UNUSED
-#endif
+#include "src/pc/n3ds/libctru_inc.h"
+#include "src/pc/pc_macros.h"
 
 #define TIMESTAMP_SNOOP_INTERVAL 8
 #define TIMESTAMP_ARRAY_COUNT(arr) (int)(sizeof(arr) / sizeof(arr[0]))
@@ -83,7 +55,7 @@ static volatile uint32_t      circ_cur_frame = 0, circ_next_frame = 0; // Circul
 static volatile uint8_t snoop_interval = 180;
 static volatile uint8_t snoop_counters[PROFILER_3DS_NUM_TRACKED_SNOOP_IDS];
 
-static char log_string[PROFILER_3DS_LOG_STRING_LENGTH];
+static USED char log_string[PROFILER_3DS_LOG_STRING_LENGTH];
 
 // libctru's osTickCounterUpdate measures time between updates. We want time since last reset.
 static inline void update_tick_counters() {
@@ -372,7 +344,7 @@ int profiler_3ds_create_log_string_circular_internal(uint32_t min_id_to_print, u
             }
 
             // Append value
-            if (!STR_HAS_SPACE(LOG_BUF_SIZE, log_len, worker_len)) goto too_long;
+            if (!STR_HAS_SPACE(LOG_BUF_SIZE, log_len, (size_t) worker_len)) goto too_long;
             strcpy(&log_string[log_len], worker);
             log_len += worker_len;
 
@@ -415,7 +387,8 @@ int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint3
     profiler_3ds_create_log_string_circular_internal(min_id_to_print, max_id_to_print, TIME);
 }
 
-volatile enum PrintMode snoop_print_mode = TIME;
+USED volatile enum PrintMode snoop_print_mode = TIME;
+USED volatile int breakpoint = 0;
 
 // Computes some useful information for the timestamps. Intended for debugger use.
 void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
@@ -435,6 +408,11 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 3: Build Display List
     // 4: GFX Rendering API Start Frame (VSync)
     // 5: GFX Run Display List
+
+    // 60fps IDs:
+    
+    // 6: GFX Rendering API Start Frame Interpolated (VSync)
+    // 7: GFX Run Display List Interpolated
 
     // Detailed IDs (replaces GFX Run Display List):
     // 5: Vertex Copy
@@ -465,14 +443,12 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 24: C3D_LogSlot_DrawArrays
     // 25: C3D_LogSlot_DrawElements
 
-
     // Use with conditional breakpoints in GDB
-    UNUSED volatile int i = 0;
-    i++;
-    i++;
-    i++;
-    i++;
-    i++;
+    breakpoint++;
+    breakpoint++;
+    breakpoint++;
+    breakpoint++;
+    breakpoint++;
 
     // Use to break after some number of iterations
     if (snoop_id < PROFILER_3DS_NUM_TRACKED_SNOOP_IDS) {
@@ -490,10 +466,10 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                         UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_internal(0, 5 /* + 20*/, snoop_print_mode);
                         snoop_print_mode = NONE;
 
-                        i += 5; // Place a breakpoint here
+                        breakpoint += 5; // Place a breakpoint here
                     }
                     
-                    i += 5; // Place a breakpoint here
+                    breakpoint += 5; // Place a breakpoint here
                     break;
                 }
             }
@@ -502,7 +478,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
     // IDs beyond the limit are still valid, but untracked
     else
-        i++;
+        breakpoint++;
 
     return; // Leave this here for breakpoints
 }

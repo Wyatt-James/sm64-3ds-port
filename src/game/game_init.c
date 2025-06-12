@@ -21,11 +21,6 @@
 #include "thread6.h"
 #include <prevent_bss_reordering.h>
 
-#ifdef TARGET_N3DS
-#include "src/pc/gfx/color_conversion.h"
-#include "src/pc/gfx/rendering_apis/citro3d/gfx_citro3d.h"
-#endif
-
 // FIXME: I'm not sure all of these variables belong in this file, but I don't
 // know of a good way to split them
 struct Controller gControllers[3];

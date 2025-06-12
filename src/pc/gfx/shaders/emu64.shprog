@@ -3,6 +3,7 @@ emu64/05.v.pica
 emu64/07.v.pica
 emu64/09.v.pica
 emu64/11.v.pica
+emu64/menu.v.pica
 emu64/texture.v.pica
 emu64/color_combiner.v.pica
 emu64/projection.v.pica
