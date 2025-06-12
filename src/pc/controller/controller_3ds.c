@@ -16,21 +16,22 @@
 
 typedef struct
 {
-    int n64, n3ds;
+    u16 n64;
+    __3ds_u32 n3ds;
 } ButtonMapping;
 
-__3ds_u32 controller_3ds_force_hold = 0;
+u16 controller_3ds_force_hold = 0;
 static ButtonMapping button_mapping[10];
 
-static void set_button_mapping(int index, int mask_n64, int mask_3ds)
+static void set_button_mapping(int index, u16 mask_n64, unsigned int mask_3ds)
 {
-    button_mapping[index].n3ds = mask_3ds;
+    button_mapping[index].n3ds = (__3ds_u32) mask_3ds;
     button_mapping[index].n64 = mask_n64;
 }
 
 static u16 controller_3ds_get_held(void)
 {
-    u32 res = 0;
+    u16 res = 0;
     N3DS_ButtonState* buttons = n3ds_hid_buttons();
     __3ds_u32 kHeld = buttons->held;
 
