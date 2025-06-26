@@ -2,12 +2,13 @@
 
 // Must be on top to ensure that 3DS types do not redefine other types.
 // Includes 3ds.h and 3ds_types.h.
+#include "macros.h"
 #include "audio_3ds_threading.h"
 #include "src/pc/n3ds/n3ds_system_info.h"
+#include "src/pc/n3ds/n3ds_config.h"
 
 #include <stdio.h>
 #include <string.h>
-#include "macros.h"
 #include "audio_3ds.h"
 #include "src/audio/external.h"
 
@@ -55,7 +56,7 @@ union NdspMix {
     } mix;
 };
 
-struct N3dsThreadInfo n3ds_audio_thread_info;
+N3DS_ThreadInfo n3ds_audio_thread_info;
 N3DS_Processor n3ds_desired_audio_cpu = OLD_CORE_0; // This will be overwritten externally
 
 bool s_thread5_wait_for_audio_to_finish = true;
@@ -97,7 +98,7 @@ static int audio_3ds_get_desired_buffered(void)
 }
 
 // Returns true if the next buffer is FREE or DONE. Available in audio_3ds.h.
-bool audio_3ds_next_buffer_is_ready()
+bool audio_3ds_next_buffer_is_ready(void)
 {
     const u8 status = sDspBuffers[sNextBuffer].status;
     return status == NDSP_WBUF_FREE || status == NDSP_WBUF_DONE;
@@ -142,7 +143,7 @@ static void audio_3ds_play_ext(const uint8_t *buf, size_t len)
         audio_3ds_play_internal(buf, len, len);
 }
 
-inline void audio_3ds_run_one_frame() {
+void audio_3ds_run_one_frame(void) {
 
     // If we've buffered less than desired, SAMPLES_HIGH; else, SAMPLES_LOW
     u32 num_audio_samples = audio_3ds_buffered() < audio_3ds_get_desired_buffered() ? SAMPLES_HIGH : SAMPLES_LOW;
@@ -176,7 +177,7 @@ static bool audio_3ds_thread_should_sleep()
     return !(s_audio_frames_to_process > 0);
 }
 
-static void audio_3ds_thread_teardown(UNUSED struct N3dsThreadInfo* thread_info)
+static void audio_3ds_thread_teardown(UNUSED N3DS_ThreadInfo* thread_info)
 {
     // Set to a negative value to ensure that the game loop does not deadlock.
     s_audio_frames_to_process = -9999;
@@ -195,7 +196,7 @@ static void initialize_thread_info()
     // Fill the name with terminators and then copy the default.
     memcpy(n3ds_audio_thread_info.friendly_name, N3DS_AUDIO_THREAD_NAME, sizeof(N3DS_AUDIO_THREAD_NAME));
     
-    n3ds_audio_thread_info.desired_priority = N3DS_DESIRED_PRIORITY_AUDIO_THREAD;
+    n3ds_audio_thread_info.desired_priority = g3dsConfig.desired_audio_thread_priority;
     n3ds_audio_thread_info.should_sleep     = audio_3ds_thread_should_sleep;
     n3ds_audio_thread_info.task             = audio_3ds_run_one_frame;
     n3ds_audio_thread_info.teardown         = audio_3ds_thread_teardown;

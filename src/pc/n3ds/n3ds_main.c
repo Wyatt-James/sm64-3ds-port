@@ -14,12 +14,13 @@
 #include "src/pc/profiler_3ds.h"
 
 static void set_up_threading() {
+    __3ds_s32 main_priority = g3dsConfig.desired_main_thread_priority;
 
     // Set main thread priority to desired value.
-    if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, N3DS_DESIRED_PRIORITY_MAIN_THREAD)))
-        fprintf(stdout, "Set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+    if (R_SUCCEEDED(svcSetThreadPriority(CUR_THREAD_HANDLE, main_priority)))
+        fprintf(stdout, "Set main thread priority to 0x%lx.\n", main_priority);
     else
-        fprintf(stderr, "Couldn't set main thread priority to 0x%x.\n", N3DS_DESIRED_PRIORITY_MAIN_THREAD);
+        fprintf(stderr, "Couldn't set main thread priority to 0x%lx.\n", main_priority);
 
     // We only really need the one extra core.
     if (!g3dsSystemInfo.is_new_3ds && g3dsConfig.enable_multi_threading)

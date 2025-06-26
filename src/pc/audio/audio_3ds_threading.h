@@ -6,8 +6,6 @@
 // Set to 1 to enable sleep, or 0 to disable.
 #define N3DS_AUDIO_ENABLE_SLEEP_FUNC true
 
-#define N3DS_DESIRED_PRIORITY_AUDIO_THREAD 0x18 // Priority of audio thread
-
 // Audio sleep duration of 10 microseconds (0.01 millis). May sleep for longer.
 #define N3DS_AUDIO_SLEEP_DURATION_NANOS N3DS_MICROS_TO_NANOS(10)
 #define N3DS_AUDIO_THREAD_NAME "audio"
@@ -20,7 +18,7 @@
 #define N3DS_AUDIO_SLEEP_FUNC(time) do {} while (0)
 #endif
 
-extern struct N3dsThreadInfo n3ds_audio_thread_info;
+extern N3DS_ThreadInfo n3ds_audio_thread_info;
 extern N3DS_Processor n3ds_desired_audio_cpu;
 
 // Controls when Thread5 is allowed to skip waiting for the audio thread.

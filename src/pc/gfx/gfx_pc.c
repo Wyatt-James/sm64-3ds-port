@@ -213,6 +213,15 @@ union VertexBuffer {
     uint8_t as_u8[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX * 4];
 };
 
+union SamplerConfig {
+    struct {
+        uint8_t pad;
+        uint8_t cms, cmt;
+        bool linear_filter;
+    };
+    uint32_t all;
+};
+
 struct TextureHashmapNode {
     struct TextureHashmapNode *next;
 
@@ -220,8 +229,7 @@ struct TextureHashmapNode {
     uint8_t fmt, siz;
 
     uint32_t texture_id;
-    uint8_t cms, cmt;
-    bool linear_filter;
+    union SamplerConfig sampler_config;
 };
 
 struct TextureCache {
@@ -613,9 +621,7 @@ static bool gfx_texture_cache_lookup(int tile, struct TextureHashmapNode **n, co
     }
     gfx_rapi_select_texture(tile, (*node)->texture_id);
     gfx_rapi_set_sampler_parameters(tile, false, 0, 0);
-    (*node)->cms = 0;
-    (*node)->cmt = 0;
-    (*node)->linear_filter = false;
+    (*node)->sampler_config = (union SamplerConfig) {};
     (*node)->next = NULL;
     (*node)->texture_addr = orig_addr;
     (*node)->fmt = fmt;
@@ -842,7 +848,7 @@ static void gfx_sp_tri_update_state()
         gfx_flush(7);
         gfx_rapi_set_cc_env_color(rdp.env_color.u32);
     }
-        
+
     if (shader_state.used_textures.either) {
         const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
         if (rendering_state.linear_filter != linear_filter) {
@@ -859,6 +865,7 @@ static void gfx_sp_tri_update_state()
             gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
         }
 
+        union SamplerConfig sampler_config = {.cms = rdp.texture_tile.cms, .cmt = rdp.texture_tile.cmt, .linear_filter = linear_filter};
         for (int i = 0; i < 2; i++) {
             if (shader_state.used_textures.bools[i]) {
                 if (rdp.textures_changed.bools[i]) {
@@ -868,13 +875,8 @@ static void gfx_sp_tri_update_state()
                     upload_texture_to_rendering_api(i);
                 }
 
-                if (rendering_state.textures[i]->linear_filter != linear_filter 
-                || rendering_state.textures[i]->cms != rdp.texture_tile.cms
-                || rendering_state.textures[i]->cmt != rdp.texture_tile.cmt)
-                {
-                    rendering_state.textures[i]->linear_filter = linear_filter;
-                    rendering_state.textures[i]->cms = rdp.texture_tile.cms;
-                    rendering_state.textures[i]->cmt = rdp.texture_tile.cmt;
+                if (rendering_state.textures[i]->sampler_config.all != sampler_config.all) {
+                    rendering_state.textures[i]->sampler_config      = sampler_config; // Struct copy
                     granular_log_time(6); // gfx_sp_tri_update_state
                     gfx_flush(11);
                     gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
@@ -895,7 +897,7 @@ static void gfx_sp_tri_update_state()
 
     // Nearly 100% savings with good numbers (potentially outdated metric)
     // Handled here to optimize rectangle drawing
-    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
+    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER; // This would save 2 instructions if we moved it up by culling_mode, but alas, icache is mine enemy
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
         granular_log_time(6); // gfx_sp_tri_update_state
@@ -954,6 +956,8 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     uint32_t old_mode = rsp.geometry_mode;
     uint32_t new_mode = (rsp.geometry_mode & ~clear) | set;
 
+    // Even though we do deferred checks in update_state, this is still required
+    // because geomode contains other bits that still need a flush.
     if (new_mode != old_mode) {
         gfx_flush(25);
         rsp.geometry_mode = new_mode;

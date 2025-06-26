@@ -11,12 +11,12 @@
 bool n3ds_old_core_1_is_available = false;
 
 
-static void default_init(UNUSED struct N3dsThreadInfo* thread_info) {}
+static void default_init(UNUSED N3DS_ThreadInfo* thread_info) {}
 static bool default_should_sleep() { return false; }
-static void default_task() {}
-static void default_teardown(UNUSED struct N3dsThreadInfo* thread_info) {}
+static void default_task(void) {}
+static void default_teardown(UNUSED N3DS_ThreadInfo* thread_info) {}
 
-void n3ds_thread_info_init(struct N3dsThreadInfo* thread_info)
+void n3ds_thread_info_init(N3DS_ThreadInfo* thread_info)
 {
     thread_info->is_disabled                 = true;
     thread_info->friendly_id                 = 0xBEEF;
@@ -27,7 +27,7 @@ void n3ds_thread_info_init(struct N3dsThreadInfo* thread_info)
     memcpy(thread_info->friendly_name,         DEFAULT_THREAD_NAME, sizeof(DEFAULT_THREAD_NAME));
     
     thread_info->assigned_cpu                = OLD_CORE_0;
-    thread_info->desired_priority            = N3DS_DESIRED_PRIORITY_MAIN_THREAD;
+    thread_info->desired_priority            = g3dsConfig.desired_main_thread_priority;
     thread_info->actual_priority             = -1;
     thread_info->priority_retrieved          = false;
     thread_info->enable_sleep_while_spinning = true;
@@ -49,7 +49,7 @@ void n3ds_thread_info_init(struct N3dsThreadInfo* thread_info)
     thread_info->teardown     = default_teardown;
 }
 
-void n3ds_thread_loop_common(struct N3dsThreadInfo* thread_info)
+void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info)
 {
     thread_info->on_start(thread_info);
     thread_info->has_settled = true;
@@ -71,7 +71,7 @@ void n3ds_thread_loop_common(struct N3dsThreadInfo* thread_info)
     thread_info->teardown(thread_info);
 }
 
-int32_t n3ds_thread_start(struct N3dsThreadInfo* thread_info)
+int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info)
 {
     int friendly_id = (int) thread_info->friendly_id; // Only used for printing
     char* friendly_name = thread_info->friendly_name;
@@ -145,7 +145,7 @@ int32_t n3ds_thread_start(struct N3dsThreadInfo* thread_info)
     return 0;
 }
 
-int32_t n3ds_enable_old_core_1()
+int32_t n3ds_enable_old_core_1(void)
 {
     static bool has_run = false;
 

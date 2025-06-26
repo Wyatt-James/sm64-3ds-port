@@ -6,8 +6,6 @@
 
 #include "src/pc/n3ds/libctru_inc.h"
 
-#define N3DS_DESIRED_PRIORITY_MAIN_THREAD 0x19  // Priority of thread5
-
 #define N3DS_SECONDS_TO_NANOS(t) (t * 1000000000)     // Calculate a duration in seconds
 #define N3DS_MILLIS_TO_NANOS(t)  (t * 1000000)        // Calculate a duration in milliseconds
 #define N3DS_MICROS_TO_NANOS(t)  (t * 1000)           // Calculate a duration in microseconds
@@ -25,15 +23,17 @@ typedef enum
 // If true, runtime systems will avoid creating threads and using thread functions.
 extern bool n3ds_old_core_1_is_available;
 
-struct N3dsThreadInfo {
+typedef struct N3DS_ThreadInfo_tag N3DS_ThreadInfo; // Required for pointer-to-self
 
+struct N3DS_ThreadInfo_tag
+{
     // --- Constants ---
     bool is_disabled;                 // Determines whether this thread will be used or not. Relevant for synchronous engine modes.
     int32_t friendly_id;              // Programmer-assigned thread ID.
     void* misc_data;                  // Miscellaneous data. Put whatever you want in here.
     char friendly_name[16];           // Friendly name for printing.
 
-    N3DS_Processor assigned_cpu;        // Which CPU this thread is assigned to.
+    N3DS_Processor assigned_cpu;      // Which CPU this thread is assigned to.
     int32_t desired_priority;         // Priority of this thread.
     int32_t actual_priority;          // Real priority of this thread, as obtained via a syscall. If the syscall fails, it is set to desired_priority.
     bool priority_retrieved;          // True if the thread priority syscall worked, false otherwise.
@@ -52,18 +52,18 @@ struct N3dsThreadInfo {
     volatile bool attempted_to_start;      // Set to true when attempting to start.
 
     // --- API Functions ---
-    void (*entry_point)  (struct N3dsThreadInfo* thread_info); // Entry-point.
-    void (*on_start)     (struct N3dsThreadInfo* thread_info); // Runs once on startup.
-    bool (*should_sleep) (void);                               // Determines whether this thread should run its task or spin.
-    void (*task)         (void);                               // Does real work.
-    void (*teardown)     (struct N3dsThreadInfo* thread_info); // Runs after the thread exits its loop.
+    void (*entry_point)  (N3DS_ThreadInfo* thread_info); // Entry-point.
+    void (*on_start)     (N3DS_ThreadInfo* thread_info); // Runs once on startup.
+    bool (*should_sleep) (void);                         // Determines whether this thread should run its task or spin.
+    void (*task)         (void);                         // Does real work.
+    void (*teardown)     (N3DS_ThreadInfo* thread_info); // Runs after the thread exits its loop.
 };
 
 // Initializes an N3dsThreadInfo object.
-extern void n3ds_thread_info_init(struct N3dsThreadInfo* thread_info);
+extern void n3ds_thread_info_init(N3DS_ThreadInfo* thread_info);
 
 // A provied thread entrypoint.
-extern void n3ds_thread_loop_common(struct N3dsThreadInfo* thread_info);
+extern void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info);
 
 /*
  * Starts a thread with the given information.
@@ -73,7 +73,7 @@ extern void n3ds_thread_loop_common(struct N3dsThreadInfo* thread_info);
  *  -2: thread was disabled, so no attempt was made
  *  -3: already attempted to start this thread
  */
-extern int32_t n3ds_thread_start(struct N3dsThreadInfo* thread_info);
+extern int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info);
 
 /* Attempts to enable O3DS core 1.
  * Return:
@@ -81,4 +81,4 @@ extern int32_t n3ds_thread_start(struct N3dsThreadInfo* thread_info);
  * -1: failure on syscall
  * -2: function was run twice
  */
-extern int32_t n3ds_enable_old_core_1();
+extern int32_t n3ds_enable_old_core_1(void);
