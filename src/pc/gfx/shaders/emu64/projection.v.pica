@@ -31,7 +31,8 @@
 
 model_view:
     ; sub_scratch_1 = model_view_mtx * inpos
-    ; Needs to be DPHI because 1.0 is appended to src1 (left input arg).
+    ; Needs to be DPHI because 1.0 is appended to src1 (left input arg),
+    ; and we need src2 to be able to access uniforms.
     dphi sub_scratch_1.x, sub_param_1, model_view_mtx[0]
     dphi sub_scratch_1.y, sub_param_1, model_view_mtx[1]
     dphi sub_scratch_1.z, sub_param_1, model_view_mtx[2]
