@@ -37,6 +37,7 @@
 # logging
 /build_logs
 /build_logs/*
+gdb.txt
 
 # Debug files
 *.dSYM/
