@@ -303,15 +303,15 @@ struct RenderingState {
     enum Stereoscopic3dMode stereo_3d_mode;
     enum IodMode iod_mode;
     uint8_t num_lights;
-    bool enable_lighting;
-    bool enable_texgen;
+    uint8_t enable_lighting; // u8 bool
+    uint8_t enable_texgen; // u8 bool
     union TextureScalingFactor texture_scaling_factor; // Why is this slow as hell when in RenderingState instead of ShaderState? 7.01 vs 7.18ms in castle courtyard
     uint32_t current_textures[2];
     
     ColorCombinerId cc_id;
     union RGBA32 prim_color;
     union RGBA32 env_color;
-    bool linear_filter;
+    uint8_t linear_filter; // u8 bool
     union int16x4 texture_settings;
     uint32_t culling_mode;
     bool depth_test;
@@ -365,6 +365,8 @@ COLD static void shader_state_init(struct ShaderState* ss)
 
 COLD static void rendering_state_init(struct RenderingState* rs)
 {
+    // We use ~0 for some "bool u8" initial conditions to ensure that
+    // `renderstate == curstate` will always fail the first time.
     rs->cc_id = DELIBERATELY_INVALID_CC_ID;
     rs->texture_settings.u64 = ~0;
     rs->prim_color.u32 = ~rdp.prim_color.u32;
@@ -477,7 +479,7 @@ static void gfx_apply_matrices()
 
 static void gfx_apply_lighting()
 {
-    const bool enable_lighting = rsp.geometry_mode & G_LIGHTING;
+    const bool enable_lighting = (rsp.geometry_mode & G_LIGHTING) ? true : false;
 
     if (rendering_state.enable_lighting != enable_lighting) {
         rendering_state.enable_lighting  = enable_lighting;
