@@ -1,6 +1,11 @@
 .nodvle
 
-; Emu64 color combiner source selection routine
+; Emu64 vertex color selection routine
+; This is a hack originally present in the PC port which lets us
+; select from a wider variety of vertex colors without robust
+; color combiner emulation. In an ideal world, we would get rid
+; of this and just use the TEV colors. This also handles LoD
+; calculation if applicable.
 
 ; ----- Uniforms -----
 .fvec rsp_colors[4]   ; See enum below
@@ -27,7 +32,7 @@
 .alias color_white    rsp_colors[3]   ; Vector with { 1, 1, 1, 1 }
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register
@@ -53,7 +58,7 @@
 ;   sub_scratch_2
 ;   cmp
 ;   a0
-.proc cc_color_select
+.proc select_vertex_color
 
 
     ; ----- RGB -----

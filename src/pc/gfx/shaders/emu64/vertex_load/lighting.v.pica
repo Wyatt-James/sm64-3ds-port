@@ -1,7 +1,9 @@
 .nodvle
 
 ; Emu64 Vertex Lighting routine.
-; Calculates lighting based on num_lights.
+; Vertex lighting is normally handled by the RSP during vertex load.
+; Uses the vertex normals, the current ambient and directional lights,
+; and the current lookat matrix.
 
 ; ----- Uniforms -----
 .fvec vertex_load_flags        ; { num_lights, enable_texgen, tex_scale_s, tex_scale_t }
@@ -25,7 +27,7 @@
 .alias num_lights     vertex_load_flags.xxxx ; Vector full of num_lights. Includes ambient.
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register

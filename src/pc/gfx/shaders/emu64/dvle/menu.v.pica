@@ -1,5 +1,9 @@
 ; position, texture
 
+; A shader entrypoint used specifically for the touch-screen menu.
+; While technically unrelated to the rest of emu64, it is packaged here
+; for performance reasons.
+
 ; ----- Uniforms -----
 ; Due to LibCTRU weirdness, declare ALL uniforms in this first file.
 .fvec projection_mtx[4], model_view_mtx[4]

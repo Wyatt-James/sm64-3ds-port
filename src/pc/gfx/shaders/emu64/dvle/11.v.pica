@@ -1,4 +1,4 @@
-; position, texture, color
+; position, texture, normals + alpha
 ; Example usage: text on file select screen, textured screen transitions
 
 ; ----- Uniforms -----
@@ -12,12 +12,12 @@
 .constf dummy_const (0.0, 0.0, 0.0, 0.0)
 
 ; ----- Aliases -----
-.alias texture_load_scale  vertex_load_flags.zw ; {tex_scale_s, tex_scale_t}
-.alias enable_texgen       vertex_load_flags.y  ; {enable_texgen}
-.alias color_scale         emu64_const_1.wwww   ; Vector full of 1/255
+.alias texture_load_scale vertex_load_flags.zw ; {tex_scale_s, tex_scale_t}
+.alias enable_texgen      vertex_load_flags.y  ; {enable_texgen}
+.alias color_scale        emu64_const_1.wwww   ; Vector full of 1/255
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register
@@ -28,9 +28,10 @@
 .alias sub_return_2   r9  ; Subroutine return register
 
 ; ----- Inputs -----
-.in inpos v0 ; xyz, plus garbage for w
-.in intex v1 ; uv
-.in inclr v2 ; rgba, scale [0,255]
+.in inpos   v0 ; xyz, plus garbage for w
+.in intex   v1 ; uv
+.in innorm  v2 ; xyz, plus garbage for w
+.in inalpha v3 ; alpha in R, scale [0,255], garbage in GBA
 
 ; ----- Outputs -----
 .out outpos position  ; xyzw
@@ -38,8 +39,8 @@
 .out outtc1 texcoord1 ; texture unit 1
 .out outclr color     ; rgba
 
-.entry main_07
-.proc main_07
+.entry main_11
+.proc main_11
 
 projection:
     mov sub_param_1, inpos
@@ -49,7 +50,8 @@ projection:
 texture:
     ; Texgen
     mov sub_param_1, intex
-    mov sub_param_2, inclr               ; Will be used as vertex normals
+    mov sub_param_2, innorm
+    mov sub_param_2.a, inalpha.x
     mov sub_param_3, texture_load_scale
     mov sub_param_3.z, enable_texgen
     call generate_texcoord_pair
@@ -61,11 +63,15 @@ texture:
     mov outtc1, sub_return_1
 color:
 
+    mov sub_param_1, innorm
+    mul sub_param_1.a, color_scale, inalpha.x
+    call calculate_lighting
+
     ; Resolve color
     mov sub_param_1, rsp_color_selection.xy  ; input CC source
-    mul sub_param_2, color_scale, inclr      ; input vertex color
+    mov sub_param_2, sub_return_1            ; input vertex color
     mov sub_param_3, r0                      ; input transformed position
-    call cc_color_select
+    call select_vertex_color
     mov outclr, sub_return_1
 
     ; We're finished

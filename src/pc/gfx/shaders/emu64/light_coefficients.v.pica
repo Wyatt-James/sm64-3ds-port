@@ -1,6 +1,8 @@
 .nodvle
 
 ; Emu64 Lighting Coefficient Calculation Routine
+; Calculates the light coefficients for the given light direction,
+; using the current transposed model-view matrix.
 
 ; ----- Uniforms -----
 .fvec transposed_model_view_mtx[4]
@@ -12,7 +14,7 @@
 .alias zeros          emu64_const_1.xxxx     ; Vector full of zeros
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register

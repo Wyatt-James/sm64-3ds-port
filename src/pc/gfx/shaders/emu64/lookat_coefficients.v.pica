@@ -1,12 +1,13 @@
 .nodvle
 
 ; Emu64 Lookat Coefficient grabbing routine
+; Returns the lookat coefficients from the current model-view matrix uniform.
 
 ; ----- Uniforms -----
 .fvec model_view_mtx[4]
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register

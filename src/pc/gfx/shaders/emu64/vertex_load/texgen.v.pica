@@ -1,6 +1,12 @@
 .nodvle
 
 ; Emu64 Texcoord Generation routine
+; Texture coordinate generation is normally handled by the RSP during vertex load.
+; This function handles procedural texture coordinate generation,
+; using the current lookat coefficients.
+; It also handles N3DS texture coordinate scale correction. The N3DS only accepts
+; textures with power-of-2 dimensions, so anything else needs its coordinate scale
+; to be altered.
 
 ; ----- Constant Uniforms -----
 .fvec emu64_const_1       ; { 0,  1, 1/127,    1/255 }
@@ -14,7 +20,7 @@
 .alias one_over_4     texture_const_2.wwww ; Vector full of 1/4
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register
@@ -79,5 +85,5 @@ ifc cmp.x
 .end
 
 return:
-    mul sub_return_1, sub_scratch_2, sub_scratch_3
+    mul sub_return_1, sub_scratch_2, sub_scratch_3       ; Multiply whatever we got by tex_scale
 .end

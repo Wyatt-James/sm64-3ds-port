@@ -1,6 +1,8 @@
 .nodvle
 
 ; Emu64 Texture coordinate calculation routine
+; This function calculates the final texture coordinates,
+; as would be calculated by the RDP.
 
 ; ----- Uniforms -----
 .fvec tex_settings_1  ; { scale_s, scale_t, uv_offset, UNUSED }
@@ -20,7 +22,7 @@
 .alias scale_1_32     texture_const_2.zzzz  ; Vector full of 1/32
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register

@@ -1,6 +1,13 @@
 .nodvle
 
 ; Emu64 vertex projection routine
+; N64 matrix projection is normally handled by the RSP during vertex load.
+; This function handles projection by both N64 matrices, as well
+; as the port-specific projection matrix. The final result and
+; the result of both N64 matrices are returned separately, as
+; the intermediate result is used for lighting. Additionally,
+; the vertex W component is implicitly 1.0, though the vertex
+; data itself remains unmodified.
 
 ; ----- Uniforms -----
 .fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4]
@@ -8,7 +15,7 @@
 ; ----- Aliases -----
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register
@@ -26,7 +33,6 @@
 ;   sub_return_2: (inpos * model_view_mtx) * game_projection_mtx
 ; Also Uses:
 ;   sub_scratch_1
-;   sub_scratch_2
 .proc matrix_projection
 
 model_view:
@@ -38,17 +44,16 @@ model_view:
     dphi sub_scratch_1.z, sub_param_1, model_view_mtx[2]
     dphi sub_scratch_1.w, sub_param_1, model_view_mtx[3]
 game_projection:
-    ; sub_scratch_2 = game_projection_mtx * inpos
-    dp4 sub_scratch_2.x, game_projection_mtx[0], sub_scratch_1
-    dp4 sub_scratch_2.y, game_projection_mtx[1], sub_scratch_1
-    dp4 sub_scratch_2.z, game_projection_mtx[2], sub_scratch_1
-    dp4 sub_scratch_2.w, game_projection_mtx[3], sub_scratch_1
-    mov sub_return_2, sub_scratch_2
+    ; sub_return_2 = game_projection_mtx * inpos
+    dp4 sub_return_2.x, game_projection_mtx[0], sub_scratch_1
+    dp4 sub_return_2.y, game_projection_mtx[1], sub_scratch_1
+    dp4 sub_return_2.z, game_projection_mtx[2], sub_scratch_1
+    dp4 sub_return_2.w, game_projection_mtx[3], sub_scratch_1
 system_projection:
     ; sub_return_1 = projection_mtx * inpos
-    dp4 sub_return_1.x, projection_mtx[0], sub_scratch_2
-    dp4 sub_return_1.y, projection_mtx[1], sub_scratch_2
-    dp4 sub_return_1.z, projection_mtx[2], sub_scratch_2
-    dp4 sub_return_1.w, projection_mtx[3], sub_scratch_2
+    dp4 sub_return_1.x, projection_mtx[0], sub_return_2
+    dp4 sub_return_1.y, projection_mtx[1], sub_return_2
+    dp4 sub_return_1.z, projection_mtx[2], sub_return_2
+    dp4 sub_return_1.w, projection_mtx[3], sub_return_2
 
 .end

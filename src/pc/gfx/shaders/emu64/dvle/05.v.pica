@@ -14,7 +14,7 @@
 .alias color_scale emu64_const_1.wwww     ; Vector full of 1/255
 
 ; ----- Subroutine Registers -----
-; These are intended purposes, but they may vary between subroutines\.
+; These are intended purposes, but they may vary between subroutines.
 .alias sub_scratch_1  r10 ; Subroutine scratch register
 .alias sub_scratch_2  r11 ; Subroutine scratch register
 .alias sub_scratch_3  r8  ; Subroutine scratch register
@@ -53,7 +53,7 @@ color:
     mov sub_param_1, rsp_color_selection.xy  ; input CC source
     mul sub_param_2, color_scale, inclr      ; input vertex color
     mov sub_param_3, r0                      ; input transformed position
-    call cc_color_select
+    call select_vertex_color
     mov outclr, sub_return_1
 
     ; We're finished
