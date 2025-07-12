@@ -12,14 +12,14 @@ RUN wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/m
   echo 976c17a78617e157083a8e342836d35c47a45940f9d0209ee8fd210a81ba7bc0  makerom.zip | sha256sum --check
 
 # CREATES citro3d-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/citro3d/archive/9da2c515e2a76e4454c3498a42395017ff3a46ae.zip \
+RUN wget https://github.com/Wyatt-James/citro3d/archive/ad2b990d867d97397d8151e62ac52b8de2b43f19.zip \
   -O citro3d-wyatt-james.zip && \
-  echo 715BC9F5CA22A512C85B378FE28BC078325C8DD13C7BEE2D6A4662D892955C6F  citro3d-wyatt-james.zip | sha256sum --check
+  echo F14B0B8E80BB5D900DDD3B68D38CA2660FFA3E66263EA103F469759AC477576C  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/libctru/archive/00816d7643d86a901fc55228f8a5d352cadef02e.zip \
+RUN wget https://github.com/Wyatt-James/libctru/archive/4235a5857f9e533e9668b14917466b6b207166e8.zip \
   -O libctru-wyatt-james.zip && \
-  echo 4621FF5010372795A40EC23CA625B9FA6D6D203DE87FE1B4021E2EF3CE054E59  libctru-wyatt-james.zip | sha256sum --check
+  echo DB653D1EACE263824C90012D7CF35FBC983947DE87C5EBC6244DB40659141DFA  libctru-wyatt-james.zip | sha256sum --check
 
 # ----- Extract archives in-place, removing commit-specific container folders -----
   
@@ -36,7 +36,7 @@ RUN mv ./libctru-wyatt-james-temp/libctru-* ./libctru-wyatt-james
 # Install wyatt-james's fork of libctru. Use the longer line to build with GDB-optimized debug data included.
 # Removing this will leave the official devkitPro version installed.
 WORKDIR /tmp/libctru-wyatt-james/libctru
-RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 > /docker_logs/make_libctru-wyatt-james.txt
+RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_LTO=1 > /docker_logs/make_libctru-wyatt-james.txt
 # RUN make install ARCH="-ggdb -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_libctru-wyatt-james.txt
 
 # Install wyatt-james's fork of Citro3D. Use the longer line to build with GDB-optimized debug data included.
