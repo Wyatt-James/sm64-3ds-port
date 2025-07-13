@@ -274,7 +274,7 @@ struct RDP {
         uint32_t line_size_bytes;
         union int16x4 texture_settings;
     } texture_tile;
-    union boolx2 textures_changed;
+    bool textures_changed[2];
 
     uint32_t other_mode_l, other_mode_h;
     CombineMode combine_mode;
@@ -870,8 +870,8 @@ static void gfx_sp_tri_update_state()
         union SamplerConfig sampler_config = {.cms = rdp.texture_tile.cms, .cmt = rdp.texture_tile.cmt, .linear_filter = linear_filter};
         for (int i = 0; i < 2; i++) {
             if (shader_state.used_textures.bools[i]) {
-                if (rdp.textures_changed.bools[i]) {
-                    rdp.textures_changed.bools[i] = false;
+                if (rdp.textures_changed[i]) {
+                    rdp.textures_changed[i] = false;
                     granular_log_time(6); // gfx_sp_tri_update_state
                     gfx_flush(10);
                     upload_texture_to_rendering_api(i);
@@ -1086,8 +1086,8 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         rdp.texture_tile.cms = cms;
         rdp.texture_tile.cmt = cmt;
         rdp.texture_tile.line_size_bytes = line * 8;
-        rdp.textures_changed.bools[0] = true;
-        rdp.textures_changed.bools[1] = true;
+        rdp.textures_changed[0] = true;
+        rdp.textures_changed[1] = true;
     }
 
     // Only valid data is ever sent.
@@ -1105,8 +1105,8 @@ static void set_tile_size_internal(uint16_t uls, uint16_t ult, uint16_t lrs, uin
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
     if (tile == G_TX_RENDERTILE) {
         set_tile_size_internal(uls, ult, lrs, lrt);
-        rdp.textures_changed.bools[0] = true;
-        rdp.textures_changed.bools[1] = true;
+        rdp.textures_changed[0] = true;
+        rdp.textures_changed[1] = true;
     }
 }
 
@@ -1143,7 +1143,7 @@ static void gfx_dp_load_block(uint8_t tile, UNUSED uint32_t uls, UNUSED uint32_t
     SUPPORT_CHECK(size_bytes <= 4096 && "bug: too big texture");
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
 
-    rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
+    rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
 }
 
 static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t lrs, uint32_t lrt) {
@@ -1175,7 +1175,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     rdp.loaded_texture[rdp.texture_to_load.tile_number].addr = rdp.texture_to_load.addr;
     
     set_tile_size_internal(uls, ult, lrs, lrt);
-    rdp.textures_changed.bools[rdp.texture_to_load.tile_number] = true;
+    rdp.textures_changed[rdp.texture_to_load.tile_number] = true;
 }
 
 static void calculate_cc_id_wrapper()
