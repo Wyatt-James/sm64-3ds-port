@@ -305,7 +305,7 @@ struct RenderingState {
     uint8_t num_lights;
     uint8_t enable_lighting; // u8 bool
     uint8_t enable_texgen; // u8 bool
-    union TextureScalingFactor texture_scaling_factor; // Why is this slow as hell when in RenderingState instead of ShaderState? 7.01 vs 7.18ms in castle courtyard
+    union TextureScalingFactor texture_scaling_factor;
     uint32_t current_textures[2];
     
     ColorCombinerId cc_id;
@@ -380,8 +380,8 @@ COLD static void rendering_state_init(struct RenderingState* rs)
     rs->num_lights = MAX_LIGHTS;
     rs->enable_lighting = ~0;
     rs->enable_texgen = ~0;
-    rs->texture_scaling_factor.s = INT32_MAX;
-    rs->texture_scaling_factor.t = INT32_MAX;
+    rs->texture_scaling_factor.s = UINT32_MAX;
+    rs->texture_scaling_factor.t = UINT32_MAX;
     rs->current_textures[0] = ~0;
     rs->current_textures[1] = ~0;
 }
@@ -1054,7 +1054,7 @@ static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSE
 
     if (rsp.texture_scaling_factor.u64 != new_mode.u64) {
         gfx_flush(28);
-        rsp.texture_scaling_factor.u64 = new_mode.u64; // Struct copy
+        rsp.texture_scaling_factor.u64 = new_mode.u64;
     }
 }
 
