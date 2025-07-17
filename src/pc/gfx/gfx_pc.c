@@ -200,17 +200,9 @@ union TextureScalingFactor {
     uint64_t u64;
 };
 
-// Total size: 16 bytes
-struct LoadedVertex {
-    union int16x4 position; // 8 bytes (w is unused, garbage value)
-    union int16x2 uv;       // 4 bytes
-    union RGBA32 color;     // 4 bytes. Also contains normals.
-};
-
 union VertexBuffer {
     float as_float[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
     uint32_t as_u32[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
-    uint8_t as_u8[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX * 4];
 };
 
 union SamplerConfig {
@@ -252,8 +244,8 @@ struct RSP {
 
     union TextureScalingFactor texture_scaling_factor;
 
-    struct LoadedVertex* loaded_vertices[MAX_VERTICES];
-    struct LoadedVertex rect_vertices[4]; // Used only for rectangle drawing
+    Vtx* loaded_vertices[MAX_VERTICES];
+    Vtx rect_vertices[4]; // Used only for rectangle drawing
 };
 
 struct RDP {
@@ -338,7 +330,7 @@ static struct RenderingState rendering_state;
 static bool dropped_frame;
 
 // batches incoming G_TRI commands
-static struct LoadedVertex* tri_batch[MAX_BUFFERED_VERTS]; 
+static Vtx* tri_batch[MAX_BUFFERED_VERTS]; 
 static size_t num_verts_batched = 0;
 
 // contains unpacked vertex data ready to send to the Rendering API
@@ -402,10 +394,10 @@ COLD void gfx_init(struct GfxWindowManagerAPI *wapi, const char *game_name, bool
     rendering_state_init(&rendering_state);
 
     // Screen-space rect Z will always be -1.
-    rsp.rect_vertices[0].position.z =
-    rsp.rect_vertices[1].position.z =
-    rsp.rect_vertices[2].position.z =
-    rsp.rect_vertices[3].position.z = -1;
+    rsp.rect_vertices[0].v.ob[2] =
+    rsp.rect_vertices[1].v.ob[2] =
+    rsp.rect_vertices[2].v.ob[2] =
+    rsp.rect_vertices[3].v.ob[2] = -1;
 
     // Initialize lights to all black
     for (int i = 0; i < MAX_LIGHTS; i++)
@@ -817,7 +809,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
     // Load each vert pointer
     for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
         const Vtx_t *v = &vertices[vert].v;
-        rsp.loaded_vertices[dest] = (struct LoadedVertex*) v; // Vertex formats are identical, so a cast is sufficient.
+        rsp.loaded_vertices[dest] = (Vtx*) v;
     }
     granular_log_time(5); // Vertex Copy
 }
@@ -918,7 +910,7 @@ static void gfx_sp_tri_update_state()
     granular_log_time(6); // gfx_sp_tri_update_state
 }
 
-static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], uint32_t numTris)
+static void gfx_tri_create_vbo(Vtx *restrict v_arr[restrict], uint32_t numTris)
 {
     granular_log_time(0);
 
@@ -933,6 +925,7 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
     const bool use_texture = shader_state.used_textures.either;
     const bool use_color_or_normals = (shader_state.num_inputs > 0) || (rsp.geometry_mode & G_LIGHTING);
 
+    size_t len = buf_vbo_len; // Local copy is needed to work around the compiler being stupid
     const size_t stride = use_color_or_normals ? 4:
                           use_texture ? 3 :
                           2;
@@ -940,16 +933,18 @@ static void gfx_tri_create_vbo(struct LoadedVertex *restrict v_arr[restrict], ui
     // It's faster to unconditionally write the full vertex and then advance by vertex stride.
     // For smaller vertex formats, this will overwrite unused attributes of the prior vertex,
     // but this is good because cached writes are much cheaper than conditionals inside the loop body.
+    #pragma GCC unroll 3
     for (size_t vtx = 0; vtx < numVerts; vtx++) {
-        // Struct copy
-        *((struct LoadedVertex*) (&buf_vbo.as_u32[buf_vbo_len])) = *v_arr[vtx];
-        buf_vbo_len += stride;
+        memcpy(&buf_vbo.as_u32[len], __builtin_assume_aligned(v_arr[vtx], _Alignof(Vtx)), sizeof(*v_arr[vtx]));
+        len += stride;
     }
+
+    buf_vbo_len = len;
 
     granular_log_time(7); // gfx_tri_create_vbo
 }
 
-static void gfx_sp_tri_batched(struct LoadedVertex *restrict v_arr[restrict], uint32_t num_tris) {
+static void gfx_sp_tri_batched(Vtx *restrict v_arr[restrict], uint32_t num_tris) {
     gfx_sp_tri_update_state();
     gfx_tri_create_vbo(v_arr, num_tris);
 }
@@ -1238,22 +1233,22 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     int16_t lrx16 = (  lrx / (4.0f * HALF_SCREEN_WIDTH)   - 1.0f) * NDC_SCALE;
     int16_t lry16 = (-(lry / (4.0f * HALF_SCREEN_HEIGHT)) + 1.0f) * NDC_SCALE;
 
-    static struct LoadedVertex* const ul = &rsp.rect_vertices[0];
-    static struct LoadedVertex* const ll = &rsp.rect_vertices[1];
-    static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
-    static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
+    static Vtx_t* const ul = &rsp.rect_vertices[0].v;
+    static Vtx_t* const ll = &rsp.rect_vertices[1].v;
+    static Vtx_t* const lr = &rsp.rect_vertices[2].v;
+    static Vtx_t* const ur = &rsp.rect_vertices[3].v;
 
-    ul->position.x = ulx16;
-    ul->position.y = uly16;
+    ul->ob[0] = ulx16;
+    ul->ob[1] = uly16;
 
-    ll->position.x = ulx16;
-    ll->position.y = lry16;
+    ll->ob[0] = ulx16;
+    ll->ob[1] = lry16;
 
-    lr->position.x = lrx16;
-    lr->position.y = lry16;
+    lr->ob[0] = lrx16;
+    lr->ob[1] = lry16;
 
-    ur->position.x = lrx16;
-    ur->position.y = uly16;
+    ur->ob[0] = lrx16;
+    ur->ob[1] = uly16;
 
     uint32_t geometry_mode_saved = rsp.geometry_mode;
     gfx_sp_geometry_mode(~0, 0);
@@ -1261,7 +1256,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     union XYWidthHeight viewport_saved = rdp.viewport;
     gfx_set_viewport((union XYWidthHeight) { .width = gfx_current_dimensions.width, .height = gfx_current_dimensions.height });
 
-    static struct LoadedVertex* rect_triangles[] =
+    static Vtx* rect_triangles[] =
        {&rsp.rect_vertices[0],
         &rsp.rect_vertices[1],
         &rsp.rect_vertices[3],
@@ -1312,25 +1307,25 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
     float lrs = ((uls << 7) + dsdx * width) >> 7;
     float lrt = ((ult << 7) + dtdy * height) >> 7;
 
-    static struct LoadedVertex* const ul = &rsp.rect_vertices[0];
-    static struct LoadedVertex* const ll = &rsp.rect_vertices[1];
-    static struct LoadedVertex* const lr = &rsp.rect_vertices[2];
-    static struct LoadedVertex* const ur = &rsp.rect_vertices[3];
+    static Vtx_t* const ul = &rsp.rect_vertices[0].v;
+    static Vtx_t* const ll = &rsp.rect_vertices[1].v;
+    static Vtx_t* const lr = &rsp.rect_vertices[2].v;
+    static Vtx_t* const ur = &rsp.rect_vertices[3].v;
     
-    ul->uv.u = uls;
-    ul->uv.v = ult;
-    lr->uv.u = lrs;
-    lr->uv.v = lrt;
+    ul->tc[0] = uls;
+    ul->tc[1] = ult;
+    lr->tc[0] = lrs;
+    lr->tc[1] = lrt;
     if (flip) {
-        ll->uv.u = lrs;
-        ll->uv.v = ult;
-        ur->uv.u = uls;
-        ur->uv.v = lrt;
+        ll->tc[0] = lrs;
+        ll->tc[1] = ult;
+        ur->tc[0] = uls;
+        ur->tc[1] = lrt;
     } else {
-        ll->uv.u = uls;
-        ll->uv.v = lrt;
-        ur->uv.u = lrs;
-        ur->uv.v = ult;
+        ll->tc[0] = uls;
+        ll->tc[1] = lrt;
+        ur->tc[0] = lrs;
+        ur->tc[1] = ult;
     }
 
     // Disable texture scaling by using a 1x scale. The other three parameters are unused.
@@ -1361,7 +1356,7 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
     }
 
     for (size_t i = 0; i < ARRAY_COUNT(rsp.rect_vertices); i++)
-        rsp.rect_vertices[i].color = rdp.fill_color; // Struct copy
+        memcpy(&rsp.rect_vertices[i].v.cn[0], &rdp.fill_color, 4);
 
     CombineMode saved_combine_mode = rdp.combine_mode;
     gfx_dp_set_combine_mode(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_SHADE), convert_color_combiner(0, 0, 0, G_ACMUX_SHADE)));
