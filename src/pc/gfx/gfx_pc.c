@@ -1203,11 +1203,10 @@ static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 }
 
 static void gfx_dp_set_fill_color(uint32_t packed_color) {
-    uint16_t col16 = (uint16_t)packed_color;
-    uint32_t r = col16 >> 11;
-    uint32_t g = (col16 >> 6) & 0x1f;
-    uint32_t b = (col16 >> 1) & 0x1f;
-    uint32_t a = col16 & 1;
+    uint32_t r = (packed_color >> 11) & 0x1f;
+    uint32_t g = (packed_color >> 6) & 0x1f;
+    uint32_t b = (packed_color >> 1) & 0x1f;
+    uint32_t a = packed_color & 1;
     rdp.fill_color.r = SCALE_5_8(r);
     rdp.fill_color.g = SCALE_5_8(g);
     rdp.fill_color.b = SCALE_5_8(b);
