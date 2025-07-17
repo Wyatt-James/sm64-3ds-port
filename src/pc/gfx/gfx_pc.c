@@ -882,6 +882,7 @@ static void gfx_sp_tri_update_state()
     // 75% savings with good numbers (potentially outdated metric)
     // Handled here to optimize rectangle drawing
     const uint32_t culling_mode = (rsp.geometry_mode & G_CULL_BOTH);
+    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (rendering_state.culling_mode != culling_mode) {
         rendering_state.culling_mode  = culling_mode;
         granular_log_time(6); // gfx_sp_tri_update_state
@@ -891,7 +892,6 @@ static void gfx_sp_tri_update_state()
 
     // Nearly 100% savings with good numbers (potentially outdated metric)
     // Handled here to optimize rectangle drawing
-    const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER; // This would save 2 instructions if we moved it up by culling_mode, but alas, icache is mine enemy
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
         granular_log_time(6); // gfx_sp_tri_update_state
