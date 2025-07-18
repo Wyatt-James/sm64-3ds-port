@@ -69,7 +69,7 @@ N3DS_TouchState* n3ds_hid_touch(void)
     bool touched = (hid_state.touch.position.px || hid_state.touch.position.py);
     
     if (touched)
-        hid_state.touch.frames_held = prev_hid_state.touch.frames_held + 1; // WYATT_TODO this is never == 1. Seems to update twice per-frame?
+        hid_state.touch.frames_held = prev_hid_state.touch.frames_held + 1;
     else
         hid_state.touch.frames_held = 0;
     
