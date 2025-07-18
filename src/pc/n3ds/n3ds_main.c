@@ -62,25 +62,29 @@ static void set_up_threading() {
  *    n3ds_apt_hook_init
  *    loop:
  *       aptMainLoop
- *       n3ds_handle_events
- *          n3ds_hid_start_frame
- *       n3ds_menu_handle_touch
- *       gfx_end_frame
- *          gfx_wapi->handle_events
- *       n64 produce 1 frame
- *          audio_3ds_run_one_frame OR synchronize with audio thread
- *          send_display_list
- *             gfx_run
- *                gfx_rapi_start_frame
- *                   C3D_FrameStart
- *             gfx_run_dl
- *             gfx_rapi_end_frame
- *                n3ds_menu_render
- *                C3D_FrameEnd -> handles vsync and present asynchronously
- *       audio_api->play
- *       gfx_end_frame
- *          gfx_rapi_finish_render (nothing on n3ds)
- *          gfx_wapi->swap_buffers_end (nothing on n3ds)
+ *       produce_one_frame
+ *          gfx_start_frame
+ *             gfx_wapi->handle_events
+ *               n3ds_handle_events
+ *                  n3ds_hid_start_frame
+ *                  n3ds_menu_handle_touch
+ *          game_loop_one_iteration
+ *             level_script_execute
+ *                N3DS synchronize with audio thread (if running MT audio)
+ *                <execute level script commands>
+ *                audio_3ds_run_one_frame OR queue N3DS audio frame (ST vs MT audio)
+ *             display_and_vsync
+ *                send_display_list
+ *                   gfx_run
+ *                      gfx_rapi_start_frame
+ *                         C3D_FrameStart
+ *                   gfx_run_dl
+ *                   gfx_rapi_end_frame
+ *                      n3ds_menu_render
+ *                      C3D_FrameEnd -> handles vsync and present asynchronously
+ *          gfx_end_frame
+ *             gfx_rapi_finish_render (nothing on n3ds)
+ *             gfx_wapi->swap_buffers_end (nothing on n3ds)
  *    n3ds_apt_hook_exit
  *    C3D_Fini
  *    gfxExit
@@ -96,8 +100,6 @@ void n3ds_main_loop(void (*run_one_game_iter)(void))
         if (!n3ds_apt_suspended) {
             profiler_3ds_linear_reset();
             profiler_3ds_circular_advance_frame();
-            n3ds_handle_events();
-            n3ds_menu_handle_touch();
             run_one_game_iter();
             profiler_3ds_snoop(0);
         } else
@@ -111,6 +113,7 @@ void n3ds_main_loop(void (*run_one_game_iter)(void))
 void n3ds_handle_events(void)
 {
     n3ds_hid_start_frame();
+    n3ds_menu_handle_touch();
 }
 
 void n3ds_main_init(void)
