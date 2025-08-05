@@ -149,7 +149,8 @@ static void internal_citro3d_init_vram_texture_pools();
 
 // --------------- Internal-use functions ---------------
 
-// Recalculates which shader to use. WYATT_TODO move me to the context?
+// Recalculates which shader to use. This function uses CTX_SHADER
+// as a bit of an optimization, rather than an external flag.
 static void internal_citro3d_select_shader()
 {
     if (ctx.flags & CTX_SHADER || OPT_DISABLED(optimize.consecutive_shader))
