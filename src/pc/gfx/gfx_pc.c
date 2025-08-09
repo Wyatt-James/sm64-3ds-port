@@ -329,7 +329,7 @@ static struct RenderingState rendering_state;
 
 static bool dropped_frame;
 
-// batches incoming G_TRI commands
+// batches incoming G_TRI commands. Batch size must be <= MAX_BUFFERED_VERTS or sp_create_vbo can break.
 static Vtx* tri_batch[MAX_BUFFERED_VERTS]; 
 static size_t num_verts_batched = 0;
 
@@ -910,11 +910,12 @@ static void gfx_sp_tri_update_state()
     granular_log_time(6); // gfx_sp_tri_update_state
 }
 
+// numTris must not be > MAX_BUFFERED_TRIS (more specifically, numTris * 3 and MAX_BUFFERED_VERTS).
+// This will be left this way for performance reasons, as this is an internal-use function. Don't break it!
 static void gfx_tri_create_vbo(Vtx *restrict v_arr[restrict], uint32_t numTris)
 {
     granular_log_time(0);
 
-    // WYATT_TODO fix this for very large batches. Fine for vanilla.
     const uint32_t numVerts = numTris * 3;
     if (buf_vbo_num_verts + numVerts >= MAX_BUFFERED_VERTS) {
         granular_log_time(7); // gfx_tri_create_vbo
