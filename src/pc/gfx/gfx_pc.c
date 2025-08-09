@@ -1678,8 +1678,6 @@ static void gfx_sp_reset() {
     rsp.modelview_matrix_stack_size = 1;
     rsp.num_lights = 2;
     rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS);
-
-    gfx_rapi_set_backface_culling_mode(rsp.geometry_mode & G_CULL_BOTH); // WYATT_TODO necessary?
     
     PC_METRIC_DO(num_rsp_commands_run = 0);
 }
