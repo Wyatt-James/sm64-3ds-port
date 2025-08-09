@@ -219,7 +219,7 @@ static inline void gfx_citro3d_save_context_uniforms(RenderContext* ctx, GPU_SHA
     memcpy(ctx->uniforms, C3D_FVUnif[shader_type], sizeof(ctx->uniforms));
 }
 
-// Uploads this context's saved float uniforms to the rendering API. WYATT_TODO make this a first-class feature
+// Uploads this context's saved float uniforms to the rendering API.
 static inline void gfx_citro3d_upload_context_uniforms(RenderContext* ctx, GPU_SHADER_TYPE shader_type)
 {
     memcpy(C3D_FVUnif[shader_type], ctx->uniforms, sizeof(ctx->uniforms));
