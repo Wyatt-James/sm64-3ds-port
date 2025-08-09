@@ -131,7 +131,7 @@ void profiler_3ds_init_impl(void) {
 
 // Returns the duration for a given frame and ID from the circular log.
 double profiler_3ds_get_frame_duration_impl(uint32_t frame, uint32_t id) {
-    if (frame < circ_cur_frame - 1 && id < PROFILER_3DS_NUM_IDS)
+    if (frame < circ_num_frames)
         return circ_buffer[frame][id].time;
     
     return -1.0;
@@ -185,12 +185,9 @@ int profiler_3ds_create_log_string_internal(uint32_t min_id_to_print, uint32_t m
 
     if (print_mode == PRINT_NONE)
         return 0;
-        
-    if (min_id_to_print > PROFILER_3DS_NUM_IDS)
-        min_id_to_print = PROFILER_3DS_NUM_IDS;
 
-    if (max_id_to_print > PROFILER_3DS_NUM_IDS)
-        max_id_to_print = PROFILER_3DS_NUM_IDS;
+    min_id_to_print = CLAMP(min_id_to_print, 0, PROFILER_3DS_NUM_IDS - 1);
+    max_id_to_print = CLAMP(max_id_to_print, 0, PROFILER_3DS_NUM_IDS - 1);
 
     if (min_id_to_print > max_id_to_print)
         return 0;

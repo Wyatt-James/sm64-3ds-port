@@ -14,7 +14,6 @@
 #define PROFILER_3DS_ENABLED
 
 // Maximum ID number for a timestamp.
-// WYATT_TODO off-by-one: value of 32 gives 33 entries
 #define PROFILER_3DS_NUM_IDS 32
 
 // Number of frames to average in the circular buffer.
