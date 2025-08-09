@@ -98,8 +98,7 @@ void n3ds_main_loop(void (*run_one_game_iter)(void))
     while (aptMainLoop() && g3dsConfig.run)
     {
         if (!n3ds_apt_suspended) {
-            profiler_3ds_linear_reset();
-            profiler_3ds_circular_advance_frame();
+            profiler_3ds_advance_frame();
             run_one_game_iter();
             profiler_3ds_snoop(0);
         } else

@@ -1,276 +1,165 @@
 #include "profiler_3ds.h"
 
-// If the profiler is disabled, functions and their headers do not exist.
+// If the profiler is disabled, this translation unit is empty.
 #if PROFILER_3DS_ENABLE == 1
 
 #include <string.h>
 #include <stdio.h>
 
-// We want to use the 3DS version of osGetTime
-#undef osGetTime
 #include "src/pc/n3ds/libctru_inc.h"
 #include "src/pc/pc_macros.h"
 
-#define TIMESTAMP_SNOOP_INTERVAL 8
-#define TIMESTAMP_ARRAY_COUNT(arr) (int)(sizeof(arr) / sizeof(arr[0]))
-#define STR_FREE_SPACE(buf_len, cur) ((buf_len - cur) - 1)
-#define STR_HAS_SPACE(buf_len, cur, size) (STR_FREE_SPACE(buf_len, cur) >= size)
-#define CIRCULAR_ADJUST_FRAME(index) ((circ_cur_frame + i + 1) % PROFILER_3DS_NUM_CIRCULAR_FRAMES)
+// Convenience define. Represents where to place the buffer terminator.
+#define PROFILER_3DS_LOG_STRING_TERMINATOR (PROFILER_3DS_LOG_STRING_LENGTH - 1)
+
+#define STR_FREE_SPACE(buf_len_, cur_) ((buf_len_ - cur_) - 1)
+#define STR_HAS_SPACE(buf_len_, cur_, size_) (STR_FREE_SPACE(buf_len_, cur_) >= size_)
+#define CIRCULAR_ADJUST_FRAME(index_) ((circ_cur_frame + index_ + 1) % PROFILER_3DS_NUM_CIRCULAR_FRAMES)
 
 typedef struct
 {
-    double t;
-    uint32_t c;
+    double time;    // Cumulative sum of all time spent within a given entry
+    uint32_t count; // Only currently used in printing
 } CircularEntry;
+
+typedef struct
+{
+    double duration; // Total amount of time
+    double average;  // Duration / num_frames
+} CircularResult;
+
+typedef struct
+{
+    uint8_t counter, interval; // When counter reaches 0, trigger a breakpoint and reset to interval
+} SnoopCounter;
 
 // Times are stored in milliseconds
 
-static TickCounter tick_counter_average, tick_counter_linear, tick_counter_circular;
-
-// A long-term average over time.
-static volatile double   long_durations_per_id[PROFILER_3DS_NUM_IDS];
-static volatile double   long_averages_per_id[PROFILER_3DS_NUM_IDS];
-static volatile uint32_t long_counts_per_id[PROFILER_3DS_NUM_IDS];
-
-// A linear log of each time recorded.
-// Once the cap is reached, it will not be updated.
-static volatile double   lin_all_times[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH + 1]; // First index is the start time
-static volatile double*  lin_elapsed_times = lin_all_times + 1; // Time since startTime for each stamp
-static volatile double   lin_durations[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH]; // Time since the previous stamp for each stamp
-static volatile uint32_t lin_ids[PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH]; // ID for each timestamp in elapsed_times
-static volatile double   lin_averages_per_id[PROFILER_3DS_NUM_IDS]; // Average duration per-id for the linear log
-static volatile double   lin_totals_per_id[PROFILER_3DS_NUM_IDS]; // Total duration per-id for the linear log
-static volatile uint32_t lin_counts_per_id[PROFILER_3DS_NUM_IDS]; // Count per-id for the linear log
-static volatile uint32_t lin_timestamp_count = 0;
+static TickCounter tick_counter;
 
 // A circular buffer of the most recent frames.
-static volatile CircularEntry circ_buffer[PROFILER_3DS_NUM_CIRCULAR_FRAMES][PROFILER_3DS_NUM_IDS]; // Circular buffer of durations
-static volatile double        circ_durations_per_id[PROFILER_3DS_NUM_IDS]; // Circular buffer of durations
-static volatile double        circ_averages_per_id[PROFILER_3DS_NUM_IDS]; // Average of contents of totals_per_id for each id, computed on-demand
-static volatile uint32_t      circ_counts_per_id[PROFILER_3DS_NUM_IDS]; // Count per-ID
-static volatile uint32_t      circ_num_frames = 1; // Number of frames encountered in the circular buffer.
-static volatile uint32_t      circ_cur_frame = 0, circ_next_frame = 0; // Circular buffer indices
+static volatile CircularEntry  circ_buffer[PROFILER_3DS_NUM_CIRCULAR_FRAMES][PROFILER_3DS_NUM_IDS];
+static volatile CircularResult circ_results[PROFILER_3DS_NUM_IDS];
+static volatile uint32_t       circ_num_frames = 0; // Number of frames of valid info currently in the buffer
+static volatile uint32_t       circ_cur_frame = 0, circ_next_frame = 0; // Circular buffer indices
 
 // Updated per-snoop-ID each profiler_3ds_snoop_impl() call; used for breakpoints.
-static volatile uint8_t snoop_interval = 180;
-static volatile uint8_t snoop_counters[PROFILER_3DS_NUM_TRACKED_SNOOP_IDS];
+static volatile SnoopCounter snoop_counters[PROFILER_3DS_NUM_TRACKED_SNOOP_IDS];
 
+// For writing debug strings. Marked as USED to prevent optimize-out with LTO enabled.
 static USED char log_string[PROFILER_3DS_LOG_STRING_LENGTH];
 
 // libctru's osTickCounterUpdate measures time between updates. We want time since last reset.
-static inline void update_tick_counters() {
+static void update_tick_counters() {
     const __3ds_u64 system_tick = svcGetSystemTick();
 
-    // For the long average, we want to measure each duration
-	tick_counter_average.elapsed = system_tick - tick_counter_average.reference;
-	tick_counter_average.reference = system_tick;
-
-    // For the linear log, we want to measure time since the reference
-    tick_counter_linear.elapsed = system_tick - tick_counter_linear.reference;
-
     // For the circular average, we want to measure each duration
-	tick_counter_circular.elapsed = system_tick - tick_counter_circular.reference;
-	tick_counter_circular.reference = system_tick;
-}
-
-static void update_average_log(uint32_t id) {
-    const double duration = osTickCounterRead(&tick_counter_average);
-    long_counts_per_id[id]++;
-    long_durations_per_id[id] += duration;
-}
-
-// Update linear log if there is space
-static void update_linear_log(uint32_t id) {
-    if (lin_timestamp_count < PROFILER_3DS_TIMESTAMP_HISTORY_LENGTH && id < PROFILER_3DS_NUM_IDS) {
-        const double curTime = osTickCounterRead(&tick_counter_linear);
-        const double lastTime = lin_elapsed_times[lin_timestamp_count - 1];
-        const double duration = curTime - lastTime;
-
-        lin_elapsed_times[lin_timestamp_count] = curTime;
-        lin_durations[lin_timestamp_count] = duration;
-        lin_ids[lin_timestamp_count] = id;
-        lin_totals_per_id[id] += duration;
-        
-        lin_timestamp_count++;
-        lin_counts_per_id[id]++;
-    }
+	tick_counter.elapsed = system_tick - tick_counter.reference;
+	tick_counter.reference = system_tick;
 }
 
 static void update_circular_log(uint32_t id) {
-    const double duration = osTickCounterRead(&tick_counter_circular);
+    const double duration = osTickCounterRead(&tick_counter);
 
     // Update circular log
-    circ_buffer[circ_cur_frame][id].t += duration;
-    circ_buffer[circ_cur_frame][id].c++;
+    circ_buffer[circ_cur_frame][id].time += duration;
+    circ_buffer[circ_cur_frame][id].count++;
 }
-
 
 // --------------- Loggers and Calculators ---------------
 
 // Logs a time with the given ID.
 void profiler_3ds_log_time_impl(uint32_t id) {
     update_tick_counters();
-    update_average_log(id);
-    update_linear_log(id);
     update_circular_log(id);
 }
 
-void profiler_3ds_average_calculate_average_impl() {
-    for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-        const uint32_t count = long_counts_per_id[id];
-
-        if (count > 0)
-            long_averages_per_id[id] = long_durations_per_id[id] / count;
-        else
-            long_averages_per_id[id] = 0.0;
-    }
-}
-
-// Calculates the averages over the linear log's history.
-void profiler_3ds_linear_calculate_averages_impl() {
-    for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-        const uint32_t count = lin_counts_per_id[id];
-
-        if (count > 0)
-            lin_averages_per_id[id] = lin_totals_per_id[id] / count;
-        else
-            lin_averages_per_id[id] = 0.0;
-    }
-}
-
 // Advances one frame in the circular log
-void profiler_3ds_circular_advance_frame_impl() {
+void profiler_3ds_advance_frame_impl(void) {
     for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
         circ_buffer[circ_next_frame][id] = (CircularEntry) {};
     }
 
     circ_cur_frame = circ_next_frame;
-
-    if (circ_next_frame == PROFILER_3DS_NUM_CIRCULAR_FRAMES - 1)
-        circ_next_frame = 0;
-    else
-        circ_next_frame++;
-
-    if (circ_num_frames < PROFILER_3DS_NUM_CIRCULAR_FRAMES)
-        circ_num_frames++;
+    circ_next_frame = (circ_next_frame + 1) % PROFILER_3DS_NUM_CIRCULAR_FRAMES;
+    circ_num_frames = MIN(circ_num_frames + 1, PROFILER_3DS_NUM_CIRCULAR_FRAMES);
     
-    tick_counter_circular.reference = svcGetSystemTick();
+    tick_counter.reference = svcGetSystemTick();
 }
 
 // Calculates the averages for the circular log
-void profiler_3ds_circular_calculate_averages_impl() {
+void profiler_3ds_calculate_results_impl(void) {
     if (circ_num_frames > 0) {
         for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-            circ_durations_per_id[id] = 0.0;
+            circ_results[id].duration = 0.0;
 
             for (uint32_t frame = 0; frame < circ_num_frames; frame++)
-                circ_durations_per_id[id] += circ_buffer[frame][id].t;
+                circ_results[id].duration += circ_buffer[frame][id].time;
 
-            circ_averages_per_id[id] = circ_durations_per_id[id] / circ_num_frames;
+            circ_results[id].average = circ_results[id].duration / circ_num_frames;
         }
     } else {
         for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++)
-            circ_averages_per_id[id] = 0.0;
+            circ_results[id].average = circ_results[id].duration = 0.0;
     }
 }
-
 
 // --------------- Resets and Initializers ---------------
 
-
-// Resets the long-term average log.
-void profiler_3ds_average_reset_impl() {
-    for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-        long_durations_per_id[id] = 0.0;
-        long_averages_per_id[id] = 0.0;
-        long_counts_per_id[id] = 0;
-    }
-
-    osTickCounterStart(&tick_counter_average);
-}
-
-// Resets the linear log.
-void profiler_3ds_linear_reset_impl() {
-    lin_all_times[0] = 0.0;
-    lin_timestamp_count = 0;
-
-    for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-        lin_totals_per_id[id] = 0.0;
-        lin_counts_per_id[id] = 0;
-    }
-
-    osTickCounterStart(&tick_counter_linear);
-}
-
 // Resets the circular log.
-void profiler_3ds_circular_reset_impl() {
-    for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++) {
-        for (uint32_t frame = 0; frame < PROFILER_3DS_NUM_CIRCULAR_FRAMES; frame++)
-            circ_buffer[frame][id].t = 0.0;
-
-        circ_averages_per_id[id] = 0.0;
-    }
+void profiler_3ds_reset_impl(void) {
+    // We don't need to zero the circular data beacuse we reset the indices.
+    for (uint32_t id = 0; id < PROFILER_3DS_NUM_IDS; id++)
+        circ_results[id] = (CircularResult) {};
 
     circ_cur_frame = circ_next_frame = 0;
-    circ_num_frames = 1;
-    profiler_3ds_circular_advance_frame_impl();
+    circ_num_frames = 0;
+    profiler_3ds_advance_frame_impl();
 }
 
 // Initializes the snoop counters and resets all logs.
-void profiler_3ds_init_impl() {
-    for (uint32_t i = 0; i < TIMESTAMP_ARRAY_COUNT(snoop_counters); i++)
-        snoop_counters[i] = snoop_interval;
+void profiler_3ds_init_impl(void) {
+    for (uint32_t id = 0; id < ARRAY_COUNT(snoop_counters); id++)
+        snoop_counters[id] = (SnoopCounter) {PROFILER_3DS_DEFAULT_SNOOP_INTERVAL, PROFILER_3DS_DEFAULT_SNOOP_INTERVAL};
 
-    profiler_3ds_average_reset_impl();
-    profiler_3ds_linear_reset_impl();
-    profiler_3ds_circular_reset_impl();
+    profiler_3ds_reset_impl();
 
     log_string[PROFILER_3DS_LOG_STRING_TERMINATOR] = '\0';
 }
 
 // --------------- Getters, Inspectors, and Snoopers ---------------
 
-// Returns the average time from the long-term average log.
-double profiler_3ds_average_get_average_impl(uint32_t id) {
-    if (id < PROFILER_3DS_NUM_IDS)
-        return long_averages_per_id[id];
-
-    return -1.0;
-}
-
-// Returns the total elapsed time of the linear log in milliseconds.
-double profiler_3ds_linear_get_elapsed_time_impl() {
-    return lin_elapsed_times[lin_timestamp_count - 1];
-}
-
-// Returns the average time for the given ID from the linear log in milliseconds. Must be calculated first.
-double profiler_3ds_linear_get_average_impl(uint32_t id) {
-    if (id < PROFILER_3DS_NUM_IDS)
-        return lin_averages_per_id[id];
+// Returns the duration for a given frame and ID from the circular log.
+double profiler_3ds_get_frame_duration_impl(uint32_t frame, uint32_t id) {
+    if (frame < circ_cur_frame - 1 && id < PROFILER_3DS_NUM_IDS)
+        return circ_buffer[frame][id].time;
     
     return -1.0;
 }
 
-// Returns the duration for a given frame and ID from the circular log.
-double profiler_3ds_circular_get_duration_impl(uint32_t frame, uint32_t id) {
-    if (frame < circ_cur_frame - 1 && id < PROFILER_3DS_NUM_IDS)
-        return circ_buffer[frame][id].t;
+// Returns the total duration for an ID from the circular log. Must be calculated first.
+double profiler_3ds_get_total_duration_impl(uint32_t id) {
+    if (id < PROFILER_3DS_NUM_IDS)
+        return circ_results[id].duration;
     
     return -1.0;
 }
 
 // Returns the average time for an ID from the circular log. Must be calculated first.
-double profiler_3ds_circular_get_average_time_impl(uint32_t id) {
+double profiler_3ds_get_average_time_impl(uint32_t id) {
     if (id < PROFILER_3DS_NUM_IDS)
-        return circ_averages_per_id[id];
+        return circ_results[id].average;
     
     return -1.0;
 }
 
-// Sets the interval for a snoop counter.
-void profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_until_snoop) {
+// Sets the interval for a snoop counter and resets its counter to the interval.
+void profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t interval) {
     if (snoop_id < PROFILER_3DS_NUM_TRACKED_SNOOP_IDS)
-        snoop_counters[snoop_id] = frames_until_snoop;
+    {
+        volatile SnoopCounter* sc = &snoop_counters[snoop_id];
+        sc->counter = sc->interval = interval;
+    }
 }
 
 // Creates a string containing the circular log's data, stored in log_string.
@@ -285,16 +174,16 @@ void profiler_3ds_set_snoop_counter_impl(uint32_t snoop_id, uint8_t frames_until
 #define FRAME_CLOSE "}"
 enum PrintMode
 {
-    NONE,
-    TIME,
-    COUNT
+    PRINT_NONE,
+    PRINT_TIME,
+    PRINT_COUNT
 };
 
-int profiler_3ds_create_log_string_circular_internal(uint32_t min_id_to_print, uint32_t max_id_to_print, enum PrintMode print_mode) {
+int profiler_3ds_create_log_string_internal(uint32_t min_id_to_print, uint32_t max_id_to_print, enum PrintMode print_mode) {
     log_string[0] = '\0';
     log_string[PROFILER_3DS_LOG_STRING_TERMINATOR] = '\0';
 
-    if (print_mode == NONE)
+    if (print_mode == PRINT_NONE)
         return 0;
         
     if (min_id_to_print > PROFILER_3DS_NUM_IDS)
@@ -328,11 +217,12 @@ int profiler_3ds_create_log_string_circular_internal(uint32_t min_id_to_print, u
         for (uint32_t id = min_id_to_print; id <= max_id_to_print; id++) {
             int worker_len;
             switch (print_mode) {
-                case TIME:
-                    worker_len = snprintf(worker, WORKER_BUF_LEN, "%lf", frame[id].t);
+                case PRINT_TIME:
+                    worker_len = snprintf(worker, WORKER_BUF_LEN, "%lf", frame[id].time);
                     break;
-                case COUNT:
-                    worker_len = snprintf(worker, WORKER_BUF_LEN, "%lu", frame[id].c);
+                case PRINT_COUNT:
+                    worker_len = snprintf(worker, WORKER_BUF_LEN, "%lu", frame[id].count);
+                    break;
                 default:
                     break;
             }
@@ -382,24 +272,19 @@ int profiler_3ds_create_log_string_circular_internal(uint32_t min_id_to_print, u
 #undef FRAME_OPEN
 #undef FRAME_CLOSE
 
-int profiler_3ds_create_log_string_circular_impl(uint32_t min_id_to_print, uint32_t max_id_to_print)
+int profiler_3ds_create_log_string_impl(uint32_t min_id_to_print, uint32_t max_id_to_print)
 {
-    profiler_3ds_create_log_string_circular_internal(min_id_to_print, max_id_to_print, TIME);
+    profiler_3ds_create_log_string_internal(min_id_to_print, max_id_to_print, PRINT_TIME);
 }
 
-USED volatile enum PrintMode snoop_print_mode = TIME;
+USED volatile enum PrintMode snoop_print_mode = PRINT_TIME;
 USED volatile int breakpoint = 0;
 
 // Computes some useful information for the timestamps. Intended for debugger use.
 void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
-    // Useful GDB prints:
-    // p/f *lin_totals_per_id@8
-    // p/d *lin_counts_per_id@8
-    // p/f *long_averages_per_id@8
-    // p/f *circ_averages_per_id@8
-    // p/f *circ_durations_per_id@8
-    // printf "%s\n", log_string        // This can be slow. I get 1400 chars/min. Faster in single-core.
+    // Useful GDB prints (faster in single-threaded mode; see n3ds_config.c):
+    // printf "%s\n", log_string
 
     // IDs:
     // 0: Misc
@@ -450,21 +335,21 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     breakpoint++;
     breakpoint++;
 
+    volatile SnoopCounter* sc = &snoop_counters[snoop_id];
+
     // Use to break after some number of iterations
     if (snoop_id < PROFILER_3DS_NUM_TRACKED_SNOOP_IDS) {
-        if (--snoop_counters[snoop_id] == 0) {
-            snoop_counters[snoop_id] = snoop_interval;
+        if (--sc->counter == 0) {
+            sc->counter = sc->interval;
 
             switch(snoop_id) { 
                 case 0: {
-                    profiler_3ds_average_calculate_average_impl();
-                    profiler_3ds_linear_calculate_averages_impl();
-                    profiler_3ds_circular_calculate_averages_impl();
-                    snoop_print_mode = TIME;
+                    profiler_3ds_calculate_results_impl();
+                    snoop_print_mode = PRINT_TIME;
 
-                    while (snoop_print_mode != NONE) {
-                        UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_internal(0, 5 /* + 20*/, snoop_print_mode);
-                        snoop_print_mode = NONE;
+                    while (snoop_print_mode != PRINT_NONE) {
+                        UNUSED volatile int log_len = profiler_3ds_create_log_string_internal(0, 5 /* + 20*/, snoop_print_mode);
+                        snoop_print_mode = PRINT_NONE;
 
                         breakpoint += 5; // Place a breakpoint here
                     }
