@@ -5,6 +5,7 @@
 
 #define MAX_VRAM_TEX 256
 #define VRAM_POOL_SIZE KIB_TO_BYTE(MAX_VRAM_TEX * 2) // 2KiB per-texture seems like a good match for vanilla
+#define VRAM_TEX_ALIGNMENT_BYTES 8
 
 static ALIGNED(32) union RGBA32 tex_conversion_buffer[16 * 1024]; // For converting textures between formats
 static ALIGNED(32) union RGBA32 tex_scaling_buffer[16 * 1024];    // For padding and tiling textures
@@ -58,7 +59,7 @@ COLD static void internal_citro3d_upload_textures_to_vram()
     // Sum up size of all textures
     for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
     {
-        data_size_to_upload += ROUND_UP(128, texture_upload_queue[i]->c3d_tex.size);
+        data_size_to_upload += ROUND_UP(VRAM_TEX_ALIGNMENT_BYTES, texture_upload_queue[i]->c3d_tex.size);
     }
 
     // If we have slots available and VRAM space, upload all textures
@@ -72,7 +73,7 @@ COLD static void internal_citro3d_upload_textures_to_vram()
             handle->load_status = TEX_VRAM;
             
             p->vram_textures[p->num_vram_tex++] = handle;
-            p->vram_pool_offset += ROUND_UP(128, handle->c3d_tex.size);
+            p->vram_pool_offset += ROUND_UP(VRAM_TEX_ALIGNMENT_BYTES, handle->c3d_tex.size);
 
             C3D_TexUpload(&handle->c3d_tex, handle->addr_fcram);
             C3D_TexFlush(&handle->c3d_tex);

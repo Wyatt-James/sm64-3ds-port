@@ -52,7 +52,7 @@
 #define NUM_ONES(v_) (__builtin_popcount(v_)) // Returns the number of 1-bits in a 32-bit uint.
 #define VARARGS_COUNT(type, ...) (sizeof(((type)[]){__VA_ARGS__})/sizeof((type))) // Returns the count of a variadic macro's varargs
 #define NTSC_FRAMERATE(fps_) ((float) (fps_) * (1000.0f / 1001.0f)) // Converts a framerate to its NTSC 1000/1001 equivalent.
-#define ROUND_UP(round_, val_) (((val_) + (round_)) & ~(round_))
+#define ROUND_UP(round_, val_) (((val_) + ((round_) - 1)) & ~((round_) - 1))
 
 // Size calculations
 #define KIB_TO_BYTE(n_) (1024UL * n_)
