@@ -50,7 +50,7 @@
 #define BSWAP_16(v_) (__builtin_bswap16(v_)) // Reverses the byte order of a 16-bit uint.
 #define NUM_LEADING_ZEROES(v_) (__builtin_clz(v_)) // Returns the number of leading zeroes of a 32-bit uint.
 #define NUM_ONES(v_) (__builtin_popcount(v_)) // Returns the number of 1-bits in a 32-bit uint.
-#define VARARGS_COUNT(type, ...) (sizeof(((type)[]){__VA_ARGS__})/sizeof((type))) // Returns the count of a variadic macro's varargs
+#define VARARGS_COUNT(type, ...) (sizeof((type[]){__VA_ARGS__})/sizeof(type)) // Returns the count of a variadic macro's varargs
 #define NTSC_FRAMERATE(fps_) ((float) (fps_) * (1000.0f / 1001.0f)) // Converts a framerate to its NTSC 1000/1001 equivalent.
 #define ROUND_UP(round_, val_) (((val_) + ((round_) - 1)) & ~((round_) - 1))
 

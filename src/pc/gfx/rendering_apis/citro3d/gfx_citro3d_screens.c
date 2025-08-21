@@ -35,14 +35,21 @@ static C3D_RenderTarget* target_400_240_left;
 static C3D_RenderTarget* target_400_240_right;
 static C3D_RenderTarget* target_bottom;
 
-N3DS_RenderTargetConfiguration initializers_top[] = {
-    {&target_800_480,       800, 480, GPU_RB_RGB8, GPU_RB_DEPTH16},
-    {&target_800_240,       800, 240, GPU_RB_RGB8, GPU_RB_DEPTH16},
-    {&target_400_240_left,  400, 240, GPU_RB_RGB8, GPU_RB_DEPTH16},
-    {&target_400_240_right, 400, 240, GPU_RB_RGB8, GPU_RB_DEPTH16},
+static N3DS_RenderTargetGroupConfig
+    group_800_480 = N3DS_RENDERTARGET_GROUP({&target_800_480,      800, 480, GPU_RB_RGB8,   GPU_RB_DEPTH16}),
+    group_800_240 = N3DS_RENDERTARGET_GROUP({&target_800_240,      800, 240, GPU_RB_RGB8,   GPU_RB_DEPTH16}),
+    group_stereo  = N3DS_RENDERTARGET_GROUP({&target_400_240_left, 400, 240, GPU_RB_RGB8,   GPU_RB_DEPTH16}, {&target_400_240_right, 400, 240, GPU_RB_RGB8, GPU_RB_DEPTH16}),
+    group_bottom  = N3DS_RENDERTARGET_GROUP({&target_bottom,       320, 240, GPU_RB_RGB565, C3D_DEPTH_NONE});
+
+static N3DS_RenderTargetGroupConfig* initializers_top[] = {
+    &group_800_480,
+    &group_800_240,
+    &group_stereo,
 };
 
-N3DS_RenderTargetConfiguration initializers_bottom[1] = {{&target_bottom, 320, 240, GPU_RB_RGB565, C3D_DEPTH_NONE}};
+static N3DS_RenderTargetGroupConfig* initializers_bottom[] = {
+    &group_bottom
+};
 
 TopScreenSetup top_screen_setups[] = {
     [N3DS_DISPLAY_2D_400_240] = {&target_400_240_left, NULL,                  N3DS_DISPLAY_2D_400_240},
@@ -145,9 +152,6 @@ void initialize_screens(void)
         svcBreak(USERBREAK_PANIC);
     }
 
-    // WYATT_TODO make this a tad bit less hacky awright? Also don't forget to account for alignment.
-    target_400_240_right->frameBuf.colorBuf += C3D_CalcColorBufSize(target_400_240_left->frameBuf.width, target_400_240_left->frameBuf.height, target_400_240_left->frameBuf.colorFmt);
-    target_400_240_right->frameBuf.depthBuf += C3D_CalcDepthBufSize(target_400_240_left->frameBuf.width, target_400_240_left->frameBuf.height, target_400_240_left->frameBuf.depthFmt);
     reconfigure_screens(true);
 }
 
