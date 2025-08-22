@@ -399,7 +399,7 @@ void citro3d_helpers_apply_projection_mtx_preset(C3D_Mtx* mtx)
 
 // WYATT_TODO this scaling is ridiculous and should be done at the GFX WAPI level,
 // but testing that gives strange behavior.
-static inline ScaleFactor gfx_mode_scale_factor_x(N3DS_DisplayMode gfx_mode)
+static inline ScaleFactor gfx_mode_scale_factor(N3DS_DisplayMode gfx_mode)
 {
     switch (gfx_mode) {
         default:                      // Same as 400x240
@@ -412,7 +412,7 @@ static inline ScaleFactor gfx_mode_scale_factor_x(N3DS_DisplayMode gfx_mode)
 
 void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
 {
-    ScaleFactor scale = gfx_mode_scale_factor_x(gfx_mode);
+    ScaleFactor scale = gfx_mode_scale_factor(gfx_mode);
     viewport_config->x       = x      * scale.x;
     viewport_config->y       = y      * scale.y;
     viewport_config->width   = width  * scale.x;
@@ -421,7 +421,7 @@ void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_c
 
 void citro3d_helpers_convert_scissor_settings(struct ScissorConfig* scissor_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
 {
-    ScaleFactor scale = gfx_mode_scale_factor_x(gfx_mode);
+    ScaleFactor scale = gfx_mode_scale_factor(gfx_mode);
     scissor_config->x1     = x * scale.x;
     scissor_config->y1     = y * scale.y;
     scissor_config->x2     = (x + width)  * scale.x;
