@@ -275,7 +275,6 @@ int profiler_3ds_create_log_string_impl(uint32_t min_id_to_print, uint32_t max_i
 }
 
 USED volatile enum PrintMode snoop_print_mode = PRINT_TIME;
-USED volatile int breakpoint = 0;
 
 // Computes some useful information for the timestamps. Intended for debugger use.
 void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
@@ -326,11 +325,11 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 25: C3D_LogSlot_DrawElements
 
     // Use with conditional breakpoints in GDB
-    breakpoint++;
-    breakpoint++;
-    breakpoint++;
-    breakpoint++;
-    breakpoint++;
+    NOP;
+    NOP;
+    NOP;
+    NOP;
+    NOP;
 
     volatile SnoopCounter* sc = &snoop_counters[snoop_id];
 
@@ -348,10 +347,10 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
                         UNUSED volatile int log_len = profiler_3ds_create_log_string_internal(0, 5 /* + 20*/, snoop_print_mode);
                         snoop_print_mode = PRINT_NONE;
 
-                        breakpoint += 5; // Place a breakpoint here
+                        NOP; // Place a breakpoint here
                     }
                     
-                    breakpoint += 5; // Place a breakpoint here
+                    NOP; // Place a breakpoint here
                     break;
                 }
             }
@@ -360,7 +359,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
 
     // IDs beyond the limit are still valid, but untracked
     else
-        breakpoint++;
+        NOP;
 
     return; // Leave this here for breakpoints
 }
