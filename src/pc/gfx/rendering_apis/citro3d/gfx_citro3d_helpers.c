@@ -398,7 +398,7 @@ void citro3d_helpers_apply_projection_mtx_preset(C3D_Mtx* mtx)
 }
 
 // WYATT_TODO this scaling is ridiculous and should be done at the GFX WAPI level,
-// but testing that gives strange behavior.
+// but the PC port doesn't support anamorphic resolutions, breaking rectangle drawing.
 static inline ScaleFactor gfx_mode_scale_factor(N3DS_DisplayMode gfx_mode)
 {
     switch (gfx_mode) {
