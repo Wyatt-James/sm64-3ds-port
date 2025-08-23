@@ -14,11 +14,11 @@
 .fvec rsp_colors[4]            ; See enum in color_combiner.v.pica. Keep this at the end of normal unifs because last 2 elems aren't changed.
 
 ; ----- Constant Uniforms -----
-.fvec texture_const_1          ; {  0.0,  1.0, 1/65536,  1/(127 * 4) }
-.fvec texture_const_2          ; {  4.0, -8.0, 1/32,     1/4         }
-.fvec cc_constants             ; { -1.0, 3000,  1.0,     0.0         }
-.fvec emu64_const_1            ; { 0.0,   1.0, 1/127,    1/255       }
-.fvec emu64_const_2            ; { 255,   256,   127,    128         }
+.fvec texture_const_1          ; {  0.0,  1.0, 1/65536,  1/(127 * 4) } ; All used. If you need a slot, leave THIS 0.0 specifically. It's used in a swizzle.
+.fvec texture_const_2          ; {  4.0, -8.0, 1/32,     1/4         } ; All used
+.fvec cc_constants             ; { -1.0, 3000,  1.0,     0.0         } ; All used
+.fvec emu64_const_1            ; { 0.0,   1.0, 1/127,    1/255       } ; All used
+.fvec emu64_const_2            ; { 255,   256,   127,    128         } ; Unused
 
 ; At least one const must be present in each DVLE thanks to a libctru bug. This was patched in d0936b8 (rolled into v2.4.0), but this is still here for compat.
 .constf dummy_const (0.0, 0.0, 0.0, 0.0)

@@ -57,7 +57,7 @@
 #define EMU64_NUM_VERTEX_FORMATS 5
 #define EMU64_UNSAFE_NUM_FV_UNIFS 34
 
-#define EMU64_MAX_LIGHTS 2 // Does NOT include ambient
+#define EMU64_MAX_DIRECTIONAL_LIGHTS 2 // Does NOT include ambient
 #define EMU64_NUM_RSP_COLORS 4
 
 // Stride values for specific inputs. Unit is one word (uint32_t)
@@ -109,9 +109,9 @@ enum Emu64ColorCombinerSource {
 union n3ds_emu64_light_color_uniform_locations {
    struct {
       int ambient, // Special-case ambient
-          directional[EMU64_MAX_LIGHTS];
+          directional[EMU64_MAX_DIRECTIONAL_LIGHTS];
    };
-   int all[EMU64_MAX_LIGHTS + 1]; // Homogenous ambient
+   int all[EMU64_MAX_DIRECTIONAL_LIGHTS + 1]; // Homogenous ambient
 };
 
 // Uniforms that should be changed freely.
@@ -125,7 +125,7 @@ struct n3ds_emu64_uniform_locations {
        tex_settings_2,
        vertex_load_flags;
    union n3ds_emu64_light_color_uniform_locations light_colors;
-   int light_directions[EMU64_MAX_LIGHTS],
+   int light_directions[EMU64_MAX_DIRECTIONAL_LIGHTS],
        rsp_colors[EMU64_NUM_RSP_COLORS];
 };
 

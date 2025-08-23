@@ -140,7 +140,7 @@ void shprog_emu64_init()
     emu64_uniform_locations_.light_directions[0]         = DVLE_GetUniformRegister(dvle, "light_directions");
     emu64_uniform_locations_.rsp_colors[0]               = DVLE_GetUniformRegister(dvle, "rsp_colors");
     
-    for (int i = 1; i < EMU64_MAX_LIGHTS; i++) {
+    for (int i = 1; i < EMU64_MAX_DIRECTIONAL_LIGHTS; i++) {
         emu64_uniform_locations_.light_colors.directional[i] = emu64_uniform_locations_.light_colors.directional[0] + i;
         emu64_uniform_locations_.light_directions[i] = emu64_uniform_locations_.light_directions[0] + i;
     }
