@@ -315,7 +315,7 @@ void aEnvMixerImpl(uint8_t flags, ENVMIX_STATE state) {
         vol_dry = rspa.vol_dry;
         vol_wet = rspa.vol_wet;
         step_diff[0] = rspa.vol[0] * (rate[0] - 0x10000) / 8;
-        step_diff[1] = rspa.vol[0] * (rate[1] - 0x10000) / 8;
+        step_diff[1] = rspa.vol[1] * (rate[1] - 0x10000) / 8;
 
         for (i = 0; i < 8; i++) {
             vols[0][i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));

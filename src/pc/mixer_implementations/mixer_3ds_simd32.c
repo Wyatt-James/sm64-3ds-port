@@ -479,8 +479,8 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
 
     if (isInit) {
         const int32_t step_diff[2] = {rspa.vol[0] * (rate[0] - 0x10000) / 8,
-                                      rspa.vol[0] * (rate[1] - 0x10000) / 8};
-        
+                                      rspa.vol[1] * (rate[1] - 0x10000) / 8};
+
         #pragma GCC unroll 0
         for (int i = 0; i < 8; i++) {
             vols[0][i] = clamp32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
