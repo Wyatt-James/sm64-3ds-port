@@ -17,9 +17,9 @@ RUN wget https://github.com/Wyatt-James/citro3d/archive/ad2b990d867d97397d8151e6
   echo F14B0B8E80BB5D900DDD3B68D38CA2660FFA3E66263EA103F469759AC477576C  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/libctru/archive/4235a5857f9e533e9668b14917466b6b207166e8.zip \
+RUN wget https://github.com/Wyatt-James/libctru/archive/cf29600389990e078bba757f2f1a46cdc939f11c.zip \
   -O libctru-wyatt-james.zip && \
-  echo DB653D1EACE263824C90012D7CF35FBC983947DE87C5EBC6244DB40659141DFA  libctru-wyatt-james.zip | sha256sum --check
+  echo 4262393D4DF8F3F0FC02B49B0EB095070C3126A571E2610118E93BB4A129B693  libctru-wyatt-james.zip | sha256sum --check
 
 # ----- Extract archives in-place, removing commit-specific container folders -----
   
@@ -37,7 +37,7 @@ RUN mv ./libctru-wyatt-james-temp/libctru-* ./libctru-wyatt-james
 # Removing this will leave the official devkitPro version installed.
 WORKDIR /tmp/libctru-wyatt-james/libctru
 RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_LTO=1 > /docker_logs/make_libctru-wyatt-james.txt
-# RUN make install ARCH="-ggdb -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_libctru-wyatt-james.txt
+# RUN make install ARCH="-ggdb3 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_libctru-wyatt-james.txt
 
 # Install wyatt-james's fork of Citro3D. Use the longer line to build with GDB-optimized debug data included.
 # Removing this will leave the official devkitPro version installed.
@@ -45,7 +45,7 @@ RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_EN
 WORKDIR /tmp/citro3d-wyatt-james
 RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_PROFILER=0 ENABLE_LTO=1 > /docker_logs/make_citro3d-wyatt-james.txt
 # RUN make install ENABLE_PROFILER=0 > /docker_logs/make_citro3d-wyatt-james.txt
-# RUN make install ARCH="-ggdb -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_citro3d-wyatt-james.txt
+# RUN make install ARCH="-ggdb3 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_citro3d-wyatt-james.txt
 
 # Install makerom
 WORKDIR /tmp
