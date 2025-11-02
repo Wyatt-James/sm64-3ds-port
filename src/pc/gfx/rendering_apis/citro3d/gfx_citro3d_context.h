@@ -222,6 +222,5 @@ static inline void gfx_citro3d_save_context_uniforms(RenderContext* ctx, GPU_SHA
 // Uploads this context's saved float uniforms to the rendering API.
 static inline void gfx_citro3d_upload_context_uniforms(RenderContext* ctx, GPU_SHADER_TYPE shader_type)
 {
-    memcpy(C3D_FVUnif[shader_type], ctx->uniforms, sizeof(ctx->uniforms));
-    C3D_RegDirty(C3D_FVUnifDirty[shader_type], 0, EMU64_UNSAFE_NUM_FV_UNIFS);
+    memcpy(C3D_FVUnifWritePtr(shader_type, 0, ARRAY_COUNT(ctx->uniforms)), ctx->uniforms, sizeof(ctx->uniforms));
 }
