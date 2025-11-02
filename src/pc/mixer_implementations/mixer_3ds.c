@@ -523,6 +523,7 @@ void aMixImpl(const int16_t gain, const uint16_t in_addr, const uint16_t out_add
 
 // Enables one to inspect the contents of the Emulated RSPA via debugger.
 // Use the Snoop Tag to differentiate different calls for breakpoints.
+/*
 void aSnoop(volatile int snoopTag) {
     UNUSED volatile uint16_t vInOffset = rspa.in;
     UNUSED volatile uint16_t vOutOffset = rspa.out;
@@ -563,3 +564,4 @@ void aSnoop(volatile int snoopTag) {
     i++;
     i++;
 }
+*/

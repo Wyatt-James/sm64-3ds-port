@@ -63,8 +63,8 @@ void aMixImpl(int16_t gain, uint16_t in_addr, uint16_t out_addr);
 
 #define ENHANCED_RSPA_EMULATION
 
-// Snoop contents of the emulated RSPA for debugging.
-void aSnoop(volatile int snoopTag);
+// Snoop contents of the emulated RSPA for debugging. May be safely removed from release builds.
+// void aSnoop(volatile int snoopTag);
 
 void aADPCMdecDirectImpl(uint8_t flags, ADPCM_STATE state, uint8_t* source);
 void aInterleaveAndCopyImpl(uint16_t left, uint16_t right, int16_t *dest_addr);
