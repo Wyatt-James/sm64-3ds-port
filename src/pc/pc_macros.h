@@ -41,6 +41,8 @@
 // General macros
 #define MAX(a_, b_) ((a_) > (b_) ? (a_) : (b_)) // Returns the higher of a_ and b_.
 #define MIN(a_, b_) ((a_) < (b_) ? (a_) : (b_)) // Returns the lower of a_ and b_.
+#define CLAMP_LOWER(val_, min_) MAX(val_, min_) // Clamps a value above a minimum.
+#define CLAMP_UPPER(val_, max_) MIN(val_, max_) // Clamps a value below a maximum.
 #define CLAMP(v_, min_, max_) MAX(MIN((v_), (max_)), (min_)) // Returns v_ if it is in range [min,max], else returns the nearest in-range value.
 #define ENUM_CLAMP(v_, max_) (((v_) <= 0 || (v_) >= (max_)) ? 0 : (v_)) // Returns v_ if it is in range [0, max), else returns 0.
 #define ARRAY_COUNT(arr_) (size_t)(sizeof(arr_) / sizeof(arr_[0])) // Returns the number of elements in arr_.
@@ -65,6 +67,7 @@
 #define UNUSED __attribute__((unused))
 #define USED __attribute__((used))
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
+#define NO_INLINE __attribute__((noinline))
 #define ALIGNED(n_) __attribute__((aligned(n_)))
 #define HOT __attribute__ ((hot))
 #define COLD __attribute__ ((cold))
