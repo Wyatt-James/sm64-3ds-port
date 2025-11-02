@@ -152,30 +152,12 @@ union int16x2 {
 
 union int16x4 {
     struct {
-        int16_t s16_1;
-        int16_t s16_2;
-        int16_t s16_3;
-        int16_t s16_4;
-    };
-    struct {
-        int16_t x;
-        int16_t y;
-        int16_t z;
-        int16_t w;
-    };
-    struct {
         int16_t uls;
         int16_t ult;
         int16_t width;
         int16_t height;
     };
-    struct {
-        uint32_t u32_upper;
-        uint32_t u32_lower;
-    };
     uint64_t u64;
-    int64_t s64;
-    double f64;
 };
 
 union boolx2 {
