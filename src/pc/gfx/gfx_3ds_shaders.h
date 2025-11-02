@@ -41,6 +41,6 @@ struct n3ds_shader_info {
    struct n3ds_shader_vbo_info vbo_info;
 };
 
-extern const struct n3ds_shader_info* const shaders[];
+extern const struct n3ds_shader_info* const shaders[]; // WYATT_TODO this doesn't belong here
 
 #endif
