@@ -106,15 +106,6 @@ const struct n3ds_shader_info
     emu64_shader_11       = { &emu64_shader_binary, DVLE_11,   5, VBO_INFO(V_POS | V_TEX |       V_NOR, emu64_vertex_format_11)   }, // position, texture, normals
     emu64_shader_menu     = { &emu64_shader_binary, DVLE_MENU, 6, VBO_INFO(V_POS | V_TEX              , emu64_vertex_format_menu) }; // position, texture (alternate)
 
-const struct n3ds_shader_info* const shaders[] = {
-    &emu64_shader_3,
-    &emu64_shader_5,
-    &emu64_shader_7,
-    &emu64_shader_9,
-    &emu64_shader_11,
-    &emu64_shader_menu,
-};
-
 void shprog_emu64_init()
 {
     emu64_shader_binary.size = emu64_shbin_size;
