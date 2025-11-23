@@ -72,13 +72,13 @@ static inline void C3DW_FogGasMode(bool fog_enabled)
     C3D_FogGasMode(citro3d_helpers_convert_fog_mode(fog_enabled), GPU_PLAIN_DENSITY, true);
 }
 
-static inline void C3DW_SetViewport(struct ViewportConfig* cfg)
+static inline void C3DW_SetViewport(ScreenDimensions* cfg)
 {
     C3D_SetViewport(cfg->y, cfg->x, cfg->height, cfg->width);
 }
 
-static inline void C3DW_SetScissor(struct ScissorConfig* cfg)
+static inline void C3DW_SetScissor(ScreenDimensions* cfg)
 {
-    C3D_SetScissor(cfg->enable ? GPU_SCISSOR_NORMAL : GPU_SCISSOR_DISABLE, cfg->y1, cfg->x1, cfg->y2, cfg->x2);
+    C3D_SetScissor(GPU_SCISSOR_NORMAL, cfg->y1, cfg->x1, cfg->y2, cfg->x2);
 }
 

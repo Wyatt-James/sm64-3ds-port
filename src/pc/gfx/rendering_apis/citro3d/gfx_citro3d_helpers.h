@@ -69,10 +69,13 @@ void citro3d_helpers_mtx_stereo_tilt(C3D_Mtx* dst, C3D_Mtx* src, enum Stereoscop
 void citro3d_helpers_apply_projection_mtx_preset(C3D_Mtx* mtx);
 
 // Converts an RSP viewport config to its GFX_Citro3D counterpart.
-void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height);
+void citro3d_helpers_convert_viewport_settings(ScreenDimensions* viewport_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height);
 
 // Converts an RSP viewport config to its GFX_Citro3D counterpart.
-void citro3d_helpers_convert_scissor_settings(struct ScissorConfig* scissor_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height);
+void citro3d_helpers_convert_scissor_settings(ScreenDimensions* scissor_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height);
+
+// Alters the scaling of the given ScreenDimensions, based on the given N3DS_DisplayModes.
+void citro3d_helpers_rescale_screen_dimensions(ScreenDimensions* viewport_config, N3DS_DisplayMode old_gfx_mode, N3DS_DisplayMode new_gfx_mode);
 
 // Converts an RSP IOD config to its GFX_Citro3D counterpart.
 void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z, float w);

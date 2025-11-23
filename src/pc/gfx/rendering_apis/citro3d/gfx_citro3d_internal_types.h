@@ -60,16 +60,11 @@ typedef struct
     struct CCFeatures cc_features;
 } ColorCombiner;
 
-struct ScissorConfig
+typedef union
 {
-    int x1, y1, x2, y2;
-    bool enable;
-};
-
-struct ViewportConfig
-{
-    int x, y, width, height;
-};
+    struct {int x1, y1, x2, y2;};
+    struct {int x, y, width, height;};
+} ScreenDimensions;
 
 struct IodConfig
 {

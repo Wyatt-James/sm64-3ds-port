@@ -58,8 +58,8 @@ typedef struct
     Emu64ShaderProgram* shader_program;
     ColorCombiner* color_combiner;
     struct VertexLoadConfig vertex_load_flags;
-    struct ViewportConfig viewport_config;
-    struct ScissorConfig scissor_config;
+    ScreenDimensions viewport_config,
+                     scissor_config;
     TexHandle* gpu_textures[CTX_TEXTURE_COUNT];
     TexHandle* current_texture;
 

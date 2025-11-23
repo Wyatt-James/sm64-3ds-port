@@ -404,29 +404,39 @@ static inline ScaleFactor gfx_mode_scale_factor(N3DS_DisplayMode gfx_mode)
     switch (gfx_mode) {
         default:                      // Same as 400x240
         case N3DS_DISPLAY_3D:         // Same as 400x240
-        case N3DS_DISPLAY_2D_400_240: return (ScaleFactor) {1, 1};
-        case N3DS_DISPLAY_2D_800_240: return (ScaleFactor) {2, 1};
-        case N3DS_DISPLAY_2D_800_480: return (ScaleFactor) {2, 2};
+        case N3DS_DISPLAY_2D_400_240: return (ScaleFactor) {0, 0};
+        case N3DS_DISPLAY_2D_800_240: return (ScaleFactor) {1, 0};
+        case N3DS_DISPLAY_2D_800_480: return (ScaleFactor) {1, 1};
     }
 }
 
-void citro3d_helpers_convert_viewport_settings(struct ViewportConfig* viewport_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
+void citro3d_helpers_convert_viewport_settings(ScreenDimensions* viewport_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
 {
     ScaleFactor scale = gfx_mode_scale_factor(gfx_mode);
-    viewport_config->x       = x      * scale.x;
-    viewport_config->y       = y      * scale.y;
-    viewport_config->width   = width  * scale.x;
-    viewport_config->height  = height * scale.y;
+    viewport_config->x       = x      << scale.x;
+    viewport_config->y       = y      << scale.y;
+    viewport_config->width   = width  << scale.x;
+    viewport_config->height  = height << scale.y;
 }
 
-void citro3d_helpers_convert_scissor_settings(struct ScissorConfig* scissor_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
+void citro3d_helpers_convert_scissor_settings(ScreenDimensions* scissor_config, N3DS_DisplayMode gfx_mode, int x, int y, int width, int height)
 {
     ScaleFactor scale = gfx_mode_scale_factor(gfx_mode);
-    scissor_config->x1     = x * scale.x;
-    scissor_config->y1     = y * scale.y;
-    scissor_config->x2     = (x + width)  * scale.x;
-    scissor_config->y2     = (y + height) * scale.y;
-    scissor_config->enable = true;
+    scissor_config->x1     = x << scale.x;
+    scissor_config->y1     = y << scale.y;
+    scissor_config->x2     = (x + width)  << scale.x;
+    scissor_config->y2     = (y + height) << scale.y;
+}
+
+// Placed in the COLD section because it should be called at most once per-frame.
+COLD void citro3d_helpers_rescale_screen_dimensions(ScreenDimensions* c, N3DS_DisplayMode old_gfx_mode, N3DS_DisplayMode new_gfx_mode)
+{
+    ScaleFactor old = gfx_mode_scale_factor(old_gfx_mode);
+    ScaleFactor new = gfx_mode_scale_factor(new_gfx_mode);
+    c->x      = c->x      >> old.x << new.x;
+    c->y      = c->y      >> old.y << new.y;
+    c->width  = c->width  >> old.x << new.x;
+    c->height = c->height >> old.y << new.y;
 }
 
 void citro3d_helpers_convert_iod_settings(struct IodConfig* iod_config, float z, float w)

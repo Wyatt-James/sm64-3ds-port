@@ -117,6 +117,10 @@ static float slider_level;
 static struct GameMtxSet rsp_matrix_sets[NUM_MATRIX_SETS];
 static bool recalculate_stereo_matrices;
 
+// Used to update some things whenever the N3DS_DisplayMode changes.
+// Not stored in the context because it doesn't really have anything to do with it.
+static N3DS_DisplayMode old_display_mode;
+
 // The current matrices.
 // projection_2d is the 3DS-specific P-matrix used in 2D rendering.
 // projection_left/right are the 3DS-specific P-matrices used in 3D rendering.
@@ -549,6 +553,9 @@ COLD static void internal_citro3d_init_rendering_state()
     transposed_model_view = &rsp_matrix_sets[DEFAULT_MATRIX_SET].transposed_model_view,
     game_projection       = &rsp_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
 
+    // Needs to be one with a 1:1 scale to match the initializers below.
+    old_display_mode = N3DS_DISPLAY_2D_400_240;
+
     optimize = (OptimizationFlags) {
         .consecutive_fog               = true,
         .consecutive_stereo_p_mtx      = true,
@@ -567,8 +574,8 @@ COLD static void internal_citro3d_init_rendering_state()
     ctx = (RenderContext) {
         // These are used directly for GPU initialization, so we set them to real values.
         .flags             = CTX_ALL,
-        .viewport_config   = (struct ViewportConfig) {.x = 0, .y = 0, .width = 400, .height = 240},
-        .scissor_config    = (struct ScissorConfig) {.enable = false},
+        .viewport_config   = (ScreenDimensions) {.x = 0, .y = 0, .width = 400, .height = 240},
+        .scissor_config    = (ScreenDimensions) {.x1 = 0, .y1 = 0, .x2 = 400, .y2 = 240},
         .vertex_load_flags = (struct VertexLoadConfig) {.enable_lighting = false, .enable_texgen = false, .num_lights = 0, .texture_scale_s = 1, .texture_scale_t = 1},
         .fog_color         = (union RGBA32) {.u32 = 0xFFFFFFFF},
         .zmode_decal       = false,
@@ -641,6 +648,10 @@ COLD void gfx_citro3d_emulator_start_frame(void)
         vertex_buffers[i].num_verts = 0;
 
     internal_citro3d_update_3d_slider();
+
+    citro3d_helpers_rescale_screen_dimensions(&ctx.viewport_config, old_display_mode, g3dsGfxState.display_mode);
+    citro3d_helpers_rescale_screen_dimensions(&ctx.scissor_config, old_display_mode, g3dsGfxState.display_mode);
+    old_display_mode = g3dsGfxState.display_mode;
     
     // Restore context
     gfx_citro3d_upload_context_uniforms(&ctx, GPU_VERTEX_SHADER);
