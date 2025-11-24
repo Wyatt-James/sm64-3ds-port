@@ -930,22 +930,26 @@ $(BUILD_DIR)/%.shbin.o: $(BUILD_DIR)/%.shbin
 	printf "$(DEVKITPRO)/tools/bin/bin2s $< | $(AS) -o $@"
 	$(DEVKITPRO)/tools/bin/bin2s $< | $(AS) -o $@
 
+# TODO make the shader recompiled if either the binary or header is outdated/missing.
 $(BUILD_DIR)/%.shbin: %.shprog $(PICA_DEPENDENCY_HACK)
 	$(eval $@shprog_file_path := $<)
 	@echo "Building PICA200 shader: $($@shprog_file_path)"
 
 # Load .shprog file and extend its paths to be relative to working directory, rather than the pica root dir
-	$(eval $@loaded_shprog   := $(shell cat ${$@shprog_file_path}))
-	$(eval $@extended_shprog := $(foreach file,$($@loaded_shprog),$(PICA_ROOT_DIR)/$(file)))
+	$(eval $@loaded_shprog_sources   := $(shell cat ${$@shprog_file_path}))
+	$(eval $@extended_shprog_sources := $(foreach file,$($@loaded_shprog_sources),$(PICA_ROOT_DIR)/$(file)))
 
-	$(DEVKITPRO)/tools/bin/picasso -o $@ $($@extended_shprog)
+# Place shader header directly next to shader binary
+	$(eval $@shprog_generated_header := $(patsubst %.shbin,%.h,$@))
+
+	$(DEVKITPRO)/tools/bin/picasso -o $@ -h $($@shprog_generated_header) $($@extended_shprog_sources)
 
 SMDH_TITLE ?= Super Mario 64
 SMDH_DESCRIPTION ?= Super Mario 64 3DS Port
 SMDH_AUTHOR ?= mkst
 SMDH_ICON := 3ds/icon.smdh
 
-$(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(PICA_O) $(SMDH_ICON)
+$(ELF): $(PICA_O) $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(SMDH_ICON)
 	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(PICA_O) $(MINIMAP_T3X_O) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
 
 $(EXE): $(ELF)

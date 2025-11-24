@@ -58,26 +58,6 @@ enum n3ds_shader_emu64_dvle_index {
    DVLE_MENU,
 };
 
-#ifndef EMU64_USE_UNSAFE
-struct n3ds_emu64_uniform_locations
-   emu64_uniform_locations_ = {
-       .projection_mtx = -1,
-       .model_view_mtx = -1,
-       .game_projection_mtx = -1,
-       .transposed_model_view_mtx = -1,
-       .rsp_color_selection = -1,
-       .tex_settings_1 = -1,
-       .tex_settings_2 = -1,
-       .vertex_load_flags = -1,
-       .light_colors = { .ambient = -1, .directional = { -1, -1 }},
-       .light_directions = { -1, -1 },
-       .rsp_colors = { -1, -1, -1, -1 },
-   };
-
-struct n3ds_emu64_const_uniform_locations
-   emu64_const_uniform_locations_ = { -1, -1, -1, -1, -1 };
-#endif
-   
 const struct n3ds_emu64_const_uniform_defaults 
    emu64_const_uniform_defaults = {
     .texture_const_1 = {   0.0f,    1.0f,  1/65536.0f, 1/508.0f },
@@ -110,43 +90,6 @@ void shprog_emu64_init()
 {
     emu64_shader_binary.size = emu64_shbin_size;
     emu64_shader_binary.dvlb = DVLB_ParseFile((__3ds_u32*)emu64_shader_binary.data, emu64_shader_binary.size);
-
-#ifndef EMU64_USE_UNSAFE
-    DVLE_s* dvle = &emu64_shader_binary.dvlb->DVLE[0]; // Despite the shared uniform space, we need a shader will all of the uniforms declared.
-
-    memset(&emu64_uniform_locations_,       -1, sizeof(emu64_uniform_locations_));
-    memset(&emu64_const_uniform_locations_, -1, sizeof(emu64_const_uniform_locations_));
-
-    // Variable uniforms
-    emu64_uniform_locations_.projection_mtx              = DVLE_GetUniformRegister(dvle, "projection_mtx");
-    emu64_uniform_locations_.model_view_mtx              = DVLE_GetUniformRegister(dvle, "model_view_mtx");
-    emu64_uniform_locations_.game_projection_mtx         = DVLE_GetUniformRegister(dvle, "game_projection_mtx");
-    emu64_uniform_locations_.transposed_model_view_mtx   = DVLE_GetUniformRegister(dvle, "transposed_model_view_mtx");
-    emu64_uniform_locations_.rsp_color_selection         = DVLE_GetUniformRegister(dvle, "rsp_color_selection");
-    emu64_uniform_locations_.tex_settings_1              = DVLE_GetUniformRegister(dvle, "tex_settings_1");
-    emu64_uniform_locations_.tex_settings_2              = DVLE_GetUniformRegister(dvle, "tex_settings_2");
-    emu64_uniform_locations_.vertex_load_flags           = DVLE_GetUniformRegister(dvle, "vertex_load_flags");
-    emu64_uniform_locations_.light_colors.ambient        = DVLE_GetUniformRegister(dvle, "ambient_light_color");
-    emu64_uniform_locations_.light_colors.directional[0] = DVLE_GetUniformRegister(dvle, "light_colors");
-    emu64_uniform_locations_.light_directions[0]         = DVLE_GetUniformRegister(dvle, "light_directions");
-    emu64_uniform_locations_.rsp_colors[0]               = DVLE_GetUniformRegister(dvle, "rsp_colors");
-    
-    for (int i = 1; i < EMU64_MAX_DIRECTIONAL_LIGHTS; i++) {
-        emu64_uniform_locations_.light_colors.directional[i] = emu64_uniform_locations_.light_colors.directional[0] + i;
-        emu64_uniform_locations_.light_directions[i] = emu64_uniform_locations_.light_directions[0] + i;
-    }
-
-    for (int i = 1; i < EMU64_NUM_RSP_COLORS; i++) {
-        emu64_uniform_locations_.rsp_colors[i] = emu64_uniform_locations_.rsp_colors[0] + i;
-    }
-
-    // Constant uniforms
-    emu64_const_uniform_locations_.texture_const_1 = DVLE_GetUniformRegister(dvle, "texture_const_1");
-    emu64_const_uniform_locations_.texture_const_2 = DVLE_GetUniformRegister(dvle, "texture_const_2");
-    emu64_const_uniform_locations_.cc_constants    = DVLE_GetUniformRegister(dvle, "cc_constants");
-    emu64_const_uniform_locations_.emu64_const_1   = DVLE_GetUniformRegister(dvle, "emu64_const_1");
-    emu64_const_uniform_locations_.emu64_const_2   = DVLE_GetUniformRegister(dvle, "emu64_const_2");
-#endif
 }
 
 void shprog_emu64_print_uniform_locations(FILE* out) {

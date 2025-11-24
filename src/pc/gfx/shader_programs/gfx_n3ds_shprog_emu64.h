@@ -5,54 +5,30 @@
 
 #include "src/pc/gfx/gfx_3ds_shaders.h"
 
+#include "src/pc/gfx/shaders/emu64.h" // Generated dynamically by Picasso
+
 /*
  * A set of shaders for emulating the N64.
- *
- * Note: moving shader uniforms from runtime to compile-time saved ~80us.
  */
 
-#define EMU64_USE_UNSAFE
-
-// WYATT_TODO picasso can generate this for us. Use that instead.
-#ifdef EMU64_USE_UNSAFE
-#define EMU64_ULOC_projection_mtx                 0
-#define EMU64_ULOC_model_view_mtx                 4
-#define EMU64_ULOC_game_projection_mtx            8
-#define EMU64_ULOC_transposed_model_view_mtx      12
-#define EMU64_ULOC_rsp_color_selection            16
-#define EMU64_ULOC_tex_settings_1                 17
-#define EMU64_ULOC_tex_settings_2                 18
-#define EMU64_ULOC_vertex_load_flags              19
-#define EMU64_ULOC_light_colors_ambient           20
-#define EMU64_ULOC_light_colors_directional(n_)  (21 + (n_))
-#define EMU64_ULOC_light_colors(n_)              (20 + (n_))
-#define EMU64_ULOC_light_directions(n_)          (23 + (n_))
-#define EMU64_ULOC_rsp_colors(n_)                (25 + (n_))
-#define EMU64_CONST_ULOC_texture_const_1          29
-#define EMU64_CONST_ULOC_texture_const_2          30
-#define EMU64_CONST_ULOC_cc_constants             31
-#define EMU64_CONST_ULOC_emu64_const_1            32
-#define EMU64_CONST_ULOC_emu64_const_2            33
-#else
-#define EMU64_ULOC_projection_mtx                 emu64_uniform_locations_.projection_mtx
-#define EMU64_ULOC_model_view_mtx                 emu64_uniform_locations_.model_view_mtx
-#define EMU64_ULOC_game_projection_mtx            emu64_uniform_locations_.game_projection_mtx
-#define EMU64_ULOC_transposed_model_view_mtx      emu64_uniform_locations_.transposed_model_view_mtx
-#define EMU64_ULOC_rsp_color_selection            emu64_uniform_locations_.rsp_color_selection
-#define EMU64_ULOC_tex_settings_1                 emu64_uniform_locations_.tex_settings_1
-#define EMU64_ULOC_tex_settings_2                 emu64_uniform_locations_.tex_settings_2
-#define EMU64_ULOC_vertex_load_flags              emu64_uniform_locations_.vertex_load_flags
-#define EMU64_ULOC_light_colors_ambient           emu64_uniform_locations_.light_colors.ambient
-#define EMU64_ULOC_light_colors_directional(n_)   emu64_uniform_locations_.light_colors.directional[n_]
-#define EMU64_ULOC_light_colors(n_)               emu64_uniform_locations_.light_colors.all[n_]
-#define EMU64_ULOC_light_directions(n_)           emu64_uniform_locations_.light_directions[n_]
-#define EMU64_ULOC_rsp_colors(n_)                 emu64_uniform_locations_.rsp_colors[n_]
-#define EMU64_CONST_ULOC_texture_const_1          emu64_const_uniform_locations_.texture_const_1
-#define EMU64_CONST_ULOC_texture_const_2          emu64_const_uniform_locations_.texture_const_2
-#define EMU64_CONST_ULOC_cc_constants             emu64_const_uniform_locations_.cc_constants
-#define EMU64_CONST_ULOC_emu64_const_1            emu64_const_uniform_locations_.emu64_const_1
-#define EMU64_CONST_ULOC_emu64_const_2            emu64_const_uniform_locations_.emu64_const_2
-#endif
+#define EMU64_ULOC_projection_mtx                 VSH_FVEC_projection_mtx
+#define EMU64_ULOC_model_view_mtx                 VSH_FVEC_model_view_mtx
+#define EMU64_ULOC_game_projection_mtx            VSH_FVEC_game_projection_mtx
+#define EMU64_ULOC_transposed_model_view_mtx      VSH_FVEC_transposed_model_view_mtx
+#define EMU64_ULOC_rsp_color_selection            VSH_FVEC_rsp_color_selection
+#define EMU64_ULOC_tex_settings_1                 VSH_FVEC_tex_settings_1
+#define EMU64_ULOC_tex_settings_2                 VSH_FVEC_tex_settings_2
+#define EMU64_ULOC_vertex_load_flags              VSH_FVEC_vertex_load_flags
+#define EMU64_ULOC_light_colors_ambient           VSH_FVEC_ambient_light_color
+#define EMU64_ULOC_light_colors_directional(n_)  ((n_) + VSH_FVEC_light_colors)
+#define EMU64_ULOC_light_colors(n_)              ((n_) + VSH_FVEC_ambient_light_color)
+#define EMU64_ULOC_light_directions(n_)          ((n_) + VSH_FVEC_light_directions)
+#define EMU64_ULOC_rsp_colors(n_)                ((n_) + VSH_FVEC_rsp_colors)
+#define EMU64_CONST_ULOC_texture_const_1          VSH_FVEC_texture_const_1
+#define EMU64_CONST_ULOC_texture_const_2          VSH_FVEC_texture_const_2
+#define EMU64_CONST_ULOC_cc_constants             VSH_FVEC_cc_constants
+#define EMU64_CONST_ULOC_emu64_const_1            VSH_FVEC_emu64_const_1
+#define EMU64_CONST_ULOC_emu64_const_2            VSH_FVEC_emu64_const_2
 
 #define EMU64_NUM_VERTEX_FORMATS 5
 #define EMU64_UNSAFE_NUM_FV_UNIFS 34
@@ -61,18 +37,18 @@
 #define EMU64_NUM_RSP_COLORS 4
 
 // Stride values for specific inputs. Unit is one word (uint32_t)
-#define EMU64_STRIDE_UNIT_SIZE sizeof(float)
-#define EMU64_STRIDE_RGBA         1
-#define EMU64_STRIDE_XYZA         1
-#define EMU64_STRIDE_POSITION     2
-#define EMU64_STRIDE_TEXTURE      1
-#define EMU64_STRIDE_VERTEX_COLOR EMU64_STRIDE_RGBA
+#define EMU64_STRIDE_UNIT_SIZE               sizeof(float)
+#define EMU64_STRIDE_RGBA                    1
+#define EMU64_STRIDE_XYZA                    1
+#define EMU64_STRIDE_POSITION                2
+#define EMU64_STRIDE_TEXTURE                 1
+#define EMU64_STRIDE_VERTEX_COLOR            EMU64_STRIDE_RGBA
 #define EMU64_STRIDE_VERTEX_NORMAL_AND_ALPHA EMU64_STRIDE_XYZA
 
 // Maximum possible stride. RGBA and XYZA are mutually exclusive.
-#define EMU64_STRIDE_MAX      (EMU64_STRIDE_POSITION    \
-                            +  EMU64_STRIDE_TEXTURE     \
-                            +  EMU64_STRIDE_RGBA)
+#define EMU64_STRIDE_MAX   (EMU64_STRIDE_POSITION \
+                         +  EMU64_STRIDE_TEXTURE  \
+                         +  EMU64_STRIDE_RGBA)
 
 typedef uint8_t Emu64ShaderCode; // EMU64 shader code
 
@@ -114,30 +90,6 @@ union n3ds_emu64_light_color_uniform_locations {
    int all[EMU64_MAX_DIRECTIONAL_LIGHTS + 1]; // Homogenous ambient
 };
 
-// Uniforms that should be changed freely.
-struct n3ds_emu64_uniform_locations {
-   int projection_mtx,
-       model_view_mtx,
-       game_projection_mtx,
-       transposed_model_view_mtx,
-       rsp_color_selection,
-       tex_settings_1,
-       tex_settings_2,
-       vertex_load_flags;
-   union n3ds_emu64_light_color_uniform_locations light_colors;
-   int light_directions[EMU64_MAX_DIRECTIONAL_LIGHTS],
-       rsp_colors[EMU64_NUM_RSP_COLORS];
-};
-
-// Uniforms that should be initialized once and remain constant.
-struct n3ds_emu64_const_uniform_locations {
-   int texture_const_1,
-       texture_const_2,
-       cc_constants,
-       emu64_const_1,
-       emu64_const_2;
-};
-
 struct n3ds_emu64_const_uniform_defaults {
    float texture_const_1[4],
          texture_const_2[4],
@@ -146,17 +98,9 @@ struct n3ds_emu64_const_uniform_defaults {
          emu64_const_2[4];
 };
 
-#ifndef EMU64_USE_UNSAFE
-extern struct n3ds_emu64_uniform_locations
-   emu64_uniform_locations_;
-
-extern struct n3ds_emu64_const_uniform_locations
-   emu64_const_uniform_locations_;
-#endif
-   
 extern const struct n3ds_emu64_uniform_defaults 
    emu64_uniform_defaults;
-   
+
 extern const struct n3ds_emu64_const_uniform_defaults 
    emu64_const_uniform_defaults;
 
