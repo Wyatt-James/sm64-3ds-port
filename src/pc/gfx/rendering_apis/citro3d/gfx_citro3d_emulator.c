@@ -109,7 +109,7 @@ static TexHandle* texture_upload_queue[MAX_ASYNC_TEXTURE_COPIES_PER_FRAME];
 
 // Miscellaneous stuff
 static struct FogCache fog_cache;
-struct IodConfig iod_config;
+static struct IodConfig iod_config;
 static enum Stereoscopic3dMode stereo_3d_mode;
 static float slider_level;
 
