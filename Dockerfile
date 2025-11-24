@@ -67,7 +67,7 @@ ENV DEVKITPRO=/opt/devkitpro
 ENV DEVKITARM=/opt/devkitpro/devkitARM
 ENV DEVKITPPC=/opt/devkitpro/devkitPPC
 
-# ----- Install Misc. Packages (WYATT_TODO unnecessary?) -----
+# ----- Install Misc. Packages -----
 RUN apt-get update && \
 apt-get install -y \
   binutils-mips-linux-gnu \
