@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 7f80303..90b96f9 100644
+index 6e0a04e..e686cfd 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -509,7 +509,7 @@ ifeq ($(TARGET_N3DS),1)
@@ -1919,10 +1919,10 @@ index cd9f13c..697921b 100644
          gSPDisplayList(displayListIter++, &intro_seg7_dl_0700B3A0);
          gSPPopMatrix(displayListIter++, G_MTX_MODELVIEW);
 diff --git a/src/pc/gfx/gfx_pc.c b/src/pc/gfx/gfx_pc.c
-index bea4504..bba2936 100644
+index 80d5fa9..a6fedd0 100644
 --- a/src/pc/gfx/gfx_pc.c
 +++ b/src/pc/gfx/gfx_pc.c
-@@ -1685,6 +1685,7 @@ static void gfx_sp_reset() {
+@@ -1664,6 +1664,7 @@ static void gfx_sp_reset() {
      PC_METRIC_DO(num_rsp_commands_run = 0);
  }
  
@@ -1930,7 +1930,7 @@ index bea4504..bba2936 100644
  COLD void gfx_run(Gfx *commands) {
      gfx_sp_reset();
  
-@@ -1696,12 +1697,12 @@ COLD void gfx_run(Gfx *commands) {
+@@ -1675,12 +1676,12 @@ COLD void gfx_run(Gfx *commands) {
  
      profiler_3ds_log_time(0);
      gfx_rapi_start_frame();
@@ -1959,7 +1959,7 @@ index 36f3428..d42d107 100644
  }
  #endif
 diff --git a/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c b/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c
-index 69805e3..54bcde9 100644
+index 853e588..fea6a64 100644
 --- a/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c
 +++ b/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c
 @@ -20,9 +20,9 @@
@@ -2092,15 +2092,15 @@ index e81ca7c..cb0c041 100644
  
  #ifdef TARGET_WEB
 diff --git a/src/pc/profiler_3ds.c b/src/pc/profiler_3ds.c
-index 311171a..6135951 100644
+index 7f1862e..2194380 100644
 --- a/src/pc/profiler_3ds.c
 +++ b/src/pc/profiler_3ds.c
-@@ -463,7 +463,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
-                     snoop_print_mode = TIME;
+@@ -344,7 +344,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
+                     snoop_print_mode = PRINT_TIME;
  
-                     while (snoop_print_mode != NONE) {
--                        UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_internal(0, 5 /* + 20*/, snoop_print_mode);
-+                        UNUSED volatile int log_len = profiler_3ds_create_log_string_circular_internal(0, 7 /* + 20*/, snoop_print_mode);
-                         snoop_print_mode = NONE;
+                     while (snoop_print_mode != PRINT_NONE) {
+-                        UNUSED volatile int log_len = profiler_3ds_create_log_string_internal(0, 5 /* + 20*/, snoop_print_mode);
++                        UNUSED volatile int log_len = profiler_3ds_create_log_string_internal(0, 7 /* + 20*/, snoop_print_mode);
+                         snoop_print_mode = PRINT_NONE;
  
-                         breakpoint += 5; // Place a breakpoint here
+                         NOP; // Place a breakpoint here
