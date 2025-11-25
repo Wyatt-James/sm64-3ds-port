@@ -133,7 +133,6 @@ static C3D_Mtx  projection_2d,
                *transposed_model_view,
                *game_projection;
 
-// Determines the clear config for each viewport.
 static OptimizationFlags optimize;
 static RenderContext ctx;
 
