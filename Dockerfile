@@ -17,9 +17,9 @@ RUN wget https://github.com/Wyatt-James/citro3d/archive/ad2b990d867d97397d8151e6
   echo F14B0B8E80BB5D900DDD3B68D38CA2660FFA3E66263EA103F469759AC477576C  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/libctru/archive/cf29600389990e078bba757f2f1a46cdc939f11c.zip \
+RUN wget https://github.com/Wyatt-James/libctru/archive/31bbb6bd5f3f2e5f15ec7bd5fb4ee0142525e552.zip \
   -O libctru-wyatt-james.zip && \
-  echo 4262393D4DF8F3F0FC02B49B0EB095070C3126A571E2610118E93BB4A129B693  libctru-wyatt-james.zip | sha256sum --check
+  echo 8B8935C7F0297A514C215B360686C0067B40FBF66108444AF4BDD4CBB31A28D9  libctru-wyatt-james.zip | sha256sum --check
 
 # ----- Extract archives in-place, removing commit-specific container folders -----
   
