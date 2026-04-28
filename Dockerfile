@@ -68,9 +68,12 @@ ENV DEVKITARM=/opt/devkitpro/devkitARM
 ENV DEVKITPPC=/opt/devkitpro/devkitPPC
 
 # ----- Install Misc. Packages -----
-RUN apt-get update && \
-apt-get install -y \
-  binutils-mips-linux-gnu \
+# I'm not sure why this is so broken. What the hell?
+RUN rm /var/lib/apt/lists/* -rvf
+RUN mv /etc/security/namespace.init /docker_logs/namespace.init
+RUN apt-get clean
+RUN apt-get update
+RUN apt-get install -y binutils-mips-linux-gnu \
   bsdmainutils \
   build-essential \
   libaudiofile-dev \
