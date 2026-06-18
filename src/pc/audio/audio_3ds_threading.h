@@ -22,6 +22,7 @@ extern N3DS_ThreadInfo n3ds_audio_thread_info;
 extern N3DS_Processor n3ds_desired_audio_cpu;
 
 // Controls when Thread5 is allowed to skip waiting for the audio thread.
+// can be overridden by g3dsConfig.level_script_waits_for_audio.
 extern bool s_thread5_wait_for_audio_to_finish;
 
 // Synchronization variables

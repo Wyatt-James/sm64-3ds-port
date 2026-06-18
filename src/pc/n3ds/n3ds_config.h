@@ -24,7 +24,8 @@ typedef struct
          vram_textures,                      // Read-only. Gives a nice performance boost.
          enable_new_3ds_speedup,             // Read-only. Ignored on old models.
          print_menu_interactions,            // If enabled, touch menu interactions are printed.
-         enable_multi_threading;             // Read-only. If enabled, audio runs on a separate core.
+         enable_multi_threading,             // Read-only. If enabled, audio runs on a separate core.
+         level_script_waits_for_audio;       // If enabled, the level script will always wait for the audio thread before running.
     uint8_t syscore_limit,                   // Limit for syscore while the game is running. Can be [10-80].
             syscore_limit_idle;              // Limit for syscore while the game is suspended. Can be [10-80].
     N3DS_Screen console_screen;              // Read-only. Which screens get a console. Only one can be used at a time. Ignored if VRAM framebuffers are enabled. Warning: will change framebuffer format to RGB565!

@@ -29,6 +29,7 @@
 #include "pc/audio/audio_3ds_threading.h"
 #include "pc/audio/audio_3ds.h"
 #include "src/pc/profiler_3ds.h"
+#include "src/pc/n3ds/n3ds_config.h"
 #endif
 
 #define CMD_GET(type, offset) (*(type *) (CMD_PROCESS_OFFSET(offset) + (u8 *) sCurrentCmd))
@@ -843,8 +844,10 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
     sCurrentCmd = cmd;
 
+    const bool waitForAudio = s_thread5_wait_for_audio_to_finish || g3dsConfig.level_script_waits_for_audio;
+
     // Either wait for synthesis or tick
-    if (s_thread5_wait_for_audio_to_finish)
+    if (waitForAudio)
         waitForSynchronizationVar(&s_audio_frames_to_process);
     else
         waitForSynchronizationVar(&s_audio_frames_to_tick);
@@ -856,7 +859,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
         LevelScriptJumpTable[sCurrentCmd->type]();
 
         // If we need to wait for synthesis to finish, wait and break
-        if (s_thread5_wait_for_audio_to_finish) {
+        if (waitForAudio) {
             waitForSynchronizationVar(&s_audio_frames_to_process);
             break;
         }
