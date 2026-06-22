@@ -238,7 +238,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
     float* vb_head = &vb_ptr[vb_num_verts * vb_stride];
 
     // Prevent buffer overruns
-    if (vb_num_verts_after * vb_stride > VERTEX_BUFFER_NUM_UNITS) {
+    if (UNLIKELY(vb_num_verts_after * vb_stride > VERTEX_BUFFER_NUM_UNITS)) {
         num_rejected_draw_calls++;
         return;
     }

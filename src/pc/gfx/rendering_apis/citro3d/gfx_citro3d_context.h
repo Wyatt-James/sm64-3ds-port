@@ -71,9 +71,14 @@ typedef struct
          fog_enabled;
     uint8_t culling_mode; // GPU_CULLMODE
 
-    union RGBA32 fog_color,
-                 env_color,
-                 prim_color;
+    union {
+        struct {
+            union RGBA32 fog_color,
+                         prim_color,
+                         env_color;
+        };
+        union RGBA32 colors[3];
+    };
 
     float uv_offset;
     
@@ -152,10 +157,7 @@ static inline void gfx_citro3d_update_context(RenderContext* ctx)
     {
         if (ctx->color_combiner->cc_features.num_inputs > 1)
         {
-            if (ctx->color_combiner->use_env_color)
-                C3D_TexEnvColor(C3D_GetTexEnv(0), ctx->env_color.u32);
-            else
-                C3D_TexEnvColor(C3D_GetTexEnv(0), ctx->prim_color.u32);
+            C3D_TexEnvColor(C3D_GetTexEnv(0), ctx->colors[1 + (size_t) ctx->color_combiner->use_env_color].u32);
         }
         
         if (flags & CTX_PRIM_COLOR)
@@ -204,7 +206,7 @@ static inline void gfx_citro3d_update_context(RenderContext* ctx)
         C3DW_AlphaTest(ctx->alpha_test);
     }
 
-    ctx->flags &= ~CTX_ALL;
+    ctx->flags = flags & ~CTX_ALL;
 }
 
 static inline void gfx_citro3d_force_update_context(RenderContext* ctx)
