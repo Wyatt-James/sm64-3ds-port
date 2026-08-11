@@ -10,5 +10,4 @@
 void gfx_citro3d_emulator_init(void);
 void gfx_citro3d_emulator_start_frame(void);
 void gfx_citro3d_emulator_end_frame(void);
-void gfx_citro3d_emulator_init(void);
 void gfx_citro3d_emulator_exit(void);

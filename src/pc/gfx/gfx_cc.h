@@ -70,7 +70,7 @@ struct CCFeatures {
     bool opt_texture_edge;    // True if alpha rejection is enabled.
     bool opt_noise;           // True if noise is enabled.
     bool used_textures[2];    // If both are true, 2-cycle must be enabled.
-    int num_inputs;           // Number of CC inputs. Max 4.
+    uint8_t num_inputs;       // Number of CC inputs. Max 4.
     bool do_single[2];        // True if there is only an additive component.
     bool do_multiply[2];      // True if there are no subtractive or additive components.
     bool do_mix[2];           // True if subtractive and additive components are equal.

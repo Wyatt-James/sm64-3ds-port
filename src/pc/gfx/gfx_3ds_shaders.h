@@ -9,21 +9,21 @@
 
 // Held in an array.
 struct n3ds_emu64_vertex_attribute {
-   GPU_FORMATS format;
+   uint8_t format; // GPU_FORMATS
    uint8_t count;
 };
 
 // An array of vertex attributes
 struct n3ds_attribute_data {
    const struct n3ds_emu64_vertex_attribute* data;
-   size_t num_attribs;
+   uint8_t num_attribs;
 };
 
 struct n3ds_shader_vbo_info {
-   bool has_position,
-        has_texture,
-        has_color,
-        has_normals;
+   bool has_position : 1,
+        has_texture  : 1,
+        has_color    : 1,
+        has_normals  : 1;
    uint8_t stride;
    struct n3ds_attribute_data attributes;
 };

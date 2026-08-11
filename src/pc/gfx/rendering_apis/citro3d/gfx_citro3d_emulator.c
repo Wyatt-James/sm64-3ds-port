@@ -533,7 +533,7 @@ COLD static void internal_citro3d_init_rendering_state()
     iod_config     = (struct IodConfig) { .z = 8.0f, .w = 16.0f };
     stereo_3d_mode = STEREO_MODE_2D;
     slider_level   = n3ds_hid_3d_slider();
-    recalculate_stereo_matrices = slider_level > 0.0f;
+    recalculate_stereo_matrices = true;
 
     fog_cache_init(&fog_cache);
 
@@ -636,6 +636,8 @@ COLD void gfx_citro3d_emulator_exit(void)
 {
     for (int i = 0; i < num_shader_programs; i++)
         citro3d_helpers_free_shader(&shader_program_pool[i].prog);
+    
+    num_shader_programs = 0;
 }
 
 COLD void gfx_citro3d_emulator_start_frame(void)
@@ -752,6 +754,7 @@ COLD static Emu64ShaderProgram* internal_citro3d_create_new_shader(Emu64ProgramF
 }
 
 // Searches for a shader program, or allocates a new one if one was not found.
+// WYATT_TODO IDs are 4-bit. This should just read into an array.
 COLD static Emu64ShaderProgram* internal_citro3d_lookup_or_create_shader(Emu64ProgramFeatureFlags shader_features)
 {
     for (size_t i = 0; i < num_shader_programs; i++) {

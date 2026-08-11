@@ -30,8 +30,9 @@
 #define EMU64_CONST_ULOC_emu64_const_1            VSH_FVEC_emu64_const_1
 #define EMU64_CONST_ULOC_emu64_const_2            VSH_FVEC_emu64_const_2
 
+
 #define EMU64_NUM_VERTEX_FORMATS 5
-#define EMU64_UNSAFE_NUM_FV_UNIFS 34
+#define EMU64_NUM_UNIFS (EMU64_CONST_ULOC_emu64_const_2 + 1)
 
 #define EMU64_MAX_DIRECTIONAL_LIGHTS 2 // Does NOT include ambient
 #define EMU64_NUM_RSP_COLORS 4

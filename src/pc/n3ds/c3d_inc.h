@@ -1,5 +1,7 @@
 #pragma once
 
+#include "libctru_inc.h"
+
 /*
  * This file contains the usual Citro3D includes with type redefinition guards.
  * All 3DS includes must be done inside of an equivalent define/undef block

@@ -6,6 +6,11 @@
  * to avoid type redefinition issues.
  */
 
+// WYATT_TODO move to makefile? Eh probably fine
+#define GPUCMD_DISABLE_BOUNDS_CHECKS
+#define GPUCMD_INLINE_THRESH 6
+// GPUCMD_ENABLE_ZERO_PADDING Disabled because it's slow
+
 #define u64 __3ds_u64
 #define s64 __3ds_s64
 #define u32 __3ds_u32

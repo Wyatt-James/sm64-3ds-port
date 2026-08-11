@@ -83,7 +83,7 @@ typedef struct
     float uv_offset;
     
     C3D_TexEnv two_color_texenv;
-    C3D_FVec uniforms[EMU64_UNSAFE_NUM_FV_UNIFS];
+    C3D_FVec uniforms[EMU64_NUM_UNIFS];
 } RenderContext;
 
 // Uploads this context to the rendering API.
