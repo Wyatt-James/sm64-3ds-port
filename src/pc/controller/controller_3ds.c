@@ -60,6 +60,10 @@ static void controller_3ds_init(void)
     set_button_mapping(i++, D_CBUTTONS,   configKeyCDown);
     set_button_mapping(i++, L_CBUTTONS,   configKeyCLeft);
     set_button_mapping(i++, R_CBUTTONS,   configKeyCRight);
+    set_button_mapping(i++, U_JPAD,       configKeyDUp);
+    set_button_mapping(i++, D_JPAD,       configKeyDDown);
+    set_button_mapping(i++, L_JPAD,       configKeyDLeft);
+    set_button_mapping(i++, R_JPAD,       configKeyDRight);
 }
 
 static void controller_3ds_read(OSContPad *pad)
