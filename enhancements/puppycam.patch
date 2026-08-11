@@ -92,7 +92,7 @@ index 0000000..dc4481e
 +#endif // TARGET_N64
 diff --git a/enhancements/puppycam.inc.c b/enhancements/puppycam.inc.c
 new file mode 100644
-index 0000000..4689813
+index 0000000..aaeeba9
 --- /dev/null
 +++ b/enhancements/puppycam.inc.c
 @@ -0,0 +1,1057 @@
@@ -140,7 +140,7 @@ index 0000000..4689813
 +    u8 newcam_hard_areaID;
 +    u8 newcam_hard_permaswap;
 +    u16 newcam_hard_modeset;
-+    s32 *newcam_hard_script;
++    void (*newcam_hard_script)();
 +    s16 newcam_hard_X1;
 +    s16 newcam_hard_Y1;
 +    s16 newcam_hard_Z1;
@@ -214,28 +214,28 @@ index 0000000..4689813
 +u8 newcam_option_scroll = 0;
 +u8 newcam_option_scroll_last = 0;
 +
++#define OPT 32 //Just a temp thing
++
 +#ifndef NC_CODE_NOMENU
 +#if defined(VERSION_EU)
-+static u8 newcam_options_fr[][64] = {{NC_ANALOGUE_FR}, {NC_CAMX_FR}, {NC_CAMY_FR}, {NC_INVERTX_FR}, {NC_INVERTY_FR}, {NC_CAMC_FR}, {NC_CAMP_FR}, {NC_CAMD_FR}};
-+static u8 newcam_options_de[][64] = {{NC_ANALOGUE_DE}, {NC_CAMX_DE}, {NC_CAMY_DE}, {NC_INVERTX}, {NC_INVERTY_DE}, {NC_CAMC_DE}, {NC_CAMP_DE}, {NC_CAMD_DE}};
-+static u8 newcam_flags_fr[][64] = {{NC_DISABLED_FR}, {NC_ENABLED_FR}};
-+static u8 newcam_flags_de[][64] = {{NC_DISABLED_DE}, {NC_ENABLED_DE}};
-+static u8 newcam_strings_fr[][64] = {{NC_BUTTON_FR}, {NC_BUTTON2_FR}, {NC_OPTION_FR}, {NC_HIGHLIGHT_L_FR}, {NC_HIGHLIGHT_R_FR}};
-+static u8 newcam_strings_de[][64] = {{NC_BUTTON_DE}, {NC_BUTTON2_DE}, {NC_OPTION_DE}, {NC_HIGHLIGHT_L_DE}, {NC_HIGHLIGHT_R_DE}};
++static u8 newcam_options_fr[OPT][64] = {{NC_ANALOGUE_FR}, {NC_CAMX_FR}, {NC_CAMY_FR}, {NC_INVERTX_FR}, {NC_INVERTY_FR}, {NC_CAMC_FR}, {NC_CAMP_FR}, {NC_CAMD_FR}};
++static u8 newcam_options_de[OPT][64] = {{NC_ANALOGUE_DE}, {NC_CAMX_DE}, {NC_CAMY_DE}, {NC_INVERTX}, {NC_INVERTY_DE}, {NC_CAMC_DE}, {NC_CAMP_DE}, {NC_CAMD_DE}};
++static u8 newcam_flags_fr[OPT][64] = {{NC_DISABLED_FR}, {NC_ENABLED_FR}};
++static u8 newcam_flags_de[OPT][64] = {{NC_DISABLED_DE}, {NC_ENABLED_DE}};
++static u8 newcam_strings_fr[OPT][64] = {{NC_BUTTON_FR}, {NC_BUTTON2_FR}, {NC_OPTION_FR}, {NC_HIGHLIGHT_L_FR}, {NC_HIGHLIGHT_R_FR}};
++static u8 newcam_strings_de[OPT][64] = {{NC_BUTTON_DE}, {NC_BUTTON2_DE}, {NC_OPTION_DE}, {NC_HIGHLIGHT_L_DE}, {NC_HIGHLIGHT_R_DE}};
 +#endif
-+static u8 newcam_options[][64] = {{NC_ANALOGUE}, {NC_CAMX}, {NC_CAMY}, {NC_INVERTX}, {NC_INVERTY}, {NC_CAMC}, {NC_CAMP}, {NC_CAMD}};
-+static u8 newcam_flags[][64] = {{NC_DISABLED}, {NC_ENABLED}};
-+static u8 newcam_strings[][64] = {{NC_BUTTON}, {NC_BUTTON2}, {NC_OPTION}, {NC_HIGHLIGHT_L}, {NC_HIGHLIGHT_R}};
++static u8 newcam_options[OPT][64] = {{NC_ANALOGUE}, {NC_CAMX}, {NC_CAMY}, {NC_INVERTX}, {NC_INVERTY}, {NC_CAMC}, {NC_CAMP}, {NC_CAMD}};
++static u8 newcam_flags[OPT][64] = {{NC_DISABLED}, {NC_ENABLED}};
++static u8 newcam_strings[OPT][64] = {{NC_BUTTON}, {NC_BUTTON2}, {NC_OPTION}, {NC_HIGHLIGHT_L}, {NC_HIGHLIGHT_R}};
 +#endif
-+
-+#define OPT 32 //Just a temp thing
 +
 +static u8 (*newcam_options_ptr)[OPT][64] = &newcam_options;
 +static u8 (*newcam_flags_ptr)[OPT][64] = &newcam_flags;
 +static u8 (*newcam_strings_ptr)[OPT][64] = &newcam_strings;
 +
 +
-+static struct newcam_optionstruct
++struct newcam_optionstruct
 +{
 +    u8 newcam_op_name; //This is the position in the newcam_options text array. It doesn't have to directly correlate with its position in the struct
 +    s16 *newcam_op_var; //This is the value that the option is going to directly affect.
@@ -635,7 +635,7 @@ index 0000000..4689813
 +    if (newcam_centering && newcam_modeflags & NC_FLAG_XTURN)
 +    {
 +        newcam_yaw = approach_s16_symmetric(newcam_yaw,newcam_yaw_target,0x800);
-+        if (newcam_yaw = newcam_yaw_target)
++        if (newcam_yaw == newcam_yaw_target)
 +            newcam_centering = 0;
 +    }
 +    else
@@ -656,50 +656,50 @@ index 0000000..4689813
 +    if (newcam_tilt < -12000)
 +        newcam_tilt = -12000;
 +
-+        if (newcam_turnwait > 0 && gMarioState->vel[1] == 0)
-+        {
-+            newcam_turnwait -= 1;
-+            if (newcam_turnwait < 0)
-+                newcam_turnwait = 0;
-+        }
-+        else
-+        {
-+        if (gMarioState->intendedMag > 0 && gMarioState->vel[1] == 0 && newcam_modeflags & NC_FLAG_XTURN && !(newcam_modeflags & NC_FLAG_8D) && !(newcam_modeflags & NC_FLAG_4D))
-+            newcam_yaw = (approach_s16_symmetric(newcam_yaw,-gMarioState->faceAngle[1]-0x4000,((newcam_aggression*(ABS(gPlayer1Controller->rawStickX/10)))*(gMarioState->forwardVel/32))));
-+        else
-+            newcam_turnwait = 10;
-+        }
++    if (newcam_turnwait > 0 && gMarioState->vel[1] == 0)
++    {
++        newcam_turnwait -= 1;
++        if (newcam_turnwait < 0)
++            newcam_turnwait = 0;
++    }
++    else
++    {
++    if (gMarioState->intendedMag > 0 && gMarioState->vel[1] == 0 && newcam_modeflags & NC_FLAG_XTURN && !(newcam_modeflags & NC_FLAG_8D) && !(newcam_modeflags & NC_FLAG_4D))
++        newcam_yaw = (approach_s16_symmetric(newcam_yaw,-gMarioState->faceAngle[1]-0x4000,((newcam_aggression*(ABS(gPlayer1Controller->rawStickX/10)))*(gMarioState->forwardVel/32))));
++    else
++        newcam_turnwait = 10;
++    }
 +
-+        if (newcam_modeflags & NC_FLAG_SLIDECORRECT)
-+        {
-+            switch (gMarioState->action)
-+            {
-+                case ACT_BUTT_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
-+                case ACT_STOMACH_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
-+                case ACT_HOLD_BUTT_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
-+                case ACT_HOLD_STOMACH_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
-+            }
-+        }
++    if (newcam_modeflags & NC_FLAG_SLIDECORRECT)
++    {
 +        switch (gMarioState->action)
 +        {
-+            case ACT_SHOT_FROM_CANNON: waterflag = 1; break;
-+            case ACT_FLYING: waterflag = 1; break;
++            case ACT_BUTT_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
++            case ACT_STOMACH_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
++            case ACT_HOLD_BUTT_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
++            case ACT_HOLD_STOMACH_SLIDE: if (gMarioState->forwardVel > 8) waterflag = 1; break;
 +        }
++    }
++    switch (gMarioState->action)
++    {
++        case ACT_SHOT_FROM_CANNON: waterflag = 1; break;
++        case ACT_FLYING: waterflag = 1; break;
++    }
 +
-+        if (gMarioState->action & ACT_FLAG_SWIMMING)
-+        {
-+            if (gMarioState->forwardVel > 2)
-+            waterflag = 1;
-+        }
++    if (gMarioState->action & ACT_FLAG_SWIMMING)
++    {
++        if (gMarioState->forwardVel > 2)
++        waterflag = 1;
++    }
 +
-+        if (waterflag && newcam_modeflags & NC_FLAG_XTURN)
-+        {
-+            newcam_yaw = (approach_s16_symmetric(newcam_yaw,-gMarioState->faceAngle[1]-0x4000,(gMarioState->forwardVel*128)));
-+            if ((signed)gMarioState->forwardVel > 1)
-+                newcam_tilt = (approach_s16_symmetric(newcam_tilt,(-gMarioState->faceAngle[0]*0.8)+3000,(gMarioState->forwardVel*32)));
-+            else
-+                newcam_tilt = (approach_s16_symmetric(newcam_tilt,3000,32));
-+        }
++    if (waterflag && newcam_modeflags & NC_FLAG_XTURN)
++    {
++        newcam_yaw = (approach_s16_symmetric(newcam_yaw,-gMarioState->faceAngle[1]-0x4000,(gMarioState->forwardVel*128)));
++        if ((signed)gMarioState->forwardVel > 1)
++            newcam_tilt = (approach_s16_symmetric(newcam_tilt,(-gMarioState->faceAngle[0]*0.8)+3000,(gMarioState->forwardVel*32)));
++        else
++            newcam_tilt = (approach_s16_symmetric(newcam_tilt,3000,32));
++    }
 +}
 +
 +static void newcam_collision(void)
@@ -712,7 +712,7 @@ index 0000000..4689813
 +    camdir[1] = newcam_pos[1]-newcam_lookat[1];
 +    camdir[2] = newcam_pos[2]-newcam_lookat[2];
 +
-+    find_surface_on_ray(newcam_pos_target, camdir, &surf, &hitpos);
++    find_surface_on_ray(newcam_pos_target, camdir, &surf, hitpos);
 +    newcam_coldist = sqrtf((newcam_pos_target[0] - hitpos[0]) * (newcam_pos_target[0] - hitpos[0]) + (newcam_pos_target[1] - hitpos[1]) * (newcam_pos_target[1] - hitpos[1]) + (newcam_pos_target[2] - hitpos[2]) * (newcam_pos_target[2] - hitpos[2]));
 +
 +
