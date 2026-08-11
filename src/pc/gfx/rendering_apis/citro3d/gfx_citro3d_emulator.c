@@ -508,9 +508,8 @@ void gfx_rapi_apply_projection_matrix(void)
 
 // --------------- Uncommonly-used Functions ---------------
 
-// WYATT_TODO there's a leak somewhere that's related to this, since
-// textures seemingly keep getting allocated but never used.
-// Check the gfx_pc hash function?
+// WYATT_TODO gfx_pc's hash function is imperfect and allocates duplicate
+// textures over time. This will eventually cause this to fail.
 COLD uint32_t gfx_rapi_new_texture(void)
 {
     if (api_texture_index == MAX_TEXTURES)
