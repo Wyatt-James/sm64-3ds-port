@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 6e0a04e..e686cfd 100644
+index dcc80b8..f197f48 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -509,7 +509,7 @@ ifeq ($(TARGET_N3DS),1)
@@ -678,12 +678,12 @@ index 8d4daa5..7ce2b22 100644
      gSPMatrix(gDisplayListHead++, VIRTUAL_TO_PHYSICAL(mtx++),
                G_MTX_MODELVIEW | G_MTX_MUL | G_MTX_PUSH);
 diff --git a/src/game/ingame_menu.c b/src/game/ingame_menu.c
-index b9a43df..281e0f3 100644
+index 69e808a..0fd4e56 100644
 --- a/src/game/ingame_menu.c
 +++ b/src/game/ingame_menu.c
-@@ -111,6 +111,41 @@ u8 gMenuHoldKeyIndex = 0;
- u8 gMenuHoldKeyTimer = 0;
- s32 gDialogResponse = 0;
+@@ -123,6 +123,41 @@ s32 gDialogResponse = 0;
+ static struct CachedChar { u8 used; u8 data[CHCACHE_BUFLEN]; } charCache[256];
+ #endif // VERSION
  
 +static Gfx *sInterpolatedDialogOffsetPos;
 +static f32 sInterpolatedDialogOffset;
@@ -723,7 +723,7 @@ index b9a43df..281e0f3 100644
  
  void create_dl_identity_matrix(void) {
      Mtx *matrix = (Mtx *) alloc_display_list(sizeof(Mtx));
-@@ -947,6 +982,14 @@ void render_dialog_box_type(struct DialogEntry *dialog, s8 linesPerBox) {
+@@ -964,6 +999,14 @@ void render_dialog_box_type(struct DialogEntry *dialog, s8 linesPerBox) {
      switch (gDialogBoxType) {
          case DIALOG_TYPE_ROTATE: // Renders a dialog black box with zoom and rotation
              if (gDialogBoxState == DIALOG_STATE_OPENING || gDialogBoxState == DIALOG_STATE_CLOSING) {
@@ -738,7 +738,7 @@ index b9a43df..281e0f3 100644
                  create_dl_scale_matrix(MENU_MTX_NOPUSH, 1.0 / gDialogBoxScale, 1.0 / gDialogBoxScale, 1.0f);
                  // convert the speed into angle
                  create_dl_rotation_matrix(MENU_MTX_NOPUSH, gDialogBoxOpenTimer * 4.0f, 0, 0, 1.0f);
-@@ -955,6 +998,12 @@ void render_dialog_box_type(struct DialogEntry *dialog, s8 linesPerBox) {
+@@ -972,6 +1015,12 @@ void render_dialog_box_type(struct DialogEntry *dialog, s8 linesPerBox) {
              break;
          case DIALOG_TYPE_ZOOM: // Renders a dialog white box with zoom
              if (gDialogBoxState == DIALOG_STATE_OPENING || gDialogBoxState == DIALOG_STATE_CLOSING) {
@@ -751,7 +751,7 @@ index b9a43df..281e0f3 100644
                  create_dl_translation_matrix(MENU_MTX_NOPUSH, 65.0 - (65.0 / gDialogBoxScale),
                                                (40.0 / gDialogBoxScale) - 40, 0);
                  create_dl_scale_matrix(MENU_MTX_NOPUSH, 1.0 / gDialogBoxScale, 1.0 / gDialogBoxScale, 1.0f);
-@@ -1237,6 +1286,8 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
+@@ -1254,6 +1303,8 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
  #ifdef VERSION_EU
          gDialogY -= gDialogScrollOffsetY;
  #else

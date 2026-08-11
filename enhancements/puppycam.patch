@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 7f80303..8233819 100644
+index dcc80b8..9a41f52 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -271,7 +271,7 @@ else
@@ -1851,10 +1851,10 @@ index 8d4daa5..c1f2099 100644
  
          if (hudDisplayFlags & HUD_DISPLAY_FLAG_TIMER) {
 diff --git a/src/game/ingame_menu.c b/src/game/ingame_menu.c
-index b9a43df..2ef25df 100644
+index 69e808a..2bf2860 100644
 --- a/src/game/ingame_menu.c
 +++ b/src/game/ingame_menu.c
-@@ -22,6 +22,7 @@
+@@ -23,6 +23,7 @@
  #include "sm64.h"
  #include "text_strings.h"
  #include "types.h"
@@ -1862,7 +1862,7 @@ index b9a43df..2ef25df 100644
  
  u16 gDialogColorFadeTimer;
  s8 gLastDialogLineNum;
-@@ -2603,7 +2604,10 @@ s16 render_pause_courses_and_castle(void) {
+@@ -2620,7 +2621,10 @@ s16 render_pause_courses_and_castle(void) {
  #ifdef VERSION_EU
      gInGameLanguage = eu_get_language();
  #endif
@@ -1874,7 +1874,7 @@ index b9a43df..2ef25df 100644
      switch (gDialogBoxState) {
          case DIALOG_STATE_OPENING:
              gDialogLineNum = 1;
-@@ -2679,6 +2683,16 @@ s16 render_pause_courses_and_castle(void) {
+@@ -2696,6 +2700,16 @@ s16 render_pause_courses_and_castle(void) {
      if (gDialogTextAlpha < 250) {
          gDialogTextAlpha += 25;
      }
@@ -2003,13 +2003,13 @@ index e6354e8..393d8bb 100644
      return gfxHead;
  }
 diff --git a/src/game/save_file.c b/src/game/save_file.c
-index 4748b99..bb9f149 100644
+index 42bc7c1..f8d3638 100644
 --- a/src/game/save_file.c
 +++ b/src/game/save_file.c
-@@ -11,11 +11,13 @@
- #include "level_table.h"
+@@ -12,11 +12,13 @@
  #include "course_table.h"
  #include "thread6.h"
+ #include "macros.h"
 +#include "../../enhancements/puppycam.h"
  
  #define MENU_DATA_MAGIC 0x4849
@@ -2021,7 +2021,7 @@ index 4748b99..bb9f149 100644
  
  extern struct SaveBuffer gSaveBuffer;
  
-@@ -565,6 +567,51 @@ u16 save_file_get_sound_mode(void) {
+@@ -566,6 +568,51 @@ u16 save_file_get_sound_mode(void) {
      return gSaveBuffer.menuData[0].soundMode;
  }
  
@@ -2148,11 +2148,11 @@ index 3ee5a19..824ee79 100644
  void disable_warp_checkpoint(void);
  void check_if_should_set_warp_checkpoint(struct WarpNode *warpNode);
 diff --git a/src/pc/configfile.c b/src/pc/configfile.c
-index 7bbdcef..43d7f01 100644
+index 87d00d1..aa7d8d3 100644
 --- a/src/pc/configfile.c
 +++ b/src/pc/configfile.c
-@@ -68,6 +68,15 @@ unsigned int configKeyStickLeft  = 0;
- unsigned int configKeyStickRight = 0;
+@@ -76,6 +76,15 @@ unsigned int configKeyDLeft      = 0;
+ unsigned int configKeyDRight     = 0;
  #endif
  
 +unsigned int puppycam_sensitivityX = 75;
@@ -2167,10 +2167,10 @@ index 7bbdcef..43d7f01 100644
  
  static const struct ConfigOption options[] = {
      {.name = "fullscreen",     .type = CONFIG_TYPE_BOOL, .boolValue = &configFullscreen},
-@@ -81,6 +90,13 @@ static const struct ConfigOption options[] = {
-     {.name = "key_cdown",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyCDown},
-     {.name = "key_cleft",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyCLeft},
-     {.name = "key_cright",     .type = CONFIG_TYPE_UINT, .uintValue = &configKeyCRight},
+@@ -93,6 +102,13 @@ static const struct ConfigOption options[] = {
+     {.name = "key_ddown",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDDown},
+     {.name = "key_dleft",      .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDLeft},
+     {.name = "key_dright",     .type = CONFIG_TYPE_UINT, .uintValue = &configKeyDRight},
 +    {.name = "puppycam_sensitivity_x", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_sensitivityX},
 +    {.name = "puppycam_sensitivity_y", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_sensitivityY},
 +    {.name = "puppycam_invert_x", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_invertX},
@@ -2182,12 +2182,12 @@ index 7bbdcef..43d7f01 100644
      {.name = "key_stickup",    .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickUp},
      {.name = "key_stickdown",  .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickDown},
 diff --git a/src/pc/configfile.h b/src/pc/configfile.h
-index 7128aaa..eaa85da 100644
+index 2a18979..810c1d8 100644
 --- a/src/pc/configfile.h
 +++ b/src/pc/configfile.h
-@@ -17,6 +17,14 @@ extern unsigned int configKeyStickDown;
- extern unsigned int configKeyStickLeft;
- extern unsigned int configKeyStickRight;
+@@ -21,6 +21,14 @@ extern unsigned int configKeyDDown;
+ extern unsigned int configKeyDLeft;
+ extern unsigned int configKeyDRight;
  
 +extern unsigned int puppycam_sensitivityX;
 +extern unsigned int puppycam_sensitivityY;
@@ -2201,7 +2201,7 @@ index 7128aaa..eaa85da 100644
  void configfile_save(const char *filename);
  
 diff --git a/src/pc/controller/controller_3ds.c b/src/pc/controller/controller_3ds.c
-index 333a325..bc90ebc 100644
+index 16be5a8..d3ac64f 100644
 --- a/src/pc/controller/controller_3ds.c
 +++ b/src/pc/controller/controller_3ds.c
 @@ -14,6 +14,9 @@
@@ -2213,16 +2213,16 @@ index 333a325..bc90ebc 100644
 +
  typedef struct
  {
-     int n64, n3ds;
-@@ -21,6 +24,7 @@ typedef struct
+     u16 n64;
+@@ -22,6 +25,7 @@ typedef struct
  
- __3ds_u32 controller_3ds_force_hold = 0;
+ u16 controller_3ds_force_hold = 0;
  static ButtonMapping button_mapping[10];
 +s16 rightstick[2];
  
- static void set_button_mapping(int index, int mask_n64, int mask_3ds)
+ static void set_button_mapping(int index, u16 mask_n64, unsigned int mask_3ds)
  {
-@@ -65,9 +69,20 @@ static void controller_3ds_read(OSContPad *pad)
+@@ -70,9 +74,20 @@ static void controller_3ds_read(OSContPad *pad)
  {
      pad->button = controller_3ds_get_held();
  
@@ -2245,12 +2245,12 @@ index 333a325..bc90ebc 100644
  
  struct ControllerAPI controller_3ds = {
 diff --git a/src/pc/controller/controller_3ds.h b/src/pc/controller/controller_3ds.h
-index e69accc..de28053 100644
+index 0168f06..c6b91ab 100644
 --- a/src/pc/controller/controller_3ds.h
 +++ b/src/pc/controller/controller_3ds.h
-@@ -9,5 +9,6 @@
+@@ -7,5 +7,6 @@
  
- extern __3ds_u32 controller_3ds_force_hold; // Forces N64 buttons to be held. See hid.h for definitions.
+ extern u16 controller_3ds_force_hold; // Forces N64 buttons to be held. See hid.h for definitions.
  extern struct ControllerAPI controller_3ds;
 +extern s16 rightstick[2];
  
