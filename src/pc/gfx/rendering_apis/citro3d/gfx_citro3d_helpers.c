@@ -514,6 +514,9 @@ ShaderProgram citro3d_helpers_init_shader(const struct n3ds_shader_info* shader_
         if (vbo_size > 0)
             vb->ptr = linearAlloc(vbo_size);
 
+        if (vb->ptr == NULL)
+            printf("Error: failed to allocate vertex buffer for shader\n");
+
         
         BufInfo_Init(&vb->buf_info);
         BufInfo_Add(&vb->buf_info, vb->ptr, vbo_info->stride * EMU64_STRIDE_UNIT_SIZE, vb->attr_info.attrCount, vb->attr_info.permutation);
@@ -532,7 +535,9 @@ void citro3d_helpers_free_shader(ShaderProgram* prog)
     if (prog->vertex_buffer != NULL && prog->vertex_buffer->ptr != NULL)
     {
         linearFree(prog->vertex_buffer->ptr);
+        linearFree(prog->vertex_buffer->ptr2);
         prog->vertex_buffer->ptr = NULL;
+        prog->vertex_buffer->ptr2 = NULL;
     }
 }
 
@@ -553,6 +558,13 @@ void citro3d_helpers_init_cc(ColorCombiner* cc, ColorCombinerId cc_id)
         CCShaderId shader_id;
         gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
         gfx_cc_get_features(shader_id, &cc->cc_features);
+
+        bool hasTex = cc->cc_features.used_textures[0] | cc->cc_features.used_textures[1],
+             hasCol = cc->cc_features.num_inputs > 0;
+
+        cc->shader_features = EMU64_VBO_POSITION;
+        if (hasTex) cc->shader_features |= EMU64_VBO_TEXTURE;
+        if (hasCol) cc->shader_features |= EMU64_VBO_COLOR;
     }
 
     // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)

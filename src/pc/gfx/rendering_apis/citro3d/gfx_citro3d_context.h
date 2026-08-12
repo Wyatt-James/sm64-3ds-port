@@ -55,7 +55,7 @@ typedef struct
 {
     ContextFlags flags;
 
-    Emu64ShaderProgram* shader_program;
+    ShaderProgram* shader_program;
     ColorCombiner* color_combiner;
     struct VertexLoadConfig vertex_load_flags;
     ScreenDimensions viewport_config,
@@ -108,7 +108,7 @@ static inline void gfx_citro3d_update_context(RenderContext* ctx)
 
     if (flags & CTX_SHADER)
     {
-        ShaderProgram* prg = &ctx->shader_program->prog;
+        ShaderProgram* prg = ctx->shader_program;
         C3D_BindProgram(&prg->pica_shader_program);
         C3D_SetAttrInfo(&prg->vertex_buffer->attr_info);
         C3D_SetBufInfo(&prg->vertex_buffer->buf_info);

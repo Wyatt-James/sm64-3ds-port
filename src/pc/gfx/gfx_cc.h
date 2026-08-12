@@ -6,7 +6,7 @@
 #include <PR/gbi.h>
 
 #define DELIBERATELY_INVALID_CC_ID ~0 // Represents an invalid color combiner, to be used for initial conditions.
-#define DEFAULT_CC_ID calculate_cc_id(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_0), convert_color_combiner(0, 0, 0, G_ACMUX_0)), false, false, false, false) // A real CC ID that produces only black pixels with alpha 0.
+#define DEFAULT_CC_ID calculate_cc_id(COMBINE_MODE(convert_color_combiner(0, 0, 0, G_CCMUX_SHADE), convert_color_combiner(0, 0, 0, G_ACMUX_SHADE)), false, false, false, false) // A real CC ID that produces only black pixels with alpha 0.
 
 #define SHADER_OPT_ALPHA        (1 << 24)
 #define SHADER_OPT_FOG          (1 << 25)

@@ -36,7 +36,6 @@
 #define MAX_TEXTURES 4096
 #define MAX_ASYNC_TEXTURE_COPIES_PER_FRAME 4
 #define MAX_VERTEX_BUFFERS  EMU64_NUM_VERTEX_FORMATS
-#define MAX_SHADER_PROGRAMS 32
 #define MAX_COLOR_COMBINERS 64
 
 #define OPT_ON 1
@@ -93,9 +92,8 @@ static size_t num_rejected_draw_calls;
 static VertexBuffer vertex_buffers[MAX_VERTEX_BUFFERS];
 static uint8_t num_vertex_buffers;
 
-// If we run out, returns pool[0]
-static Emu64ShaderProgram shader_program_pool[MAX_SHADER_PROGRAMS];
-static uint8_t num_shader_programs;
+// Position is assumed to always be present
+static ShaderProgram shader_program_pool[EMU64_VBO_PERMUTATIONS >> 1];
 
 // If we run out, wraps to 0.
 static ColorCombiner color_combiner_pool[MAX_COLOR_COMBINERS];
@@ -139,8 +137,7 @@ static RenderContext ctx;
 // --------------- Forward Declarations ---------------
 static VertexBuffer* internal_citro3d_setup_vertex_buffer(const struct n3ds_shader_vbo_info* vbo_info, C3D_AttrInfo attr_info);
 static VertexBuffer* internal_citro3d_lookup_or_create_vertex_buffer(const struct n3ds_shader_vbo_info* vbo_info, C3D_AttrInfo attr_info);
-static Emu64ShaderProgram* internal_citro3d_create_new_shader(Emu64ProgramFeatureFlags shader_features);
-static Emu64ShaderProgram* internal_citro3d_lookup_or_create_shader(Emu64ProgramFeatureFlags shader_features);
+static ShaderProgram* internal_citro3d_create_new_shader(Emu64ShaderFeatures shader_features);
 static void internal_citro3d_select_shader();
 static void internal_citro3d_select_color_combiner(ColorCombiner* cc);
 static void internal_citro3d_recalculate_stereo_matrices();
@@ -158,20 +155,13 @@ static void internal_citro3d_select_shader()
 {
     if (ctx.flags & CTX_SHADER || OPT_DISABLED(optimize.consecutive_shader))
     {
-        struct CCFeatures* cc_features = &ctx.color_combiner->cc_features;
-
-        bool hasTex  = cc_features->used_textures[0] || cc_features->used_textures[1],
-             hasCol  = cc_features->num_inputs > 0 && !ctx.vertex_load_flags.enable_lighting,
-             hasNorm = ctx.vertex_load_flags.enable_lighting;
-
-        Emu64ProgramFeatureFlags shader_features = {
-            .position = true,
-            .tex = hasTex,
-            .color = hasCol,
-            .normals = hasNorm
-        };
-
-        Emu64ShaderProgram* prg = internal_citro3d_lookup_or_create_shader(shader_features);
+        Emu64ShaderFeatures shader_features = ctx.color_combiner->shader_features;
+        if (ctx.vertex_load_flags.enable_lighting) {
+            shader_features &= ~EMU64_VBO_COLOR;
+            shader_features |= EMU64_VBO_NORMALS;
+        }
+        
+        ShaderProgram* prg = &shader_program_pool[shader_features >> 1];
 
         if (ctx.shader_program != prg || OPT_DISABLED(optimize.consecutive_shader))
             ctx.shader_program  = prg;
@@ -229,7 +219,7 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
     gfx_citro3d_update_context(&ctx);
 
-    VertexBuffer* vb = ctx.shader_program->prog.vertex_buffer;
+    VertexBuffer* vb = ctx.shader_program->vertex_buffer;
     float* const vb_ptr = vb->ptr;
     size_t vb_num_verts = vb->num_verts;
     uint8_t vb_stride = vb->vbo_info->stride;
@@ -525,10 +515,9 @@ COLD uint32_t gfx_rapi_new_texture(void)
 COLD static void internal_citro3d_init_rendering_state()
 {
     num_rejected_draw_calls = 0;
-
     num_vertex_buffers = 0;
     num_color_combiners = 0;
-    num_shader_programs = 0;
+    api_texture_index = 0;
 
     iod_config     = (struct IodConfig) { .z = 8.0f, .w = 16.0f };
     stereo_3d_mode = STEREO_MODE_2D;
@@ -537,10 +526,8 @@ COLD static void internal_citro3d_init_rendering_state()
 
     fog_cache_init(&fog_cache);
 
-    api_texture_index = 0;
-
     // Default all matrix sets to identity
-    for (int i = 0; i < NUM_MATRIX_SETS; i++) {
+    for (size_t i = 0; i < NUM_MATRIX_SETS; i++) {
         Mtx_Identity(&rsp_matrix_sets[i].game_projection);
         Mtx_Identity(&rsp_matrix_sets[i].model_view);
     }
@@ -612,6 +599,10 @@ COLD static void internal_citro3d_load_default_texture()
 COLD void gfx_citro3d_emulator_init(void)
 {
     internal_citro3d_init_rendering_state();
+
+    for (size_t i = 0; i < ARRAY_COUNT(shader_program_pool); i++)
+        internal_citro3d_create_new_shader((i << 1) | EMU64_VBO_POSITION);
+
     internal_citro3d_select_color_combiner(&color_combiner_pool[gfx_rapi_lookup_or_create_color_combiner(DEFAULT_CC_ID)]);
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
     internal_citro3d_load_default_texture();
@@ -634,18 +625,26 @@ COLD void gfx_citro3d_emulator_init(void)
 
 COLD void gfx_citro3d_emulator_exit(void)
 {
-    for (int i = 0; i < num_shader_programs; i++)
-        citro3d_helpers_free_shader(&shader_program_pool[i].prog);
-    
-    num_shader_programs = 0;
+    for (size_t i = 0; i < ARRAY_COUNT(shader_program_pool); i++)
+        citro3d_helpers_free_shader(&shader_program_pool[i]);
 }
 
 COLD void gfx_citro3d_emulator_start_frame(void)
 {
     num_rejected_draw_calls = 0;
 
-    for (int i = 0; i < num_vertex_buffers; i++)
-        vertex_buffers[i].num_verts = 0;
+    for (size_t i = 0; i < num_vertex_buffers; i++) {
+        VertexBuffer* vb = &vertex_buffers[i];
+        vb->num_verts = 0;
+
+        float* tmp = vb->ptr;
+        vb->ptr = vb->ptr2;
+        vb->ptr2 = tmp;
+
+        __3ds_u32 tmp2 = vb->buf_info.buffers[0].offset;
+        vb->buf_info.buffers[0].offset = vb->buf_info_offset2;
+        vb->buf_info_offset2 = tmp2;
+    }
 
     internal_citro3d_update_3d_slider();
 
@@ -698,14 +697,26 @@ COLD static VertexBuffer* internal_citro3d_setup_vertex_buffer(const struct n3ds
 {
     if (num_vertex_buffers == MAX_VERTEX_BUFFERS) {
         printf("Error: too many vertex buffers! (%d)\n", num_vertex_buffers + 1);
-        return &vertex_buffers[0];
+        return NULL;
     }
 
     VertexBuffer* vb = &vertex_buffers[num_vertex_buffers++];
     vb->vbo_info = vbo_info;
     vb->attr_info = attr_info; // Struct copy
     vb->ptr = linearAlloc(VERTEX_BUFFER_NUM_BYTES);
+    vb->ptr2 = linearAlloc(VERTEX_BUFFER_NUM_BYTES);
     vb->num_verts = 0;
+
+    if (vb->ptr == NULL || vb->ptr2 == NULL) {
+        printf("Error: failed to allocate vertex buffer\n");
+        if (vb->ptr  != NULL) linearFree(vb->ptr);
+        if (vb->ptr2 != NULL) linearFree(vb->ptr2);
+        return NULL;
+    }
+    
+    BufInfo_Init(&vb->buf_info);
+    BufInfo_Add(&vb->buf_info, vb->ptr2, vbo_info->stride * EMU64_STRIDE_UNIT_SIZE, attr_info.attrCount, attr_info.permutation);
+    vb->buf_info_offset2 = vb->buf_info.buffers[0].offset;
 
     BufInfo_Init(&vb->buf_info);
     BufInfo_Add(&vb->buf_info, vb->ptr, vbo_info->stride * EMU64_STRIDE_UNIT_SIZE, attr_info.attrCount, attr_info.permutation);
@@ -729,19 +740,11 @@ COLD static VertexBuffer* internal_citro3d_lookup_or_create_vertex_buffer(const 
 }
 
 // Allocates and configures a new shader program
-COLD static Emu64ShaderProgram* internal_citro3d_create_new_shader(Emu64ProgramFeatureFlags shader_features)
+COLD static ShaderProgram* internal_citro3d_create_new_shader(Emu64ShaderFeatures shader_features)
 {
-    if (num_shader_programs == MAX_SHADER_PROGRAMS) {
-        printf("Error: too many shader programs! (%d)\n", num_shader_programs);
-        return &shader_program_pool[0];
-    }
+    ShaderProgram* prg = &shader_program_pool[shader_features >> 1]; // Position is assumed to be present
 
-    Emu64ShaderProgram* e_prg = &shader_program_pool[num_shader_programs++];
-    ShaderProgram* prg = &e_prg->prog;
-
-    e_prg->shader_features.u32 = shader_features.u32;
-
-    const struct n3ds_shader_info* shader_info = emu64_get_shader_info_from_flags(e_prg->shader_features);
+    const struct n3ds_shader_info* shader_info = emu64_get_shader_info(shader_features);
 
     C3D_AttrInfo attr_info = citro3d_helpers_init_attr_info(&shader_info->vbo_info.attributes);
     prg->vertex_buffer = internal_citro3d_lookup_or_create_vertex_buffer(&shader_info->vbo_info, attr_info);
@@ -750,19 +753,7 @@ COLD static Emu64ShaderProgram* internal_citro3d_create_new_shader(Emu64ProgramF
     shaderProgramSetVsh(&prg->pica_shader_program, &shader_info->binary->dvlb->DVLE[shader_info->dvle_index]);
     shaderProgramSetGsh(&prg->pica_shader_program, NULL, 0);
 
-    return e_prg;
-}
-
-// Searches for a shader program, or allocates a new one if one was not found.
-// WYATT_TODO IDs are 4-bit. This should just read into an array.
-COLD static Emu64ShaderProgram* internal_citro3d_lookup_or_create_shader(Emu64ProgramFeatureFlags shader_features)
-{
-    for (size_t i = 0; i < num_shader_programs; i++) {
-        if (shader_program_pool[i].shader_features.u32 == shader_features.u32)
-            return &shader_program_pool[i];
-    }
-
-    return internal_citro3d_create_new_shader(shader_features);
+    return prg;
 }
 
 #endif

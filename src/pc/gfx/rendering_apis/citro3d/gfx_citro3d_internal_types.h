@@ -23,6 +23,10 @@ typedef struct
     C3D_AttrInfo attr_info; // Used to avoid duplicates.
     float *ptr;
     size_t num_verts;
+
+    // For double-buffering
+    u32 buf_info_offset2;
+    float *ptr2;
 } VertexBuffer;
 
 /*
@@ -35,13 +39,6 @@ typedef struct
     VertexBuffer* vertex_buffer;
 } ShaderProgram;
 
-// Represents a loaded Emu64 Shader Program
-typedef struct
-{
-    Emu64ProgramFeatureFlags shader_features;
-    ShaderProgram prog;
-} Emu64ShaderProgram;
-
 typedef struct
 {
     float c1_rgb,
@@ -53,6 +50,7 @@ typedef struct
 typedef struct
 {
     bool use_env_color;
+    Emu64ShaderFeatures shader_features;
     ColorCombinerId cc_id;
     ShaderInputMapping c3d_shader_input_mapping; // Sent to GPU
     C3D_TexEnv texenv; // Sent to GPU

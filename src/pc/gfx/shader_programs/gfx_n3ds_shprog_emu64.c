@@ -18,6 +18,7 @@
 
 #define VBO_POS      VBO_S16(4)
 #define VBO_TEX      VBO_S16(2)
+#define VBO_PAD      VBO_S16(2)
 #define VBO_RGBA     VBO_U8(4)
 #define VBO_ALPHA    VBO_U8(1)
 #define VBO_NORMALS  VBO_S8(3)
@@ -27,6 +28,7 @@
 #define V_TEX  EMU64_VBO_TEXTURE
 #define V_COL  EMU64_VBO_COLOR
 #define V_NOR  EMU64_VBO_NORMALS
+#define V_PAD  (EMU64_VBO_NORMALS << 1)
 
 // Bitwise AND ternary
 #define BIT_TERNARY(flag_, v_, res1_, res2_) (((v_ & flag_) ? res1_ : res2_))
@@ -34,6 +36,7 @@
 // Calculates the stride of a VBO, given a flag
 #define VBO_STRIDE(val_) (BIT_TERNARY(V_POS, (val_), EMU64_STRIDE_POSITION,                0)    \
                         + BIT_TERNARY(V_TEX, (val_), EMU64_STRIDE_TEXTURE,                 0)    \
+                        + BIT_TERNARY(V_PAD, (val_), EMU64_STRIDE_TEXTURE,                 0)    \
                         + BIT_TERNARY(V_COL, (val_), EMU64_STRIDE_VERTEX_COLOR,            0)    \
                         + BIT_TERNARY(V_NOR, (val_), EMU64_STRIDE_VERTEX_NORMAL_AND_ALPHA, 0)    \
                         )
@@ -72,17 +75,17 @@ struct n3ds_shader_binary
 
 const struct n3ds_emu64_vertex_attribute
    emu64_vertex_format_3[]     = { VBO_POS, VBO_TEX                                   },
-   emu64_vertex_format_5[]     = { VBO_POS, VBO_TEX, VBO_RGBA                         }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
+   emu64_vertex_format_5[]     = { VBO_POS, VBO_PAD, VBO_RGBA                         }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
    emu64_vertex_format_7[]     = { VBO_POS, VBO_TEX, VBO_RGBA                         },
-   emu64_vertex_format_9[]     = { VBO_POS, VBO_TEX,           VBO_NORMALS, VBO_ALPHA }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
+   emu64_vertex_format_9[]     = { VBO_POS, VBO_PAD,           VBO_NORMALS, VBO_ALPHA }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
    emu64_vertex_format_11[]    = { VBO_POS, VBO_TEX,           VBO_NORMALS, VBO_ALPHA },
    emu64_vertex_format_menu[]  = { VBO_POS, VBO_TEX                                   };
 
 const struct n3ds_shader_info
     emu64_shader_3        = { &emu64_shader_binary, DVLE_03,   1, VBO_INFO(V_POS | V_TEX              , emu64_vertex_format_3)    }, // position, texture
-    emu64_shader_5        = { &emu64_shader_binary, DVLE_05,   2, VBO_INFO(V_POS |         V_COL      , emu64_vertex_format_5)    }, // position, color
+    emu64_shader_5        = { &emu64_shader_binary, DVLE_05,   2, VBO_INFO(V_POS | V_PAD | V_COL      , emu64_vertex_format_5)    }, // position, color
     emu64_shader_7        = { &emu64_shader_binary, DVLE_07,   3, VBO_INFO(V_POS | V_TEX | V_COL      , emu64_vertex_format_7)    }, // position, texture, color
-    emu64_shader_9        = { &emu64_shader_binary, DVLE_09,   4, VBO_INFO(V_POS |               V_NOR, emu64_vertex_format_9)    }, // position, normals
+    emu64_shader_9        = { &emu64_shader_binary, DVLE_09,   4, VBO_INFO(V_POS | V_PAD |       V_NOR, emu64_vertex_format_9)    }, // position, normals
     emu64_shader_11       = { &emu64_shader_binary, DVLE_11,   5, VBO_INFO(V_POS | V_TEX |       V_NOR, emu64_vertex_format_11)   }, // position, texture, normals
     emu64_shader_menu     = { &emu64_shader_binary, DVLE_MENU, 6, VBO_INFO(V_POS | V_TEX              , emu64_vertex_format_menu) }; // position, texture (alternate)
 
@@ -140,49 +143,26 @@ void shprog_emu64_print_uniform_locations(FILE* out) {
         EMU64_CONST_ULOC_emu64_const_2);
 }
 
-const struct n3ds_shader_info* emu64_get_shader_info(Emu64ShaderCode shader_code)
+const struct n3ds_shader_info* emu64_get_shader_info(Emu64ShaderFeatures shader_code)
 {
-    const struct n3ds_shader_info* shader = NULL;
-
+    // fprintf(stderr, "SH %c%c%c%c\n",
+    //     (shader_code & EMU64_VBO_POSITION) ? 'P' : '-',
+    //     (shader_code & EMU64_VBO_TEXTURE)  ? 'T' : '-',
+    //     (shader_code & EMU64_VBO_COLOR)    ? 'C' : '-',
+    //     (shader_code & EMU64_VBO_NORMALS)  ? 'N' : '-');
     switch(shader_code)
     {
-        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE:
-            shader = &emu64_shader_3;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_COLOR:
-            shader = &emu64_shader_5;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_COLOR:
-            shader = &emu64_shader_7;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_NORMALS:
-            shader = &emu64_shader_9;
-            break;
-        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_NORMALS:
-            shader = &emu64_shader_11;
-            break;
+        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE:                     return &emu64_shader_3;
+        case EMU64_VBO_POSITION | EMU64_VBO_COLOR:                       return &emu64_shader_5;
+        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_COLOR:   return &emu64_shader_7;
+        case EMU64_VBO_POSITION | EMU64_VBO_NORMALS:                     return &emu64_shader_9;
+        case EMU64_VBO_POSITION | EMU64_VBO_TEXTURE | EMU64_VBO_NORMALS: return &emu64_shader_11;
         default:
-            shader = &emu64_shader_7;
             fprintf(stderr, "Invalid shader code: %c%c%c%c\n",
                 (shader_code & EMU64_VBO_POSITION) ? 'P' : '-',
                 (shader_code & EMU64_VBO_TEXTURE)  ? 'T' : '-',
                 (shader_code & EMU64_VBO_COLOR)    ? 'C' : '-',
                 (shader_code & EMU64_VBO_NORMALS)  ? 'N' : '-');
-            break;
+            return &emu64_shader_7;
     }
-
-    return shader;
-}
-
-const struct n3ds_shader_info* emu64_get_shader_info_from_flags(Emu64ProgramFeatureFlags feature_flags)
-{
-    return emu64_get_shader_info(emu64_calculate_shader_code(feature_flags)); 
-}
-
-Emu64ShaderCode emu64_calculate_shader_code(Emu64ProgramFeatureFlags feature_flags)
-{
-    return (feature_flags.position ? EMU64_VBO_POSITION : 0) | 
-           (feature_flags.tex      ? EMU64_VBO_TEXTURE  : 0) | 
-           (feature_flags.color    ? EMU64_VBO_COLOR    : 0) | 
-           (feature_flags.normals  ? EMU64_VBO_NORMALS  : 0);
 }

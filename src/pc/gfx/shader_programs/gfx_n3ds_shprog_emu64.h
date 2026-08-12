@@ -51,26 +51,17 @@
                          +  EMU64_STRIDE_TEXTURE  \
                          +  EMU64_STRIDE_RGBA)
 
-typedef uint8_t Emu64ShaderCode; // EMU64 shader code
-
-typedef union
-{
-    struct
-    {
-        bool position, tex, color, normals;
-    };
-
-    uint32_t u32;
-} Emu64ProgramFeatureFlags;
+typedef uint8_t Emu64ShaderFeatures; // EMU64 shader code
 
 // Shader VBO features
 enum Emu64ShaderFeature {
-   EMU64_VBO_POSITION     = 1 << 0,
-   EMU64_VBO_TEXTURE      = 1 << 1,
-   EMU64_VBO_COLOR        = 1 << 2, // Mutually exclusive
-   EMU64_VBO_NORMALS      = 1 << 3  // Mutually exclusive
+   EMU64_VBO_POSITION     = BIT(0),
+   EMU64_VBO_TEXTURE      = BIT(1),
+   EMU64_VBO_COLOR        = BIT(2), // Mutually exclusive
+   EMU64_VBO_NORMALS      = BIT(3)  // Mutually exclusive
+#define EMU64_VBO_PERMUTATIONS (EMU64_VBO_NORMALS << 1)
 };
-                            
+
 // Negative values are special cases.
 // Unspecified values give undefined behavior.
 enum Emu64ColorCombinerSource {
@@ -131,10 +122,4 @@ void shprog_emu64_init();
 void shprog_emu64_print_uniform_locations(FILE* out);
 
 // Looks up an n3ds_shader_info struct from the given Emu64 shader code
-const struct n3ds_shader_info* emu64_get_shader_info(Emu64ShaderCode shader_code);
-
-// Looks up an n3ds_shader_info struct from the given feature flags.
-const struct n3ds_shader_info* emu64_get_shader_info_from_flags(Emu64ProgramFeatureFlags feature_flags);
-
-// Calculates an Emu64 shader code based on the given feature flags
-Emu64ShaderCode emu64_calculate_shader_code(Emu64ProgramFeatureFlags feature_flags);
+const struct n3ds_shader_info* emu64_get_shader_info(Emu64ShaderFeatures shader_code);
