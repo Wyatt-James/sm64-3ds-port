@@ -178,8 +178,7 @@ static void internal_citro3d_select_color_combiner(ColorCombiner* cc)
 
     CTX_NOTIFY(CTX_TEXENV | CTX_SHADER);
 
-    bool cc_mappings_different = old == NULL || (cc->cc_mapping_identifier != old->cc_mapping_identifier);
-    
+    bool cc_mappings_different = cc->cc_mapping_identifier != old->cc_mapping_identifier;
     if (cc_mappings_different || OPT_DISABLED(optimize.consecutive_cc_mappings))
         CTX_NOTIFY(CTX_SHADER_INPUT_MAPPING);
 
@@ -604,6 +603,7 @@ COLD void gfx_citro3d_emulator_init(void)
     for (size_t i = 0; i < ARRAY_COUNT(shader_program_pool); i++)
         internal_citro3d_create_new_shader((i << 1) | EMU64_VBO_POSITION);
 
+    ctx.color_combiner = &(ColorCombiner) {.cc_features.num_inputs = ~0};
     internal_citro3d_select_color_combiner(&color_combiner_pool[gfx_rapi_lookup_or_create_color_combiner(DEFAULT_CC_ID)]);
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
     internal_citro3d_load_default_texture();
