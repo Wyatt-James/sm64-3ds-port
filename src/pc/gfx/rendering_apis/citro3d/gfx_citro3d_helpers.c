@@ -187,36 +187,36 @@ GPU_TEVSRC citro3d_helpers_cc_input_to_tev_src(int cc_input, bool swap_input)
 
 static void configure_tev_internal(struct CCFeatures* cc_features, C3D_TexEnv* texenv, bool swap_input, C3D_TexEnvMode mode)
 {
-    if (cc_features->do_single[0])
+    if (cc_features->do_single_0)
     {
         C3D_TexEnvFunc(texenv, mode, GPU_REPLACE);
-        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[3], swap_input), 0, 0);
+        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.d.rgb, swap_input), 0, 0);
 
         C3D_TexEnvOpRgb(texenv,
-            cc_features->cc.rgb[3] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.d.rgb == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
             GPU_TEVOP_RGB_SRC_COLOR,
             GPU_TEVOP_RGB_SRC_COLOR);
     }
-    else if (cc_features->do_multiply[0])
+    else if (cc_features->do_multiply_0)
     {
         C3D_TexEnvFunc(texenv, mode, GPU_MODULATE);
-        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[0], swap_input),
-                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[2], swap_input), 0);
+        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.a.rgb, swap_input),
+                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.c.rgb, swap_input), 0);
         C3D_TexEnvOpRgb(texenv,
-            cc_features->cc.rgb[0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
-            cc_features->cc.rgb[2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.a.rgb == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.c.rgb == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
             GPU_TEVOP_RGB_SRC_COLOR);
     }
-    else if (cc_features->do_mix[0])
+    else if (cc_features->do_mix_0)
     {
         C3D_TexEnvFunc(texenv, mode, GPU_INTERPOLATE);
-        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[0], swap_input),
-                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[1], swap_input),
-                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.rgb[2], swap_input));
+        C3D_TexEnvSrc (texenv, mode, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.a.rgb, swap_input),
+                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.b.rgb, swap_input),
+                                     citro3d_helpers_cc_input_to_tev_src(cc_features->cc.c.rgb, swap_input));
         C3D_TexEnvOpRgb(texenv,
-            cc_features->cc.rgb[0] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
-            cc_features->cc.rgb[1] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
-            cc_features->cc.rgb[2] == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR);
+            cc_features->cc.a.rgb == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.b.rgb == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR,
+            cc_features->cc.c.rgb == SHADER_TEXEL0A ? GPU_TEVOP_RGB_SRC_ALPHA : GPU_TEVOP_RGB_SRC_COLOR);
     }
 }
 
@@ -237,23 +237,23 @@ C3D_TexEnv citro3d_helpers_configure_tex_env(struct CCFeatures* cc_features)
 
         // Alpha
         C3D_TexEnvOpAlpha(texenv, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_ALPHA);
-        if (cc_features->do_single[1])
+        if (cc_features->do_single_1)
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_REPLACE);
-            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[3], swap_input), 0, 0);
+            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.d.alpha, swap_input), 0, 0);
         }
-        else if (cc_features->do_multiply[1])
+        else if (cc_features->do_multiply_1)
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_MODULATE);
-            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[0], swap_input),
-                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[2], swap_input), 0);
+            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.a.alpha, swap_input),
+                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.c.alpha, swap_input), 0);
         }
-        else if (cc_features->do_mix[1])
+        else if (cc_features->do_mix_1)
         {
             C3D_TexEnvFunc(texenv, C3D_Alpha, GPU_INTERPOLATE);
-            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[0], swap_input),
-                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[1], swap_input),
-                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.alpha[2], swap_input));
+            C3D_TexEnvSrc (texenv, C3D_Alpha, citro3d_helpers_cc_input_to_tev_src(cc_features->cc.a.alpha, swap_input),
+                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.b.alpha, swap_input),
+                                              citro3d_helpers_cc_input_to_tev_src(cc_features->cc.c.alpha, swap_input));
         }
     }
 
@@ -559,7 +559,7 @@ void citro3d_helpers_init_cc(ColorCombiner* cc, ColorCombinerId cc_id)
         gfx_cc_generate_cc(cc_id, &mapping, &shader_id);
         gfx_cc_get_features(shader_id, &cc->cc_features);
 
-        bool hasTex = cc->cc_features.used_textures[0] | cc->cc_features.used_textures[1],
+        bool hasTex = cc->cc_features.used_textures_0 | cc->cc_features.used_textures_1,
              hasCol = cc->cc_features.num_inputs > 0;
 
         cc->shader_features = EMU64_VBO_POSITION;
@@ -569,34 +569,29 @@ void citro3d_helpers_init_cc(ColorCombiner* cc, ColorCombinerId cc_id)
 
     // If num inputs >= 2, we need to reverse the mappings' A and B params (hack for goddard)
     if (cc->cc_features.num_inputs >= 2) {
-        union CCInputMapping mapping_temp;
-        for (int i = 0; i <= 1; i++) {
-            mapping_temp.arr[i][0] = mapping.arr[i][1];
-            mapping_temp.arr[i][1] = mapping.arr[i][0];
-
-            mapping.arr[i][0] = mapping_temp.arr[i][0];
-            mapping.arr[i][1] = mapping_temp.arr[i][1];
-        }
+        struct CCInput tmp = mapping.a;
+        mapping.a = mapping.b;
+        mapping.b = tmp;
     }
 
     cc->cc_id = cc_id;
 
-    cc->c3d_shader_input_mapping.c1_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[0], false);
-    cc->c3d_shader_input_mapping.c2_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.rgb[1], false);
+    cc->c3d_shader_input_mapping.c1_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.a.rgb, false);
+    cc->c3d_shader_input_mapping.c2_rgb = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.b.rgb, false);
 
-    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[0], cc->cc_features.opt_fog);
-    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.alpha[1], cc->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c1_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.a.alpha, cc->cc_features.opt_fog);
+    cc->c3d_shader_input_mapping.c2_a = citro3d_helpers_convert_cc_mapping_to_emu64_float(mapping.b.alpha, cc->cc_features.opt_fog);
 
     // Fixes the pause tint being too light.
-    cc->use_env_color = mapping.rgb[1] == CC_ENV;
+    cc->use_env_color = mapping.b.rgb == CC_ENV;
 
     // N3DS only cares about the first two mappings, so we want to make an identifier for specifically this to enhance performance
     // RGBA32 works fine since it's four u8s
     cc->cc_mapping_identifier = (union RGBA32) {
-        .r = mapping.rgb[0],
-        .g = mapping.rgb[1],
-        .b = mapping.alpha[0],
-        .a = mapping.alpha[1],
+        .r = mapping.a.rgb,
+        .g = mapping.b.rgb,
+        .b = mapping.a.alpha,
+        .a = mapping.b.alpha,
     }.u32;
 
     // Preconfigure TEV settings

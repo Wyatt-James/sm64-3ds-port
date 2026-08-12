@@ -43,39 +43,38 @@ typedef enum
     SHADER_TEXEL1
 } ShaderSource;
 
+struct CCInput {
+    uint8_t rgb : 4, alpha : 4;
+};
+
 // (a - b) * c + d
 union CCInputMapping {
     struct {
-        uint8_t rgb_a,
-                rgb_b,
-                rgb_c,
-                rgb_d,
-                alpha_a,
-                alpha_b,
-                alpha_c,
-                alpha_d;
+        struct CCInput a, b, c, d;
     };
 
-    struct {
-        uint8_t rgb[4], alpha[4]; // a, b, c, d
-    };
-
-    uint8_t arr[2][4]; // Uses format [RGB | A][input].
+    struct CCInput arr[4]; // Uses format [RGB | A][input].
 };
 
 struct CCFeatures {
     union CCInputMapping cc;  // CC input mapping.
-    bool opt_alpha;           // True if alpha is enabled.
-    bool opt_fog;             // True if fog is enabled.
-    bool opt_texture_edge;    // True if alpha rejection is enabled.
-    bool opt_noise;           // True if noise is enabled.
-    bool used_textures[2];    // If both are true, 2-cycle must be enabled.
-    uint8_t num_inputs;       // Number of CC inputs. Max 4.
-    bool do_single[2];        // True if there is only an additive component.
-    bool do_multiply[2];      // True if there are no subtractive or additive components.
-    bool do_mix[2];           // True if subtractive and additive components are equal.
-    bool color_alpha_same;    // True if color and alpha use identical mixing setups.
+    bool used_textures_0   : 1;  // If both are true, 2-cycle must be enabled.
+    bool do_single_0       : 1;  // True if there is only an additive component.
+    bool do_multiply_0     : 1;  // True if there are no subtractive or additive components.
+    bool do_mix_0          : 1;  // True if subtractive and additive components are equal.
+    bool do_single_1       : 1;  // True if there is only an additive component.
+    bool do_multiply_1     : 1;  // True if there are no subtractive or additive components.
+    bool do_mix_1          : 1;  // True if subtractive and additive components are equal.
+    bool used_textures_1   : 1;  // If both are true, 2-cycle must be enabled.
+    // Byte boundary
+    bool opt_alpha         : 1;  // True if alpha is enabled.
+    bool opt_fog           : 1;  // True if fog is enabled.
+    bool opt_texture_edge  : 1;  // True if alpha rejection is enabled.
+    bool opt_noise         : 1;  // True if noise is enabled.
+    bool color_alpha_same  : 1;  // True if color and alpha use identical mixing setups.
+    uint8_t num_inputs     : 3;  // Number of CC inputs. Max 4.
 };
+
 
 #ifdef __cplusplus
 extern "C" {

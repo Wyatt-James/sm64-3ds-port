@@ -430,9 +430,10 @@ size_t gfx_rapi_lookup_or_create_color_combiner(ColorCombinerId cc_id)
 void gfx_rapi_color_combiner_get_info(size_t cc_index, uint8_t *num_inputs, bool used_textures[2])
 {
     ColorCombiner* cc = &color_combiner_pool[cc_index];
-    *num_inputs      = cc->cc_features.num_inputs;
-    used_textures[0] = cc->cc_features.used_textures[0];
-    used_textures[1] = cc->cc_features.used_textures[1];
+    *num_inputs = cc->cc_features.num_inputs;
+    bool used[2] = {cc->cc_features.used_textures_0, cc->cc_features.used_textures_1};
+    used_textures[0] = used[0];
+    used_textures[1] = used[1];
 }
 
 void gfx_rapi_select_color_combiner(size_t cc_index)
