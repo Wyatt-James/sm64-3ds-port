@@ -96,7 +96,7 @@ static inline void gfx_citro3d_update_context(RenderContext* ctx)
         ColorCombiner* cc = ctx->color_combiner;
 
         // Configure TEV
-        if (cc->cc_features.num_inputs == 2)
+        if (UNLIKELY(cc->cc_features.num_inputs > 1))
         {
             C3D_SetTexEnv(0, &ctx->two_color_texenv);
             C3D_SetTexEnv(1, &cc->texenv);
