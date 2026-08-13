@@ -183,8 +183,8 @@ union TextureScalingFactor {
 };
 
 union VertexBuffer {
-    float as_float[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
-    uint32_t as_u32[MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX];
+    float  as_float[(ROUND_UP(8, MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX))];
+    uint32_t as_u32[(ROUND_UP(8, MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX))];
 };
 
 union SamplerConfig {
@@ -316,7 +316,7 @@ static Vtx* tri_batch[MAX_BUFFERED_VERTS];
 static size_t num_verts_batched = 0;
 
 // contains unpacked vertex data ready to send to the Rendering API
-static union VertexBuffer buf_vbo;
+static union VertexBuffer buf_vbo ALIGNED(32); // Cacheline-aligned
 static size_t buf_vbo_len = 0;
 static size_t buf_vbo_num_verts = 0;
 

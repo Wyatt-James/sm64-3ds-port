@@ -213,6 +213,29 @@ static void internal_citro3d_recalculate_stereo_matrices()
 
 // --------------- API functions ---------------
 
+// Copies full 32-byte cachelines
+// num_words must not be 0! Will also break if num_words + 7 overflows.
+// If num_words & 3 is not 0, an extra line will be copied
+__attribute__((naked)) size_t memcpy32(void *restrict dst, const void *restrict src, size_t num_words)
+{
+    (void) dst; (void) src; (void) num_words;
+    asm volatile (
+        "    push { r4-r10 }            \n\t"
+        "    add r2, r2, #7             \n\t"
+        "    lsrs r2, r2, #3            \n\t"
+     // "    beq memcpy32_ret           \n\t" // Correctly handle 0
+        "memcpy32_loop:                 \n\t"
+        "    ldmia r1!, { r3-r10 }      \n\t"
+        "    pld [r1, #32]              \n\t"
+        "    subs r2, r2, #1            \n\t"
+        "    stmia r0!, { r3-r10 }      \n\t"
+        "    bne memcpy32_loop          \n\t"
+        "memcpy32_ret:                  \n\t"
+        "    pop { r4-r10 }             \n\t"
+        "    bx lr                      \n\t"
+    );
+}
+
 void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris)
 {
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
@@ -226,14 +249,14 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
     size_t vb_num_verts_after = vb_num_verts + num_verts_this_drawcall;
     float* vb_head = &vb_ptr[vb_num_verts * vb_stride];
 
-    // Prevent buffer overruns
-    if (UNLIKELY(vb_num_verts_after * vb_stride > VERTEX_BUFFER_NUM_UNITS)) {
+    // Prevent buffer overruns. Biased down to ensure we can fit 8-word batches.
+    if (UNLIKELY(vb_num_verts_after * vb_stride > VERTEX_BUFFER_NUM_UNITS - 7)) {
         num_rejected_draw_calls++;
         return;
     }
 
     // Copy verts into the GPU buffer
-    memcpy(vb_head, buf_vbo, buf_vbo_num_words * EMU64_STRIDE_UNIT_SIZE);
+    memcpy32(vb_head, buf_vbo, buf_vbo_num_words);
 
     // Draw
     if (g3dsGfxState.stereo_3d_active)

@@ -71,8 +71,9 @@
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
 #define NO_INLINE __attribute__((noinline))
 #define ALIGNED(n_) __attribute__((aligned(n_)))
-#define HOT __attribute__ ((hot))
-#define COLD __attribute__ ((cold))
+#define HOT __attribute__((hot))
+#define COLD __attribute__((cold))
+#define NAKED __attribute__((naked))
 
 // Compiler hints
 #define ASSUME(cond_) if (!(cond_)) __builtin_unreachable()
