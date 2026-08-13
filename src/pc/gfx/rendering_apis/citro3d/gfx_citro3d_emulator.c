@@ -216,7 +216,7 @@ static void internal_citro3d_recalculate_stereo_matrices()
 // Copies full 32-byte cachelines
 // num_words must not be 0! Will also break if num_words + 7 overflows.
 // If num_words & 3 is not 0, an extra line will be copied
-__attribute__((naked)) size_t memcpy32(void *restrict dst, const void *restrict src, size_t num_words)
+NAKED void memcpy32(void *restrict dst, const void *restrict src, size_t num_words)
 {
     (void) dst; (void) src; (void) num_words;
     asm volatile (
