@@ -31,6 +31,7 @@
 #define GFX_RAPI_VERTEX_TEXGEN    GFX_ENABLE
 #define GFX_RAPI_GPU_TEXCOORDS    GFX_ENABLE
 #define GFX_RAPI_COLOR_COMBINER   GFX_ENABLE
+#define GFX_RAPI_POINTER_DRAWING  GFX_ENABLE
 #else
 #define GFX_RAPI_TEXTURE_FORMATS  GFX_DISABLE
 #define GFX_RAPI_STEREOSCOPIC_3D  GFX_DISABLE
@@ -40,6 +41,7 @@
 #define GFX_RAPI_VERTEX_TEXGEN    GFX_DISABLE
 #define GFX_RAPI_GPU_TEXCOORDS    GFX_DISABLE
 #define GFX_RAPI_COLOR_COMBINER   GFX_DISABLE
+#define GFX_RAPI_POINTER_DRAWING       GFX_DISABLE
 #endif
 
 // Types to be defined by the implementation
@@ -59,7 +61,7 @@ void                    gfx_rapi_set_zmode_decal            (bool zmode_decal); 
 void                    gfx_rapi_set_viewport               (int x, int y, int width, int height);                                                 // Sets the GPU viewport settings.
 void                    gfx_rapi_set_scissor                (int x, int y, int width, int height);                                                 // Sets the GPU scissor settings.
 void                    gfx_rapi_set_use_alpha              (bool use_alpha);                                                                      // Enables or disables alpha blending.
-void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris);                  // Draws the given triangles. Buf_vbo_num_units is how many words (32-bits) the VBO is.
+void                    gfx_rapi_draw_triangles             (float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris);                  // Draws the given triangles. Buf_vbo_num_words is how many words (uint32s) the VBO is.
 void                    gfx_rapi_init                       (void);                                                                                // Initializes the GFX Rendering API.
 void                    gfx_rapi_exit                       (void);                                                                                // Exits the GFX Rendering API.
 void                    gfx_rapi_on_resize                  (void);                                                                                // Called when the window is resized.
@@ -140,6 +142,10 @@ void                    gfx_rapi_color_combiner_get_info          (size_t cc_ind
 
 void                    gfx_rapi_set_cc_prim_color                (uint32_t color);                                               // Sets the GPU prim color. This is global across color combiners.
 void                    gfx_rapi_set_cc_env_color                 (uint32_t color);                                               // Sets the GPU env color. This is global across color combiners.
+#endif
+
+#if GFX_RAPI_POINTER_DRAWING == GFX_ENABLE
+void                    gfx_rapi_draw_triangles_indirect          (Vtx** verts, size_t num_tris);                                 // Draws the given vertices from an array of pointers
 #endif
 
 #endif

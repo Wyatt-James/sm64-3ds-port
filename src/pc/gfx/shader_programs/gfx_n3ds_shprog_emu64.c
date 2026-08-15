@@ -75,9 +75,9 @@ struct n3ds_shader_binary
 
 const struct n3ds_emu64_vertex_attribute
    emu64_vertex_format_3[]     = { VBO_POS, VBO_TEX                                   },
-   emu64_vertex_format_5[]     = { VBO_POS, VBO_PAD, VBO_RGBA                         }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
+   emu64_vertex_format_5[]     = { VBO_POS, VBO_PAD, VBO_RGBA                         }, // VBO_TEX is present but ignored. We write extra data to optimize vertex copy.
    emu64_vertex_format_7[]     = { VBO_POS, VBO_TEX, VBO_RGBA                         },
-   emu64_vertex_format_9[]     = { VBO_POS, VBO_PAD,           VBO_NORMALS, VBO_ALPHA }, // VBO_TEX is present but ignored. We write extra data to optimize gfx_tri_create_vbo.
+   emu64_vertex_format_9[]     = { VBO_POS, VBO_PAD,           VBO_NORMALS, VBO_ALPHA }, // VBO_TEX is present but ignored. We write extra data to optimize vertex copy.
    emu64_vertex_format_11[]    = { VBO_POS, VBO_TEX,           VBO_NORMALS, VBO_ALPHA },
    emu64_vertex_format_menu[]  = { VBO_POS, VBO_TEX                                   };
 

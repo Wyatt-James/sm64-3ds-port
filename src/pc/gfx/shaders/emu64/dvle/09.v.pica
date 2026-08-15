@@ -28,7 +28,7 @@
 .in inpos   v0 ; xyz, plus garbage for w
 .in innorm  v2 ; xyz, plus garbage for w
 .in inalpha v3 ; alpha in R, scale [0,255], garbage in GBA
-; v1 contains texcoords, but they're unused. This is done to optimize gfx_tri_create_vbo.
+; v1 contains texcoords, but they're unused. This is done to optimize vertex copy.
 
 ; ----- Outputs -----
 .out outpos position  ; xyzw

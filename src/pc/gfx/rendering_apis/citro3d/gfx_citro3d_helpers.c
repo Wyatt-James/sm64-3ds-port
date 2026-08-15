@@ -516,6 +516,8 @@ ShaderProgram citro3d_helpers_init_shader(const struct n3ds_shader_info* shader_
 
         if (vb->ptr == NULL)
             printf("Error: failed to allocate vertex buffer for shader\n");
+        else
+            vb->max_verts = (vbo_size / vbo_info->stride) / 3 * 3;
 
         
         BufInfo_Init(&vb->buf_info);

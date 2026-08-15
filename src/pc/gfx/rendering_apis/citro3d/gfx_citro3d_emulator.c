@@ -213,10 +213,79 @@ static void internal_citro3d_recalculate_stereo_matrices()
 
 // --------------- API functions ---------------
 
+static inline void draw_triangles_internal(size_t vb_num_verts, size_t num_verts)
+{
+    // Draw
+    if (g3dsGfxState.stereo_3d_active)
+    {
+        if (recalculate_stereo_matrices || OPT_DISABLED(optimize.consecutive_stereo_p_mtx)) {
+            recalculate_stereo_matrices = false;
+            internal_citro3d_recalculate_stereo_matrices();
+
+            if (stereo_3d_mode == STEREO_MODE_2D)
+                C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_left);
+        }
+
+        // left screen
+        if (stereo_3d_mode != STEREO_MODE_2D)
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_left);
+
+        // We use SetFrameBuf because it doesn't overwrite viewport or scissor settings.
+        C3D_SetFrameBuf(&gTarget->frameBuf);
+        C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts);
+
+        // right screen
+        if (stereo_3d_mode != STEREO_MODE_2D)
+            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_right);
+
+        C3D_SetFrameBuf(&gTargetRight->frameBuf);
+        // Fall through
+    }
+
+    C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts);
+}
+
+static void copy_verts_from_ptrs(Vtx** verts, size_t num_verts, float* base, size_t stride)
+{
+    // It's faster to unconditionally write the full vertex and then advance by vertex stride.
+    // For smaller vertex formats, this will overwrite unused attributes of the prior vertex,
+    // but this is good because cached writes are much cheaper than conditionals inside the loop body.
+    // GCC unroll doesn't seem to know that we're copying a multiple of 3 verts so we just manually unroll.
+    for (size_t vtx = 0; vtx < num_verts; vtx += 3) {
+        memcpy(ASSUME_ALIGNED(base, ALIGNOF(float)), ASSUME_ALIGNED(verts[vtx], ALIGNOF(Vtx)), sizeof(*verts[vtx]));
+        base += stride;
+        memcpy(ASSUME_ALIGNED(base, ALIGNOF(float)), ASSUME_ALIGNED(verts[vtx + 1], ALIGNOF(Vtx)), sizeof(*verts[vtx]));
+        base += stride;
+        memcpy(ASSUME_ALIGNED(base, ALIGNOF(float)), ASSUME_ALIGNED(verts[vtx + 2], ALIGNOF(Vtx)), sizeof(*verts[vtx]));
+        base += stride;
+    }
+}
+
+void gfx_rapi_draw_triangles_indirect(Vtx** verts, size_t num_tris)
+{
+    internal_citro3d_select_shader();
+    gfx_citro3d_update_context(&ctx);
+
+    VertexBuffer* vb = ctx.shader_program->vertex_buffer;
+    size_t num_verts = num_tris * 3;
+    size_t vb_num_verts = vb->num_verts;
+    size_t vb_stride = vb->vbo_info->stride;
+
+    // Avoid corrupting memory
+    if (UNLIKELY(vb_num_verts + num_verts > vb->max_verts)) {
+        num_rejected_draw_calls++;
+        return;
+    }
+
+    copy_verts_from_ptrs(verts, num_verts, vb->ptr + (vb_num_verts * vb_stride), vb->vbo_info->stride); // WYATT_TODO write ASM functions and handle alignment properly
+    draw_triangles_internal(vb_num_verts, num_verts);
+    vb->num_verts = vb_num_verts + num_verts;
+}
+
 // Copies full 32-byte cachelines
 // num_words must not be 0! Will also break if num_words + 7 overflows.
 // If num_words & 3 is not 0, an extra line will be copied
-NAKED void memcpy32(void *restrict dst, const void *restrict src, size_t num_words)
+COLD NAKED void memcpy32(void *restrict dst, const void *restrict src, size_t num_words)
 {
     (void) dst; (void) src; (void) num_words;
     asm volatile (
@@ -236,7 +305,7 @@ NAKED void memcpy32(void *restrict dst, const void *restrict src, size_t num_wor
     );
 }
 
-void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris)
+COLD void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t buf_vbo_num_tris)
 {
     internal_citro3d_select_shader(); // Must be done here because it may need to allocate a shader.
     gfx_citro3d_update_context(&ctx);
@@ -245,49 +314,19 @@ void gfx_rapi_draw_triangles(float buf_vbo[], size_t buf_vbo_num_words, size_t b
     float* const vb_ptr = vb->ptr;
     size_t vb_num_verts = vb->num_verts;
     uint8_t vb_stride = vb->vbo_info->stride;
-    size_t num_verts_this_drawcall = buf_vbo_num_tris * 3;
-    size_t vb_num_verts_after = vb_num_verts + num_verts_this_drawcall;
+    size_t num_verts = buf_vbo_num_tris * 3;
     float* vb_head = &vb_ptr[vb_num_verts * vb_stride];
 
     // Prevent buffer overruns. Biased down to ensure we can fit 8-word batches.
-    if (UNLIKELY(vb_num_verts_after * vb_stride > VERTEX_BUFFER_NUM_UNITS - 7)) {
+    if (UNLIKELY(vb_num_verts + num_verts > vb->max_verts)) {
         num_rejected_draw_calls++;
         return;
     }
 
     // Copy verts into the GPU buffer
     memcpy32(vb_head, buf_vbo, buf_vbo_num_words);
-
-    // Draw
-    if (g3dsGfxState.stereo_3d_active)
-    {
-        if (recalculate_stereo_matrices || OPT_DISABLED(optimize.consecutive_stereo_p_mtx)) {
-            recalculate_stereo_matrices = false;
-            internal_citro3d_recalculate_stereo_matrices();
-
-            if (stereo_3d_mode == STEREO_MODE_2D)
-                C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_left);
-        }
-
-        // left screen
-        if (stereo_3d_mode != STEREO_MODE_2D)
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_left);
-
-        // We use SetFrameBuf because it doesn't overwrite viewport or scissor settings.
-        C3D_SetFrameBuf(&gTarget->frameBuf);
-        C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts_this_drawcall);
-
-        // right screen
-        if (stereo_3d_mode != STEREO_MODE_2D)
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_right);
-
-        C3D_SetFrameBuf(&gTargetRight->frameBuf);
-        // Fall through
-    }
-
-    C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts_this_drawcall);
-
-    vb->num_verts = vb_num_verts_after;
+    draw_triangles_internal(vb_num_verts, num_verts);
+    vb->num_verts = vb_num_verts + num_verts;
 }
 
 void gfx_rapi_select_texture(int tex_slot, uint32_t texture_id)
@@ -730,6 +769,7 @@ COLD static VertexBuffer* internal_citro3d_setup_vertex_buffer(const struct n3ds
     vb->ptr = linearAlloc(VERTEX_BUFFER_NUM_BYTES);
     vb->ptr2 = linearAlloc(VERTEX_BUFFER_NUM_BYTES);
     vb->num_verts = 0;
+    vb->max_verts = (VERTEX_BUFFER_NUM_UNITS / vb->vbo_info->stride) / 3 * 3;
 
     if (vb->ptr == NULL || vb->ptr2 == NULL) {
         printf("Error: failed to allocate vertex buffer\n");

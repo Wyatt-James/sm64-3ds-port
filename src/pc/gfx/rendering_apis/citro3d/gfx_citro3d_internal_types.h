@@ -23,6 +23,7 @@ typedef struct
     C3D_AttrInfo attr_info; // Used to avoid duplicates.
     float *ptr;
     size_t num_verts;
+    size_t max_verts;
 
     // For double-buffering
     u32 buf_info_offset2;

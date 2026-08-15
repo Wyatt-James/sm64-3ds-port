@@ -74,6 +74,8 @@
 #define HOT __attribute__((hot))
 #define COLD __attribute__((cold))
 #define NAKED __attribute__((naked))
+#define ASSUME_ALIGNED(var_, alignment_) __builtin_assume_aligned((var_), (alignment_))
+#define ALIGNOF(val_) _Alignof(val_)
 
 // Compiler hints
 #define ASSUME(cond_) if (!(cond_)) __builtin_unreachable()

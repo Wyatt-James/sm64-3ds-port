@@ -296,10 +296,9 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 7: GFX Run Display List Interpolated
 
     // Detailed IDs (replaces GFX Run Display List):
-    // 5: Vertex Copy
-    // 6: gfx_sp_tri_update_state
-    // 7: gfx_tri_create_vbo
-    // 8: gfx_flush
+    // 5: gfx_sp_vertex
+    // 6: gfx_update_deferred_state
+    // 7: gfx_flush
 
     // C3D IDs
     // 

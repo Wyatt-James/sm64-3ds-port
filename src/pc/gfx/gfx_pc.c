@@ -48,9 +48,15 @@
 
 // -------------------- PREPROCESSOR FLAGS --------------------
 
+enum {
+    FLUSH_DRAWRECT,       // Rectangle drawing functions flush immediately
+    FLUSH_BATCH_FULL,     // If the tri batch is full, it must be flushed
+    FLUSH_TRI_LOOP_END,   // Tris are flushed at the end of the tri-specific command loop
+    NUM_FLUSH_COUNTERS,   // Number of gfx_flush calls to log.
+};
+
 #define GRANULAR_PROFILING 0 // Enables fine-grained performance profiling of various things.
 #define GRANULAR_FLUSHES   0 // Enables fine-grained profiling of flush hit/avoid rate.
-#define FLUSH_COUNTERS    31 // Number of gfx_flush calls to log.
 #define ENABLE_ASSERTIONS  0 // Enables or disables assertions. Leave off for release.
 
 
@@ -69,9 +75,9 @@
 #define GRANULAR_FLUSH_DO(stmt_) do { stmt_; } while (0)   /* Executes a statement if granular flushes are enabled */
 #define gfx_flush(id_) gfx_flush_impl(id_)                 /* Passes the flush ID if granular flushes are enabled  */
 
-static int flushes[FLUSH_COUNTERS],              // Read these counters with a debugger.
-           flush_avoids[FLUSH_COUNTERS],
-           tris_per_flush[FLUSH_COUNTERS][255];
+static int flushes[NUM_FLUSH_COUNTERS],              // Read these counters with a debugger.
+           flush_avoids[NUM_FLUSH_COUNTERS],
+           tris_per_flush[NUM_FLUSH_COUNTERS][255];
 #else
 #define GRANULAR_FLUSH_PARAM_DECLARATION(...)      /* Dummies out the given parameters.                    */
 #define GRANULAR_FLUSH_DO(stmt_) do {} while (0)   /* Executes a statement if granular flushes are enabled */
@@ -94,8 +100,8 @@ static int flushes[FLUSH_COUNTERS],              // Read these counters with a d
 
 #define ARR_INDEX_2D(x_, y_, w_) (x_ + (y_ * w_))
 
-#define MAX_BUFFERED_TRIS 512
-#define MAX_BUFFERED_VERTS (MAX_BUFFERED_TRIS * 3)
+#define MAX_BATCHED_TRIS 512
+#define MAX_BATCHED_VERTS (MAX_BATCHED_TRIS * 3)
 #define MAX_VERTICES 64
 #define MAT_STACK_SIZE 11
 
@@ -180,11 +186,6 @@ union TextureScalingFactor {
         uint32_t s, t;
     };
     uint64_t u64;
-};
-
-union VertexBuffer {
-    float  as_float[(ROUND_UP(8, MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX))];
-    uint32_t as_u32[(ROUND_UP(8, MAX_BUFFERED_VERTS * EMU64_STRIDE_MAX))];
 };
 
 union SamplerConfig {
@@ -311,14 +312,9 @@ static struct RenderingState rendering_state;
 
 static bool dropped_frame;
 
-// batches incoming G_TRI commands. Batch size must be <= MAX_BUFFERED_VERTS or sp_create_vbo can break.
-static Vtx* tri_batch[MAX_BUFFERED_VERTS]; 
-static size_t num_verts_batched = 0;
-
-// contains unpacked vertex data ready to send to the Rendering API
-static union VertexBuffer buf_vbo ALIGNED(32); // Cacheline-aligned
-static size_t buf_vbo_len = 0;
-static size_t buf_vbo_num_verts = 0;
+// batches incoming G_TRI commands
+static Vtx* tri_batch[MAX_BATCHED_VERTS] ALIGNED(32);
+static size_t num_verts_batched;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
 
@@ -510,28 +506,22 @@ static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id))
 {
     granular_log_time(0);
 
-    if (UNLIKELY(buf_vbo_num_verts > 0)) {
-        GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += buf_vbo_num_verts / 3);
-        GRANULAR_FLUSH_DO(flushes[flush_id]++);
-        gfx_apply_matrices();
-        gfx_apply_lighting();
-        gfx_apply_texgen();
+    GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += num_verts_batched / 3);
+    GRANULAR_FLUSH_DO(flushes[flush_id]++);
+    gfx_apply_matrices();
+    gfx_apply_lighting();
+    gfx_apply_texgen();
 
-        gfx_rapi_draw_triangles(buf_vbo.as_float, buf_vbo_len, buf_vbo_num_verts / 3);
-        buf_vbo_len = 0;
-        buf_vbo_num_verts = 0;
-    } else 
-        GRANULAR_FLUSH_DO(flush_avoids[flush_id]++);
+    gfx_rapi_draw_triangles_indirect(tri_batch, num_verts_batched / 3);
+    num_verts_batched = 0;
 
-    granular_log_time(8); // gfx_flush
+    granular_log_time(7); // gfx_flush
 }
 
 static void gfx_set_2d(int mode_2d)
 {
     if (rendering_state.stereo_3d_mode != mode_2d) {
         rendering_state.stereo_3d_mode  = mode_2d;
-        gfx_flush(0);
-        
         gfx_rapi_set_2d_mode(mode_2d);
     }
 }
@@ -540,7 +530,6 @@ static void gfx_set_iod(uint32_t iod)
 {
     if (rendering_state.iod_mode != iod) {
         rendering_state.iod_mode  = iod;
-        gfx_flush(1);
 
         float z, w;
         switch(iod) {
@@ -732,7 +721,6 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
         bool matrix_updated = !(rendering_state.last_p_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
-            gfx_flush(2);
             rendering_state.last_p_mtx_addr = matrix;
         }
 
@@ -753,7 +741,6 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
         bool matrix_updated = !(rendering_state.last_mv_mtx_addr == matrix && is_load);
 
         if (matrix_updated) {
-            gfx_flush(3);
             rendering_state.last_mv_mtx_addr = matrix;
         }
         
@@ -777,8 +764,6 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
 
 // SM64 only ever pops 1 matrix at a time, and never 0.
 static void gfx_sp_pop_matrix(uint32_t count) {
-    gfx_flush(4);
-
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
     // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
     rsp.modelview_matrix_stack_size -= count;
@@ -793,18 +778,17 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         const Vtx_t *v = &vertices[vert].v;
         rsp.loaded_vertices[dest] = (Vtx*) v;
     }
-    granular_log_time(5); // Vertex Copy
+    granular_log_time(5); // Vertex Load
 }
 
-static void gfx_sp_tri_update_state()
+static void gfx_update_deferred_state()
 {
     granular_log_time(0);
 
     if (rendering_state.cc_id != shader_state.cc_id) {
         rendering_state.cc_id  = shader_state.cc_id;
 
-        granular_log_time(6); // gfx_sp_tri_update_state
-        gfx_flush(5);
+        granular_log_time(6); // gfx_update_deferred_state
 
         const size_t cc_index = gfx_rapi_lookup_or_create_color_combiner(shader_state.cc_id);
         gfx_rapi_color_combiner_get_info(cc_index, &shader_state.num_inputs, shader_state.used_textures.bools);
@@ -813,15 +797,13 @@ static void gfx_sp_tri_update_state()
 
     if (UNLIKELY(rendering_state.prim_color.u32 != rdp.prim_color.u32)) {
         rendering_state.prim_color.u32           = rdp.prim_color.u32;
-        granular_log_time(6); // gfx_sp_tri_update_state
-        gfx_flush(6);
+        granular_log_time(6); // gfx_update_deferred_state
         gfx_rapi_set_cc_prim_color(rdp.prim_color.u32);
     }
 
     if (UNLIKELY(rendering_state.env_color.u32 != rdp.env_color.u32)) {
         rendering_state.env_color.u32           = rdp.env_color.u32;
-        granular_log_time(6); // gfx_sp_tri_update_state
-        gfx_flush(7);
+        granular_log_time(6); // gfx_update_deferred_state
         gfx_rapi_set_cc_env_color(rdp.env_color.u32);
     }
 
@@ -829,15 +811,13 @@ static void gfx_sp_tri_update_state()
         const bool linear_filter = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
         if (rendering_state.linear_filter != linear_filter) {
             rendering_state.linear_filter  = linear_filter;
-            granular_log_time(6); // gfx_sp_tri_update_state
-            gfx_flush(8);
+            granular_log_time(6); // gfx_update_deferred_state
             gfx_rapi_set_uv_offset(linear_filter ? 0.5f : 0.0f);
         }
 
         if (rendering_state.texture_settings.u64 != rdp.texture_tile.texture_settings.u64) {
             rendering_state.texture_settings.u64  = rdp.texture_tile.texture_settings.u64;
-            granular_log_time(6); // gfx_sp_tri_update_state
-            gfx_flush(9);
+            granular_log_time(6); // gfx_update_deferred_state
             gfx_rapi_set_texture_settings(rdp.texture_tile.texture_settings.uls, rdp.texture_tile.texture_settings.ult, rdp.texture_tile.texture_settings.width, rdp.texture_tile.texture_settings.height);
         }
 
@@ -846,15 +826,13 @@ static void gfx_sp_tri_update_state()
             if (shader_state.used_textures.bools[i]) {
                 if (rdp.textures_changed[i]) {
                     rdp.textures_changed[i] = false;
-                    granular_log_time(6); // gfx_sp_tri_update_state
-                    gfx_flush(10);
+                    granular_log_time(6); // gfx_update_deferred_state
                     upload_texture_to_rendering_api(i);
                 }
 
                 if (rendering_state.textures[i]->sampler_config.all != sampler_config.all) {
                     rendering_state.textures[i]->sampler_config      = sampler_config; // Struct copy
-                    granular_log_time(6); // gfx_sp_tri_update_state
-                    gfx_flush(11);
+                    granular_log_time(6); // gfx_update_deferred_state
                     gfx_rapi_set_sampler_parameters(i, linear_filter, rdp.texture_tile.cms, rdp.texture_tile.cmt);
                 }
             }
@@ -867,8 +845,7 @@ static void gfx_sp_tri_update_state()
     const bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
     if (rendering_state.culling_mode != culling_mode) {
         rendering_state.culling_mode  = culling_mode;
-        granular_log_time(6); // gfx_sp_tri_update_state
-        gfx_flush(12);
+        granular_log_time(6); // gfx_update_deferred_state
         gfx_rapi_set_backface_culling_mode(culling_mode);
     }
 
@@ -876,60 +853,18 @@ static void gfx_sp_tri_update_state()
     // Handled here to optimize rectangle drawing
     if (rendering_state.depth_test != depth_test) {
         rendering_state.depth_test  = depth_test;
-        granular_log_time(6); // gfx_sp_tri_update_state
-        gfx_flush(13);
+        granular_log_time(6); // gfx_update_deferred_state
         gfx_rapi_set_depth_test(depth_test);
     }
 
     // Handled here to optimize rectangle drawing
     if (rendering_state.viewport.u64 != rdp.viewport.u64) {
         rendering_state.viewport      = rdp.viewport; // Struct copy
-        granular_log_time(6); // gfx_sp_tri_update_state
-        gfx_flush(14);
+        granular_log_time(6); // gfx_update_deferred_state
         gfx_rapi_set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
     }
 
-    granular_log_time(6); // gfx_sp_tri_update_state
-}
-
-// numTris must not be > MAX_BUFFERED_TRIS (more specifically, numTris * 3 and MAX_BUFFERED_VERTS).
-// This will be left this way for performance reasons, as this is an internal-use function. Don't break it!
-static void gfx_tri_create_vbo(Vtx *restrict v_arr[restrict], uint32_t numTris)
-{
-    granular_log_time(0);
-
-    const uint32_t numVerts = numTris * 3;
-    if (buf_vbo_num_verts + numVerts >= MAX_BUFFERED_VERTS) {
-        granular_log_time(7); // gfx_tri_create_vbo
-        gfx_flush(15);
-    }
-    buf_vbo_num_verts += numVerts;
-
-    const bool use_texture = shader_state.used_textures.either;
-    const bool use_color_or_normals = (shader_state.num_inputs > 0) || (rsp.geometry_mode & G_LIGHTING);
-
-    size_t len = buf_vbo_len; // Local copy is needed to work around the compiler being stupid
-    const size_t stride = use_color_or_normals ? 4:
-                          use_texture ? 3 :
-                          2;
-
-    // It's faster to unconditionally write the full vertex and then advance by vertex stride.
-    // For smaller vertex formats, this will overwrite unused attributes of the prior vertex,
-    // but this is good because cached writes are much cheaper than conditionals inside the loop body.
-    #pragma GCC unroll 3
-    for (size_t vtx = 0; vtx < numVerts; vtx++) {
-        memcpy(&buf_vbo.as_u32[len], __builtin_assume_aligned(v_arr[vtx], _Alignof(Vtx)), sizeof(*v_arr[vtx]));
-        len += stride;
-    }
-
-    buf_vbo_len = len;
-
-    granular_log_time(7); // gfx_tri_create_vbo
-}
-
-static void gfx_sp_tri_batched(Vtx *restrict v_arr[restrict], uint32_t num_tris) {
-    gfx_sp_tri_update_state();
-    gfx_tri_create_vbo(v_arr, num_tris);
+    granular_log_time(6); // gfx_update_deferred_state
 }
 
 static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
@@ -939,7 +874,6 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
     // Even though we do deferred checks in update_state, this is still required
     // because geomode contains other bits that still need a flush.
     if (new_mode != old_mode) {
-        gfx_flush(25);
         rsp.geometry_mode = new_mode;
     }
 }
@@ -969,7 +903,6 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
 
     // This previously avoided overwriting the lookat mtx, but that data no longer even makes it this far.
     if (LIKELY(index == G_MV_LIGHT)) {
-        gfx_flush(27);
         const int light_index = (offset / 24) - 2;
         rsp.lights[light_index] = (Light_t*) data;
         rsp.lights_changed_bitfield |= BIT(light_index);
@@ -993,7 +926,6 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
         case G_MV_L1:
         case G_MV_L2:
             // NOTE: reads out of bounds if it is an ambient light
-            gfx_flush(27);
             const int light_index = (index - G_MV_L0) / 2;
             rsp.lights[light_index] = (Light_t*) data;
             rsp.lights_changed_bitfield |= BIT(light_index);
@@ -1005,7 +937,6 @@ static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
 static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data) {
     switch (index) {
         case G_MW_NUMLIGHT:
-            gfx_flush(26);
 #ifdef F3DEX_GBI_2
             rsp.num_lights = data / 24 + 1; // add ambient light
 #else
@@ -1017,7 +948,6 @@ static void gfx_sp_moveword(uint8_t index, UNUSED uint16_t offset, uint32_t data
         case G_MW_FOG:
             if (rendering_state.fog_settings != data) {
                 rendering_state.fog_settings  = data;
-                gfx_flush(16);
                 uint16_t fog_mul = (int16_t)(data >> 16),
                          fog_offset = (int16_t)data;
                 gfx_rapi_set_fog(fog_mul, fog_offset);
@@ -1031,7 +961,6 @@ static void gfx_sp_texture(uint32_t sc, uint32_t tc, UNUSED uint8_t level, UNUSE
     union TextureScalingFactor new_mode = {.s = sc, .t = tc};
 
     if (rsp.texture_scaling_factor.u64 != new_mode.u64) {
-        gfx_flush(28);
         rsp.texture_scaling_factor.u64 = new_mode.u64;
     }
 }
@@ -1045,7 +974,6 @@ static void gfx_dp_set_scissor(UNUSED uint32_t mode, uint32_t ulx, uint32_t uly,
     const union XYWidthHeight scissor = {{ x, y, width, height }};
     if (rendering_state.scissor.u64 != scissor.u64) {
         rendering_state.scissor      = scissor;
-        gfx_flush(17);
         gfx_rapi_set_scissor(scissor.x, scissor.y, scissor.width, scissor.height);
     }
 }
@@ -1181,7 +1109,6 @@ static void gfx_dp_set_prim_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 }
 
 static void gfx_dp_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    gfx_flush(18);
     gfx_rapi_set_fog_color(r, g, b, a);
 }
 
@@ -1197,8 +1124,6 @@ static void gfx_dp_set_fill_color(uint32_t packed_color) {
 }
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
-    gfx_flush(19);
-
     uint32_t saved_other_mode_h = rdp.other_mode_h;
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
     uint32_t saved_matrix_set = rsp.matrix_set;
@@ -1238,16 +1163,17 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     union XYWidthHeight viewport_saved = rdp.viewport;
     gfx_set_viewport((union XYWidthHeight) { .width = gfx_current_dimensions.width, .height = gfx_current_dimensions.height });
 
-    static Vtx* rect_triangles[] =
-       {&rsp.rect_vertices[0],
-        &rsp.rect_vertices[1],
-        &rsp.rect_vertices[3],
-        &rsp.rect_vertices[1],
-        &rsp.rect_vertices[2],
-        &rsp.rect_vertices[3]};
+    gfx_update_deferred_state();
 
-    gfx_sp_tri_batched(rect_triangles, 2);
-    gfx_flush(20);
+    num_verts_batched = 6;
+    tri_batch[0] = &rsp.rect_vertices[0];
+    tri_batch[1] = &rsp.rect_vertices[1];
+    tri_batch[2] = &rsp.rect_vertices[3];
+    tri_batch[3] = &rsp.rect_vertices[1];
+    tri_batch[4] = &rsp.rect_vertices[2];
+    tri_batch[5] = &rsp.rect_vertices[3];
+
+    gfx_flush(FLUSH_DRAWRECT);
 
     rsp.matrix_set = saved_matrix_set;
     
@@ -1259,8 +1185,6 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 }
 
 static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, UNUSED uint8_t tile, int16_t uls, int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
-    gfx_flush(29);
-
     bool is_copy = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY;
     CombineMode saved_combine_mode = rdp.combine_mode;
     if (is_copy) {
@@ -1327,8 +1251,6 @@ static void gfx_dp_fill_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t
         return;
     }
 
-    gfx_flush(30);
-
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
 
     if (cycle_type == G_CYC_COPY || cycle_type == G_CYC_FILL) {
@@ -1367,14 +1289,12 @@ static void set_other_mode_l(uint32_t other_mode_l)
         
         const bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
         if (z_upd != rendering_state.depth_mask) {
-            gfx_flush(21);
             gfx_rapi_set_depth_mask(z_upd);
             rendering_state.depth_mask = z_upd;
         }
 
         const bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
         if (zmode_decal != rendering_state.decal_mode) {
-            gfx_flush(22);
             gfx_rapi_set_zmode_decal(zmode_decal);
             rendering_state.decal_mode = zmode_decal;
         }
@@ -1387,7 +1307,6 @@ static void set_other_mode_l(uint32_t other_mode_l)
         calculate_cc_id_wrapper();
         
         if (shader_state.use_alpha != rendering_state.alpha_blend) {
-            gfx_flush(23);
             gfx_rapi_set_use_alpha(shader_state.use_alpha);
             rendering_state.alpha_blend = shader_state.use_alpha;
         }
@@ -1409,16 +1328,93 @@ static inline void *seg_addr(uintptr_t w1) {
 #define C0(pos, width) ((cmd->words.w0 >> (pos)) & ((1U << width) - 1))
 #define C1(pos, width) ((cmd->words.w1 >> (pos)) & ((1U << width) - 1))
 
-static void gfx_run_dl(Gfx* cmd) {
+#if defined(F3DEX_GBI) || defined(F3DLP_GBI)
+#define TRI_LOOP_EXPECT (uint8_t) G_TRI2
+#else
+#define TRI_LOOP_EXPECT (uint8_t) G_TRI1
+#endif
+
+// Fast loop for processing triangles
+static Gfx* gfx_run_tri_loop(Gfx* cmd)
+{
+    gfx_update_deferred_state();
+
     for (;;) {
         uint32_t opcode = cmd->words.w0 >> 24;
         PC_METRIC_DO(num_rsp_commands_run++);
 
-        // GOTO actually happens to be faster here.
-        if (UNLIKELY(opcode != G_TRI1 && opcode != G_TRI2 && opcode != G_VTX && num_verts_batched)) {
-flush:      gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
-            num_verts_batched = 0;
+        switch (EXPECT(opcode, TRI_LOOP_EXPECT)) {
+            case (uint8_t)G_TRI1: {
+                if (UNLIKELY(num_verts_batched + 3 > MAX_BATCHED_TRIS))
+                    gfx_flush(FLUSH_BATCH_FULL);
+                
+#ifdef F3DEX_GBI_2
+                const uint8_t i1 = C0(16, 8) / 2,
+                              i2 = C0(8, 8)  / 2,
+                              i3 = C0(0, 8)  / 2;
+#elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
+                const uint8_t i1 = C1(16, 8) / 2,
+                              i2 = C1(8, 8)  / 2,
+                              i3 = C1(0, 8)  / 2;
+#else
+                const uint8_t i1 = C1(16, 8) / 10,
+                              i2 = C1(8, 8)  / 10,
+                              i3 = C1(0, 8)  / 10;
+#endif
+                Vtx** batch_head = &tri_batch[num_verts_batched];
+                num_verts_batched += 3;
+                batch_head[0] = rsp.loaded_vertices[i1];
+                batch_head[1] = rsp.loaded_vertices[i2];
+                batch_head[2] = rsp.loaded_vertices[i3];
+                break;
+            }
+
+#if defined(F3DEX_GBI) || defined(F3DLP_GBI)
+            case (uint8_t)G_TRI2: {
+                if (UNLIKELY(num_verts_batched + 6 > ARRAY_COUNT(tri_batch)))
+                    gfx_flush(FLUSH_BATCH_FULL);
+
+                const uint8_t i1 = C0(16, 8) / 2,
+                              i2 = C0(8, 8)  / 2,
+                              i3 = C0(0, 8)  / 2,
+                              i4 = C1(16, 8) / 2,
+                              i5 = C1(8, 8)  / 2,
+                              i6 = C1(0, 8)  / 2;
+
+                Vtx** batch_head = &tri_batch[num_verts_batched];
+                num_verts_batched += 6;
+                batch_head[0] = rsp.loaded_vertices[i1];
+                batch_head[1] = rsp.loaded_vertices[i2];
+                batch_head[2] = rsp.loaded_vertices[i3];
+                batch_head[3] = rsp.loaded_vertices[i4];
+                batch_head[4] = rsp.loaded_vertices[i5];
+                batch_head[5] = rsp.loaded_vertices[i6];
+                break;
+            }
+#endif
+            case G_VTX:
+#ifdef F3DEX_GBI_2
+                gfx_sp_vertex(C0(12, 8), C0(1, 7) - C0(12, 8), seg_addr(cmd->words.w1));
+#elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
+                gfx_sp_vertex(C0(10, 6), C0(16, 8) / 2, seg_addr(cmd->words.w1));
+#else
+                gfx_sp_vertex((C0(0, 16)) / sizeof(Vtx), C0(16, 4), seg_addr(cmd->words.w1));
+#endif
+                break;
+            default:
+                // Not guaranteed because we can enter with G_VTX
+                if (num_verts_batched != 0) 
+                    gfx_flush(FLUSH_TRI_LOOP_END);
+                return cmd;
         }
+        cmd++;
+    }
+}
+
+static void gfx_run_dl(Gfx* cmd) {
+    for (;;) {
+        uint32_t opcode = cmd->words.w0 >> 24;
+        PC_METRIC_DO(num_rsp_commands_run++);
 
         switch (opcode) {
             // RSP commands:
@@ -1457,15 +1453,6 @@ flush:      gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
                 gfx_sp_texture(C1(16, 16), C1(0, 16), C0(11, 3), C0(8, 3), C0(0, 8));
 #endif
                 break;
-            case G_VTX:
-#ifdef F3DEX_GBI_2
-                gfx_sp_vertex(C0(12, 8), C0(1, 7) - C0(12, 8), seg_addr(cmd->words.w1));
-#elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
-                gfx_sp_vertex(C0(10, 6), C0(16, 8) / 2, seg_addr(cmd->words.w1));
-#else
-                gfx_sp_vertex((C0(0, 16)) / sizeof(Vtx), C0(16, 4), seg_addr(cmd->words.w1));
-#endif
-                break;
             case G_DL:
                 if (C0(16, 1) == 0) {
                     // Push return address
@@ -1489,48 +1476,14 @@ flush:      gfx_sp_tri_batched(tri_batch, num_verts_batched / 3);
                 gfx_sp_geometry_mode(cmd->words.w1, 0);
                 break;
 #endif
-            case (uint8_t)G_TRI1: {
-                if (UNLIKELY(num_verts_batched + 3 > ARRAY_COUNT(tri_batch)))
-                    goto flush;
-                
-#ifdef F3DEX_GBI_2
-                const uint8_t i1 = C0(16, 8) / 2,
-                              i2 = C0(8, 8)  / 2,
-                              i3 = C0(0, 8)  / 2;
-#elif defined(F3DEX_GBI) || defined(F3DLP_GBI)
-                const uint8_t i1 = C1(16, 8) / 2,
-                              i2 = C1(8, 8)  / 2,
-                              i3 = C1(0, 8)  / 2;
-#else
-                const uint8_t i1 = C1(16, 8) / 10,
-                              i2 = C1(8, 8)  / 10,
-                              i3 = C1(0, 8)  / 10;
-#endif
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i1];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i2];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i3];
-                break;
-            }
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
-            case (uint8_t)G_TRI2: {
-                if (UNLIKELY(num_verts_batched + 6 > ARRAY_COUNT(tri_batch)))
-                    goto flush;
-
-                const uint8_t i1 = C0(16, 8) / 2,
-                              i2 = C0(8, 8)  / 2,
-                              i3 = C0(0, 8)  / 2,
-                              i4 = C1(16, 8) / 2,
-                              i5 = C1(8, 8)  / 2,
-                              i6 = C1(0, 8)  / 2;
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i1];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i2];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i3];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i4];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i5];
-                tri_batch[num_verts_batched++] = rsp.loaded_vertices[i6];
-                break;
-            }
+            case (uint8_t)G_TRI2:
 #endif
+            case G_VTX:
+            case (uint8_t)G_TRI1:
+                cmd = gfx_run_tri_loop(cmd);
+                cmd--;
+                break;
             case (uint8_t)G_SETOTHERMODE_L:
 #ifdef F3DEX_GBI_2
                 gfx_sp_set_other_mode(31 - C0(8, 8) - C0(0, 8), C0(0, 8) + 1, cmd->words.w1);
@@ -1680,9 +1633,8 @@ COLD void gfx_run(Gfx *commands) {
 
     non_granular_log_time(0);
     gfx_run_dl(commands);
-    gfx_flush(24);
     non_granular_log_time(5); // GFX Run Display List
-    
+
     gfx_rapi_end_frame();
     gfx_wapi->swap_buffers_begin();
 
