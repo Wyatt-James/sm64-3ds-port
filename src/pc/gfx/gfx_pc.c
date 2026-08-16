@@ -144,18 +144,6 @@ static Light_t LIGHT_DEFAULT = {
 
 // -------------------- TYPES --------------------
 
-union int16x2 {
-    struct {
-        int16_t s16_upper;
-        int16_t s16_lower;
-    };
-    struct {
-        int16_t u;
-        int16_t v;
-    };
-    uint32_t u32;
-};
-
 union int16x4 {
     struct {
         int16_t uls;
