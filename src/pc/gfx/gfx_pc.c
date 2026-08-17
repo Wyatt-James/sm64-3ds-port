@@ -1333,7 +1333,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
 
         switch (EXPECT(opcode, TRI_LOOP_EXPECT)) {
             case (uint8_t)G_TRI1: {
-                if (UNLIKELY(num_verts_batched + 3 > MAX_BATCHED_TRIS))
+                if (UNLIKELY(num_verts_batched + 3 > ARRAY_COUNT(tri_batch)))
                     gfx_flush(FLUSH_BATCH_FULL);
                 
 #ifdef F3DEX_GBI_2
