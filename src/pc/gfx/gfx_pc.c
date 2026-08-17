@@ -1328,6 +1328,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
     // Note: if we allow entering this func without a G_TRI command,
     // this needs to be deferred until we actually flush
     gfx_update_deferred_state();
+    Vtx** batch_head = &tri_batch[0];
 
     for (;;) {
         uint32_t opcode = cmd->words.w0 >> 24;
@@ -1335,8 +1336,11 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
 
         switch (EXPECT(opcode, TRI_LOOP_EXPECT)) {
             case (uint8_t)G_TRI1: {
-                if (UNLIKELY(num_verts_batched + 3 > ARRAY_COUNT(tri_batch)))
+                if (UNLIKELY(num_verts_batched + 3 > ARRAY_COUNT(tri_batch))) {
+                    num_verts_batched = batch_head - tri_batch;
+                    batch_head = &tri_batch[0];
                     gfx_flush(FLUSH_BATCH_FULL);
+                }
                 
 #ifdef F3DEX_GBI_2
                 const uint8_t i1 = C0(16, 8) / 2,
@@ -1351,18 +1355,20 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
                               i2 = C1(8, 8)  / 10,
                               i3 = C1(0, 8)  / 10;
 #endif
-                Vtx** batch_head = &tri_batch[num_verts_batched];
-                num_verts_batched += 3;
                 batch_head[0] = rsp.loaded_vertices[i1];
                 batch_head[1] = rsp.loaded_vertices[i2];
                 batch_head[2] = rsp.loaded_vertices[i3];
+                batch_head += 3;
                 break;
             }
 
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
             case (uint8_t)G_TRI2: {
-                if (UNLIKELY(num_verts_batched + 6 > ARRAY_COUNT(tri_batch)))
+                if (UNLIKELY(num_verts_batched + 6 > ARRAY_COUNT(tri_batch))) {
+                    num_verts_batched = batch_head - tri_batch;
+                    batch_head = &tri_batch[0];
                     gfx_flush(FLUSH_BATCH_FULL);
+                }
 
                 const uint8_t i1 = C0(16, 8) / 2,
                               i2 = C0(8, 8)  / 2,
@@ -1371,14 +1377,13 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
                               i5 = C1(8, 8)  / 2,
                               i6 = C1(0, 8)  / 2;
 
-                Vtx** batch_head = &tri_batch[num_verts_batched];
-                num_verts_batched += 6;
                 batch_head[0] = rsp.loaded_vertices[i1];
                 batch_head[1] = rsp.loaded_vertices[i2];
                 batch_head[2] = rsp.loaded_vertices[i3];
                 batch_head[3] = rsp.loaded_vertices[i4];
                 batch_head[4] = rsp.loaded_vertices[i5];
                 batch_head[5] = rsp.loaded_vertices[i6];
+                batch_head += 6;
                 break;
             }
 #endif
@@ -1394,6 +1399,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
             default:
                 // Note: if we allow entering this func without a
                 // G_TRI command, this needs an empty check
+                num_verts_batched = batch_head - tri_batch;
                 gfx_flush(FLUSH_TRI_LOOP_END);
                 return cmd;
         }
