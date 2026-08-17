@@ -1325,6 +1325,8 @@ static inline void *seg_addr(uintptr_t w1) {
 // Fast loop for processing triangles
 static Gfx* gfx_run_tri_loop(Gfx* cmd)
 {
+    // Note: if we allow entering this func without a G_TRI command,
+    // this needs to be deferred until we actually flush
     gfx_update_deferred_state();
 
     for (;;) {
@@ -1390,9 +1392,9 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
 #endif
                 break;
             default:
-                // Not guaranteed because we can enter with G_VTX
-                if (num_verts_batched != 0) 
-                    gfx_flush(FLUSH_TRI_LOOP_END);
+                // Note: if we allow entering this func without a
+                // G_TRI command, this needs an empty check
+                gfx_flush(FLUSH_TRI_LOOP_END);
                 return cmd;
         }
         cmd++;
