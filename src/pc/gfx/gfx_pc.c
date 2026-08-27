@@ -1336,7 +1336,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
 
         switch (EXPECT(opcode, TRI_LOOP_EXPECT)) {
             case (uint8_t)G_TRI1: {
-                if (UNLIKELY(num_verts_batched + 3 > ARRAY_COUNT(tri_batch))) {
+                if (UNLIKELY((batch_head - tri_batch) + 3U > ARRAY_COUNT(tri_batch))) {
                     num_verts_batched = batch_head - tri_batch;
                     batch_head = &tri_batch[0];
                     gfx_flush(FLUSH_BATCH_FULL);
@@ -1364,7 +1364,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
 
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
             case (uint8_t)G_TRI2: {
-                if (UNLIKELY(num_verts_batched + 6 > ARRAY_COUNT(tri_batch))) {
+                if (UNLIKELY((batch_head - tri_batch) + 6U > ARRAY_COUNT(tri_batch))) {
                     num_verts_batched = batch_head - tri_batch;
                     batch_head = &tri_batch[0];
                     gfx_flush(FLUSH_BATCH_FULL);
