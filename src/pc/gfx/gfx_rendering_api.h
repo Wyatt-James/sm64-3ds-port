@@ -145,7 +145,7 @@ void                    gfx_rapi_set_cc_env_color                 (uint32_t colo
 #endif
 
 #if GFX_RAPI_POINTER_DRAWING == GFX_ENABLE
-void                    gfx_rapi_draw_triangles_indirect          (Vtx** verts, size_t num_tris);                                 // Draws the given vertices from an array of pointers
+void                    gfx_rapi_draw_triangles_indirect          (const Vtx** verts, size_t num_tris);                           // Draws the given vertices from an array of pointers
 #endif
 
 #endif

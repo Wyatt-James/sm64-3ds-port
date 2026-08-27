@@ -215,7 +215,7 @@ struct RSP {
 
     union TextureScalingFactor texture_scaling_factor;
 
-    Vtx* loaded_vertices[MAX_VERTICES];
+    const Vtx* loaded_vertices[MAX_VERTICES];
     Vtx rect_vertices[4]; // Used only for rectangle drawing
 };
 
@@ -301,7 +301,7 @@ static struct RenderingState rendering_state;
 static bool dropped_frame;
 
 // batches incoming G_TRI commands
-static Vtx* tri_batch[MAX_BATCHED_VERTS] ALIGNED(32);
+static const Vtx* tri_batch[MAX_BATCHED_VERTS] ALIGNED(32);
 static size_t num_verts_batched;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
@@ -763,8 +763,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 
     // Load each vert pointer
     for (size_t vert = 0, dest = dest_index; vert < n_vertices; vert++, dest++) {
-        const Vtx_t *v = &vertices[vert].v;
-        rsp.loaded_vertices[dest] = (Vtx*) v;
+        rsp.loaded_vertices[dest] = &vertices[vert];
     }
     granular_log_time(5); // Vertex Load
 }
@@ -1328,7 +1327,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
     // Note: if we allow entering this func without a G_TRI command,
     // this needs to be deferred until we actually flush
     gfx_update_deferred_state();
-    Vtx** batch_head = &tri_batch[0];
+    const Vtx** batch_head = &tri_batch[0];
 
     for (;;) {
         uint32_t opcode = cmd->words.w0 >> 24;

@@ -245,7 +245,7 @@ static inline void draw_triangles_internal(size_t vb_num_verts, size_t num_verts
     C3D_DrawArrays(GPU_TRIANGLES, vb_num_verts, num_verts);
 }
 
-static void copy_verts_from_ptrs(Vtx** verts, size_t num_verts, float* base, size_t stride)
+static void copy_verts_from_ptrs(const Vtx** verts, size_t num_verts, float* base, size_t stride)
 {
     // It's faster to unconditionally write the full vertex and then advance by vertex stride.
     // For smaller vertex formats, this will overwrite unused attributes of the prior vertex,
@@ -261,7 +261,7 @@ static void copy_verts_from_ptrs(Vtx** verts, size_t num_verts, float* base, siz
     }
 }
 
-void gfx_rapi_draw_triangles_indirect(Vtx** verts, size_t num_tris)
+void gfx_rapi_draw_triangles_indirect(const Vtx** verts, size_t num_tris)
 {
     internal_citro3d_select_shader();
     gfx_citro3d_update_context(&ctx);
