@@ -1606,6 +1606,7 @@ static void gfx_sp_reset() {
     rsp.modelview_matrix_stack_size = 1;
     rsp.num_lights = 2;
     rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS);
+    rendering_state.last_mv_mtx_addr = rendering_state.last_p_mtx_addr = NULL;
     
     PC_METRIC_DO(num_rsp_commands_run = 0);
 }
@@ -1622,7 +1623,6 @@ COLD void gfx_run(Gfx *commands) {
     profiler_3ds_log_time(0);
     gfx_rapi_start_frame();
     profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
-    rendering_state.last_mv_mtx_addr = rendering_state.last_p_mtx_addr = NULL;
 
     non_granular_log_time(0);
     gfx_run_dl(commands);
