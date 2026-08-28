@@ -700,7 +700,7 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
 
     if (UNLIKELY(parameters & G_MTX_PROJECTION)) {
 
-        bool matrix_updated = !(rendering_state.last_p_mtx_addr == matrix && is_load);
+        bool matrix_updated = !is_load || rendering_state.last_p_mtx_addr != matrix;
 
         if (matrix_updated) {
             rendering_state.last_p_mtx_addr = matrix;
@@ -720,7 +720,7 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
     } else { // G_MTX_MODELVIEW
         float* src = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
         
-        bool matrix_updated = !(rendering_state.last_mv_mtx_addr == matrix && is_load);
+        bool matrix_updated = !is_load || rendering_state.last_mv_mtx_addr != matrix;
 
         if (matrix_updated) {
             rendering_state.last_mv_mtx_addr = matrix;
