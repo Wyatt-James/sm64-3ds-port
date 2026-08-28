@@ -71,17 +71,13 @@ enum {
 #endif
 
 #if GRANULAR_FLUSHES == 1
-#define GRANULAR_FLUSH_PARAM_DECLARATION(...) __VA_ARGS__  /* Passes the given parameters through                  */
 #define GRANULAR_FLUSH_DO(stmt_) do { stmt_; } while (0)   /* Executes a statement if granular flushes are enabled */
-#define gfx_flush(id_) gfx_flush_impl(id_)                 /* Passes the flush ID if granular flushes are enabled  */
 
 static int flushes[NUM_FLUSH_COUNTERS],              // Read these counters with a debugger.
            flush_avoids[NUM_FLUSH_COUNTERS],
            tris_per_flush[NUM_FLUSH_COUNTERS][255];
 #else
-#define GRANULAR_FLUSH_PARAM_DECLARATION(...)      /* Dummies out the given parameters.                    */
 #define GRANULAR_FLUSH_DO(stmt_) do {} while (0)   /* Executes a statement if granular flushes are enabled */
-#define gfx_flush(id_) gfx_flush_impl()            /* Passes the flush ID if granular flushes are enabled  */
 #endif
 
 #if ENABLE_ASSERTIONS == 1
@@ -302,13 +298,12 @@ static bool dropped_frame;
 
 // batches incoming G_TRI commands
 static const Vtx* tri_batch[MAX_BATCHED_VERTS] ALIGNED(32);
-static size_t num_verts_batched;
 
 static struct GfxWindowManagerAPI *gfx_wapi;
 
 static void set_other_mode_h(uint32_t other_mode_h);
 static void set_other_mode_l(uint32_t other_mode_l);
-static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id));
+static void gfx_flush(size_t num_verts, uint8_t flush_id);
 
 COLD static void shader_state_init(struct ShaderState* ss)
 {
@@ -490,18 +485,17 @@ static void gfx_apply_texgen()
     }
 }
 
-static void gfx_flush_impl(GRANULAR_FLUSH_PARAM_DECLARATION(uint8_t flush_id))
+static void gfx_flush(size_t num_verts, UNUSED uint8_t flush_id)
 {
     granular_log_time(0);
 
-    GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += num_verts_batched / 3);
+    GRANULAR_FLUSH_DO(tris_per_flush[flush_id][flushes[flush_id]] += num_verts / 3);
     GRANULAR_FLUSH_DO(flushes[flush_id]++);
     gfx_apply_matrices();
     gfx_apply_lighting();
     gfx_apply_texgen();
 
-    gfx_rapi_draw_triangles_indirect(tri_batch, num_verts_batched / 3);
-    num_verts_batched = 0;
+    gfx_rapi_draw_triangles_indirect(tri_batch, num_verts / 3);
 
     granular_log_time(7); // gfx_flush
 }
@@ -1152,7 +1146,6 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 
     gfx_update_deferred_state();
 
-    num_verts_batched = 6;
     tri_batch[0] = &rsp.rect_vertices[0];
     tri_batch[1] = &rsp.rect_vertices[1];
     tri_batch[2] = &rsp.rect_vertices[3];
@@ -1160,7 +1153,7 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
     tri_batch[4] = &rsp.rect_vertices[2];
     tri_batch[5] = &rsp.rect_vertices[3];
 
-    gfx_flush(FLUSH_DRAWRECT);
+    gfx_flush(6, FLUSH_DRAWRECT);
 
     rsp.matrix_set = saved_matrix_set;
     
@@ -1336,9 +1329,8 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
         switch (EXPECT(opcode, TRI_LOOP_EXPECT)) {
             case (uint8_t)G_TRI1: {
                 if (UNLIKELY((batch_head - tri_batch) + 3U > ARRAY_COUNT(tri_batch))) {
-                    num_verts_batched = batch_head - tri_batch;
+                    gfx_flush(batch_head - tri_batch, FLUSH_BATCH_FULL);
                     batch_head = &tri_batch[0];
-                    gfx_flush(FLUSH_BATCH_FULL);
                 }
                 
 #ifdef F3DEX_GBI_2
@@ -1364,9 +1356,8 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
 #if defined(F3DEX_GBI) || defined(F3DLP_GBI)
             case (uint8_t)G_TRI2: {
                 if (UNLIKELY((batch_head - tri_batch) + 6U > ARRAY_COUNT(tri_batch))) {
-                    num_verts_batched = batch_head - tri_batch;
+                    gfx_flush(batch_head - tri_batch, FLUSH_BATCH_FULL);
                     batch_head = &tri_batch[0];
-                    gfx_flush(FLUSH_BATCH_FULL);
                 }
 
                 const uint8_t i1 = C0(16, 8) / 2,
@@ -1398,8 +1389,7 @@ static Gfx* gfx_run_tri_loop(Gfx* cmd)
             default:
                 // Note: if we allow entering this func without a
                 // G_TRI command, this needs an empty check
-                num_verts_batched = batch_head - tri_batch;
-                gfx_flush(FLUSH_TRI_LOOP_END);
+                gfx_flush(batch_head - tri_batch, FLUSH_TRI_LOOP_END);
                 return cmd;
         }
         cmd++;
