@@ -122,7 +122,6 @@ COLD static void internal_citro3d_upload_texture_common(void* data, struct Textu
     {
         case TEX_VRAM:
             tex->data = handle->addr_fcram; // Swap back to FCRAM. We'll leave a hole in the VRAM pool, but that's OK.
-        case TEX_ENQUEUED:
         case TEX_FCRAM:
             C3D_TexDelete(tex);             // Delete FCRAM texture because the size might be different
         case TEX_UNINITIALIZED:

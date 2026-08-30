@@ -110,7 +110,6 @@ typedef enum
 {
     TEX_UNINITIALIZED,  // Not yet uploaded, or upload failed
     TEX_FCRAM,          // Uploaded to FCRAM only
-    TEX_ENQUEUED,       // Uploaded to FCRAM, queued for VRAM
     TEX_VRAM,           // Uploaded to both FCRAM and VRAM
 } TexLoadStatus;
 

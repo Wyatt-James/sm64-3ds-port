@@ -337,7 +337,6 @@ void gfx_rapi_select_texture(int tex_slot, uint32_t texture_id)
     
     if (UNLIKELY(tex->load_status == TEX_FCRAM && num_textures_to_upload_to_vram < MAX_ASYNC_TEXTURE_COPIES_PER_FRAME))
     {
-        tex->load_status = TEX_ENQUEUED;
         texture_upload_queue[num_textures_to_upload_to_vram++] = tex;
     }
 }
