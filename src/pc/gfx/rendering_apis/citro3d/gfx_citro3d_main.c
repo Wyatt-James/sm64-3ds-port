@@ -38,7 +38,7 @@ void gfx_rapi_start_frame(void)
     reconfigure_screens(false);
     
     // Must occur after screen init
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    C3D_FrameBegin(0);
 
     // Due to hardware differences, the PC port always clears the depth buffer.
     queue_screen_clear(GFX_C3D_VIEWPORT_TOP, C3D_CLEAR_DEPTH);
@@ -55,6 +55,7 @@ void gfx_rapi_end_frame(void)
 {
     gfx_citro3d_emulator_end_frame();
     n3ds_menu_render();
+    C3D_FrameSync();
     C3D_FrameEnd(0);
 }
 
