@@ -287,7 +287,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
     // 1: Run Level Script
     // 2: Synchronous Audio Synthesis
     // 3: Build Display List
-    // 4: GFX Rendering API Start Frame (VSync)
+    // 4: VSync
     // 5: GFX Run Display List
 
     // 60fps IDs:

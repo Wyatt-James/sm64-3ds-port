@@ -1624,9 +1624,7 @@ COLD void gfx_run(Gfx *commands) {
     }
     dropped_frame = false;
 
-    profiler_3ds_log_time(0);
     gfx_rapi_start_frame();
-    profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
 
     non_granular_log_time(0);
     gfx_run_dl(commands);

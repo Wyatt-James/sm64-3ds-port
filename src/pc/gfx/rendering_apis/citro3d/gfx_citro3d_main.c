@@ -55,7 +55,9 @@ void gfx_rapi_end_frame(void)
 {
     gfx_citro3d_emulator_end_frame();
     n3ds_menu_render();
+    profiler_3ds_log_time(0);
     C3D_FrameSync();
+    profiler_3ds_log_time(4); // VSync
     C3D_FrameEnd(0);
 }
 
