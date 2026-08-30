@@ -63,8 +63,9 @@ COLD static void internal_citro3d_upload_textures_to_vram()
     }
 
     // If we have slots available and VRAM space, upload all textures
-    if (p->num_vram_tex + num_textures_to_upload_to_vram < MAX_VRAM_TEX &&  p->data_size + data_size_to_upload < VRAM_POOL_SIZE)
+    if (p->num_vram_tex + num_textures_to_upload_to_vram < MAX_VRAM_TEX &&  p->data_size + data_size_to_upload <= VRAM_POOL_SIZE)
     {
+        p->data_size += data_size_to_upload;
         for (size_t i = 0; i < num_textures_to_upload_to_vram; i++)
         {
             TexHandle* handle = texture_upload_queue[i];
@@ -78,7 +79,6 @@ COLD static void internal_citro3d_upload_textures_to_vram()
             C3D_TexUpload(&handle->c3d_tex, handle->addr_fcram);
             C3D_TexFlush(&handle->c3d_tex);
         }
-        p->data_size += data_size_to_upload;
     }
 
     // If our pool is full, clear it and the queue
