@@ -1919,10 +1919,10 @@ index cd9f13c..697921b 100644
          gSPDisplayList(displayListIter++, &intro_seg7_dl_0700B3A0);
          gSPPopMatrix(displayListIter++, G_MTX_MODELVIEW);
 diff --git a/src/pc/gfx/gfx_pc.c b/src/pc/gfx/gfx_pc.c
-index e93c44d..c6c50c8 100644
+index 5b67ea6..5b60c8a 100644
 --- a/src/pc/gfx/gfx_pc.c
 +++ b/src/pc/gfx/gfx_pc.c
-@@ -1611,6 +1611,7 @@ static void gfx_sp_reset() {
+@@ -1616,6 +1616,7 @@ static void gfx_sp_reset() {
      PC_METRIC_DO(num_rsp_commands_run = 0);
  }
  
@@ -1930,12 +1930,7 @@ index e93c44d..c6c50c8 100644
  COLD void gfx_run(Gfx *commands) {
      gfx_sp_reset();
  
-@@ -1622,11 +1623,11 @@ COLD void gfx_run(Gfx *commands) {
- 
-     profiler_3ds_log_time(0);
-     gfx_rapi_start_frame();
--    profiler_3ds_log_time(4); // GFX Rendering API Start Frame (VSync)
-+    profiler_3ds_log_time(isInterpFrame ? 6 : 4); // GFX Rendering API Start Frame (VSync)
+@@ -1629,7 +1630,7 @@ COLD void gfx_run(Gfx *commands) {
  
      non_granular_log_time(0);
      gfx_run_dl(commands);
@@ -1958,10 +1953,10 @@ index 36f3428..d42d107 100644
  }
  #endif
 diff --git a/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c b/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c
-index 853e588..fea6a64 100644
+index 86896f6..18865f4 100644
 --- a/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c
 +++ b/src/pc/gfx/rendering_apis/citro3d/gfx_citro3d_main.c
-@@ -20,9 +20,9 @@
+@@ -20,12 +20,13 @@
  #define DEFAULT_GXQUEUE_SIZE 32 // This is the default used by C3D.
  
  #ifdef VERSION_EU
@@ -1973,6 +1968,19 @@ index 853e588..fea6a64 100644
  #endif
  
  static ShaderProgram default_program;
++extern bool isInterpFrame;
+ 
+ void gfx_rapi_start_frame(void)
+ {
+@@ -57,7 +58,7 @@ void gfx_rapi_end_frame(void)
+     n3ds_menu_render();
+     profiler_3ds_log_time(0);
+     C3D_FrameSync();
+-    profiler_3ds_log_time(4); // VSync
++    profiler_3ds_log_time(isInterpFrame ? 6 : 4); // VSync
+     C3D_FrameEnd(0);
+ }
+ 
 diff --git a/src/pc/gfx/windowing_apis/dxgi/gfx_dxgi.cpp b/src/pc/gfx/windowing_apis/dxgi/gfx_dxgi.cpp
 index ed60f17..5ed929f 100644
 --- a/src/pc/gfx/windowing_apis/dxgi/gfx_dxgi.cpp
@@ -2091,7 +2099,7 @@ index e81ca7c..cb0c041 100644
  
  #ifdef TARGET_WEB
 diff --git a/src/pc/profiler_3ds.c b/src/pc/profiler_3ds.c
-index 64dbf15..2369804 100644
+index b78be57..6f6748d 100644
 --- a/src/pc/profiler_3ds.c
 +++ b/src/pc/profiler_3ds.c
 @@ -343,7 +343,7 @@ void profiler_3ds_snoop_impl(UNUSED uint32_t snoop_id) {
