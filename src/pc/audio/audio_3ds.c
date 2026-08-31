@@ -261,11 +261,7 @@ static bool audio_3ds_init()
 // Stops the audio thread and waits for it to exit.
 static void audio_3ds_stop(void)
 {
-    if (n3ds_audio_thread_info.thread) {
-        n3ds_audio_thread_info.running = false;
-        threadJoin(n3ds_audio_thread_info.thread, U64_MAX);
-        n3ds_audio_thread_info.thread = NULL;
-    }
+    n3ds_thread_stop(&n3ds_audio_thread_info, N3DS_SECONDS_TO_NANOS(2));
 
     ndspExit();
     linearFree(ndsp_buf_raw);

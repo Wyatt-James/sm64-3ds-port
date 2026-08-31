@@ -75,6 +75,19 @@ extern void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info);
  */
 extern int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info);
 
+/*
+ * Stops the given thread
+ * Returns:
+ *   0: the thread was joined successfully or timeout was 0
+ *   1: the thread was not already running (info->thread == NULL or info->running is false)
+ *  -1: timeout elapsed
+ * Pass U64_MAX to wait indefinitely for the thread to close.
+ * Pass 0 to skip joining threads. Thread->thread will not be set to NULL.
+ * Thread->running will be set to false unconditionally.
+ * Thread->thread will be set to NULL only if joined successfully.
+ */
+extern int32_t n3ds_thread_stop(N3DS_ThreadInfo* thread_info, __3ds_u64 timeout);
+
 /* Attempts to enable O3DS core 1.
  * Return:
  *  0: success

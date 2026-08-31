@@ -145,6 +145,25 @@ int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info)
     return 0;
 }
 
+int32_t n3ds_thread_stop(N3DS_ThreadInfo* thread_info, __3ds_u64 timeout)
+{
+    printf("Stopping thread %s... ", thread_info->friendly_name);
+    thread_info->running = false;
+
+    if (thread_info->thread == NULL)
+        return printf("was NULL\n"), 1;
+
+    if (!timeout)
+        return printf("join not requested\n"), 0;
+
+    if (!R_SUCCEEDED(threadJoin(thread_info->thread, timeout)))
+        return printf("join timed out\n"), -1;
+
+    thread_info->thread = NULL;
+    printf("done\n");
+    return 0;
+}
+
 int32_t n3ds_enable_old_core_1(void)
 {
     static bool has_run = false;
