@@ -76,9 +76,11 @@
 #define NAKED __attribute__((naked))
 #define ASSUME_ALIGNED(var_, alignment_) __builtin_assume_aligned((var_), (alignment_))
 #define ALIGNOF(val_) _Alignof(val_)
+#define UNREACHABLE __builtin_unreachable()
 
 // Compiler hints
 #define ASSUME(cond_) if (!(cond_)) __builtin_unreachable()
 #define LIKELY(cond_) __builtin_expect(!!(cond_), 1)
 #define UNLIKELY(cond_)  __builtin_expect(!!(cond_), 0)
 #define EXPECT(val_, expected_) __builtin_expect(val_, expected_)
+#define UNUSED2(var_) (void) var_
