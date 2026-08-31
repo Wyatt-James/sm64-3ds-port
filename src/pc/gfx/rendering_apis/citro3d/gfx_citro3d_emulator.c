@@ -65,9 +65,9 @@ prevent compile // Invalid OPTIMIZATION_SETTING
 #define OPT_ENABLED(flag_)  (ENABLE_OPTIMIZATIONS && ((FORCE_OPTIMIZATIONS) || (flag_))) // Optimization flag. Use: if (OPT_ENABLED(flag)) {fast path} else {slow path}
 #define OPT_DISABLED(flag_) (!OPT_ENABLED(flag_))                                        // Optimization flag. Use: if (OPT_DISABLED(flag)) {slow path} else {fast path}
 
-struct GameMtxSet {
+typedef struct {
     C3D_Mtx model_view, transposed_model_view, game_projection;
-};
+} GameMtxSet;
 
 typedef struct
 {
@@ -112,7 +112,7 @@ static enum Stereoscopic3dMode stereo_3d_mode;
 static float slider_level;
 
 // Selectable groups of N64 matrix sets
-static struct GameMtxSet rsp_matrix_sets[NUM_MATRIX_SETS];
+static ALIGNED(32) GameMtxSet rsp_matrix_sets[NUM_MATRIX_SETS];
 static bool recalculate_stereo_matrices;
 
 // Used to update some things whenever the N3DS_DisplayMode changes.
@@ -124,12 +124,10 @@ static N3DS_DisplayMode old_display_mode;
 // projection_left/right are the 3DS-specific P-matrices used in 3D rendering.
 // model_view is the N64 MV-matrix.
 // game_projection is the N64 P-matrix.
-static C3D_Mtx  projection_2d,
-                projection_left,
-                projection_right,
-               *model_view,
-               *transposed_model_view,
-               *game_projection;
+static C3D_Mtx  projection_2d    ALIGNED(32),
+                projection_left  ALIGNED(32),
+                projection_right ALIGNED(32);
+static GameMtxSet* game_matrix_set;
 
 static OptimizationFlags optimize;
 static RenderContext ctx;
@@ -530,31 +528,28 @@ void gfx_rapi_set_cc_env_color(uint32_t color)
 
 void gfx_rapi_select_matrix_set(uint32_t matrix_set_id)
 {
-    model_view            = &rsp_matrix_sets[matrix_set_id].model_view;
-    transposed_model_view = &rsp_matrix_sets[matrix_set_id].transposed_model_view;
-    game_projection       = &rsp_matrix_sets[matrix_set_id].game_projection;
+    game_matrix_set = &rsp_matrix_sets[matrix_set_id];
 }
 
 void gfx_rapi_set_model_view_matrix(float mtx[4][4])
 {
-    citro3d_helpers_convert_mtx(model_view, mtx);
-    citro3d_helpers_copy_and_transpose_mtx(transposed_model_view, model_view);
+    citro3d_helpers_convert_and_transpose_mtx(&game_matrix_set->model_view, &game_matrix_set->transposed_model_view, mtx);
 }
 
 void gfx_rapi_set_projection_matrix(float mtx[4][4])
 {
-    citro3d_helpers_convert_mtx(game_projection, mtx);
+    citro3d_helpers_convert_mtx(&game_matrix_set->game_projection, mtx);
 }
 
 void gfx_rapi_apply_model_view_matrix(void)
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_model_view_mtx, model_view);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_transposed_model_view_mtx, transposed_model_view);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_model_view_mtx, &game_matrix_set->model_view);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_transposed_model_view_mtx, &game_matrix_set->transposed_model_view);
 }
 
 void gfx_rapi_apply_projection_matrix(void)
 {
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_game_projection_mtx, game_projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_game_projection_mtx, &game_matrix_set->game_projection);
 }
 
 // --------------- Uncommonly-used Functions ---------------
@@ -595,9 +590,7 @@ COLD static void internal_citro3d_init_rendering_state()
 
     Mtx_Identity(&projection_2d);
     citro3d_helpers_apply_projection_mtx_preset(&projection_2d);
-    model_view            = &rsp_matrix_sets[DEFAULT_MATRIX_SET].model_view,
-    transposed_model_view = &rsp_matrix_sets[DEFAULT_MATRIX_SET].transposed_model_view,
-    game_projection       = &rsp_matrix_sets[DEFAULT_MATRIX_SET].game_projection;
+    game_matrix_set = &rsp_matrix_sets[DEFAULT_MATRIX_SET];
 
     // Needs to be one with a 1:1 scale to match the initializers below.
     old_display_mode = N3DS_DISPLAY_2D_400_240;

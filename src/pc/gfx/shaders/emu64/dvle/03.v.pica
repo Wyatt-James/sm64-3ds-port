@@ -3,7 +3,7 @@
 ; ----- Uniforms -----
 ; Due to LibCTRU weirdness, declare ALL uniforms in this first file.
 ; If you change these, you will need to change the defines in gfx_n3ds_shprog_emu64.h.
-.fvec projection_mtx[4], model_view_mtx[4], game_projection_mtx[4], transposed_model_view_mtx[4]
+.fvec projection_mtx[4], model_view_mtx[4], transposed_model_view_mtx[4], game_projection_mtx[4]
 .fvec rsp_color_selection      ; { col1_rgb, col1_alpha, col2_rgb, col2_alpha }
 .fvec tex_settings_1           ; { scale_s, scale_t, uv_offset, UNUSED }
 .fvec tex_settings_2           ; { uls, ult, tex_width, tex_height }

@@ -314,23 +314,30 @@ GPU_CULLMODE citro3d_helpers_convert_cull_mode(uint32_t culling_mode)
     }
 }
 
-void citro3d_helpers_convert_mtx(C3D_Mtx* restrict c3d_mtx, float sm64_mtx[restrict 4][4])
+void citro3d_helpers_convert_and_transpose_mtx(C3D_Mtx* restrict out, C3D_Mtx* restrict out_t, float sm64_mtx[restrict 4][4])
 {
     for (int i = 0; i < 4; i++) {
-        c3d_mtx->r[i].x = sm64_mtx[0][i];
-        c3d_mtx->r[i].y = sm64_mtx[1][i];
-        c3d_mtx->r[i].z = sm64_mtx[2][i];
-        c3d_mtx->r[i].w = sm64_mtx[3][i];
+        out->r[i].x = sm64_mtx[0][i];
+        out->r[i].y = sm64_mtx[1][i];
+        out->r[i].z = sm64_mtx[2][i];
+        out->r[i].w = sm64_mtx[3][i];
+    }
+
+    for (int i = 1; i <= 4; i++) {
+        out_t->m[4  - i] = out->m[4 * i - 1]; //  3  2  1  0  |  3  7 11 15
+        out_t->m[8  - i] = out->m[4 * i - 2]; //  7  6  5  4  |  2  6 10 14
+        out_t->m[12 - i] = out->m[4 * i - 3]; // 11 10  9  8  |  1  5  9 13
+        out_t->m[16 - i] = out->m[4 * i - 4]; // 15 14 13 12  |  0  4  8 12
     }
 }
 
-void citro3d_helpers_copy_and_transpose_mtx(C3D_Mtx* restrict dst, C3D_Mtx* restrict src)
+void citro3d_helpers_convert_mtx(C3D_Mtx* restrict out, float sm64_mtx[restrict 4][4])
 {
-    for (int i = 1; i <= 4; i++) {
-        dst->m[4  - i] = src->m[4 * i - 1]; //  3  2  1  0  |  3  7 11 15
-        dst->m[8  - i] = src->m[4 * i - 2]; //  7  6  5  4  |  2  6 10 14
-        dst->m[12 - i] = src->m[4 * i - 3]; // 11 10  9  8  |  1  5  9 13
-        dst->m[16 - i] = src->m[4 * i - 4]; // 15 14 13 12  |  0  4  8 12
+    for (int i = 0; i < 4; i++) {
+        out->r[i].x = sm64_mtx[0][i];
+        out->r[i].y = sm64_mtx[1][i];
+        out->r[i].z = sm64_mtx[2][i];
+        out->r[i].w = sm64_mtx[3][i];
     }
 }
 

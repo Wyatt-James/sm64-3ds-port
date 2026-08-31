@@ -198,14 +198,14 @@ struct TextureCache {
 };
 
 struct RSP {
-    uint32_t matrix_set;
     float modelview_matrix_stack[MAT_STACK_SIZE][4][4];
-    uint8_t modelview_matrix_stack_size;
     float P_matrix[4][4];
+    uint8_t matrix_set;
+    uint8_t modelview_matrix_current;
 
-    Light_t* lights[MAX_LIGHTS]; // MUST be populated with valid pointers during init! Use LIGHT_DEFAULT.
     uint8_t lights_changed_bitfield;
     uint8_t num_lights; // includes ambient light
+    Light_t* lights[MAX_LIGHTS]; // MUST be populated with valid pointers during init! Use LIGHT_DEFAULT.
 
     uint32_t geometry_mode;
 
@@ -289,7 +289,7 @@ struct GfxDimensions gfx_current_dimensions;
 // -------------------- STATIC VARIABLES --------------------
 
 static struct TextureCache gfx_texture_cache;
-static struct RSP rsp;
+static struct RSP rsp ALIGNED(32);
 static struct RDP rdp;
 static struct ShaderState shader_state;
 static struct RenderingState rendering_state;
@@ -418,7 +418,7 @@ static void gfx_apply_matrices()
 
         if (rendering_state.mv_mtx_changed) {
             rendering_state.mv_mtx_changed = false;
-            gfx_rapi_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1]);
+            gfx_rapi_set_model_view_matrix(rsp.modelview_matrix_stack[rsp.modelview_matrix_current]);
             apply_mv_mtx = true;
         }
     }
@@ -649,22 +649,21 @@ COLD static void upload_texture_to_rendering_api(int tile) {
 // Copies src to dst. We do it manually because it's faster than memcpy.
 static inline void gfx_copy_matrix(float* restrict dst, float* restrict src)
 {
-    // memcpy(dst, src, sizeof(float[4][4]));
-    for (size_t i = 0; i < 4; i++)
-        for (size_t j = 0; j < 4; j++)
-            dst[i*4 + j] = src[i*4 + j];
+    for (size_t i = 0; i < 16; i++)
+        dst[i] = src[i];
 }
 
 
 // Multiplies the whole matrix. When both funcs are inline, saves ~200us.
 // Matrices are column-major.
-static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* restrict a, const float* restrict  b) {
+static inline void gfx_matrix_mul_unsafe(float* restrict res, const float* restrict a, const float* restrict  b) {
     #define MTA(r_, c_) a[ARR_INDEX_2D(c_, r_, 4)]
     #define MTB(r_, c_) b[ARR_INDEX_2D(c_, r_, 4)]
+    #define MTR(r_, c_) res[ARR_INDEX_2D(c_, r_, 4)]
 
     for (int r = 0; r < 4; r++) {
         for (int c = 0; c < 4; c++) {
-            res[r][c] = MTA(r, 0) * MTB(0, c) + MTA(r, 1) * MTB(1, c) + MTA(r, 2) * MTB(2, c) + MTA(r, 3) * MTB(3, c);
+            MTR(r, c) = MTA(r, 0) * MTB(0, c) + MTA(r, 1) * MTB(1, c) + MTA(r, 2) * MTB(2, c) + MTA(r, 3) * MTB(3, c);
         }
     }
 
@@ -673,15 +672,15 @@ static inline void gfx_matrix_mul_unsafe(float res[restrict 4][4], const float* 
 }
 
 // Multiplies the whole matrix, using a temporary variable. Use only when a == res || b == res.
-static inline void gfx_matrix_mul_safe(float res[4][4], const float* a, const float* b) {
-    float tmp[4][4];
+static inline void gfx_matrix_mul_safe(float* res, const float* a, const float* b) {
+    float tmp[16];
     gfx_matrix_mul_unsafe(tmp, a, b);
     gfx_copy_matrix((float*) res, (float*) tmp);
 }
 static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
 
 #ifndef GBI_FLOATS
-    const float matrix[4][4];
+    float matrix[4][4];
     // Original GBI where fixed point matrices are used
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j += 2) {
@@ -715,12 +714,12 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
             }
         }
         else {
-            gfx_matrix_mul_safe(rsp.P_matrix, matrix, (float*) rsp.P_matrix);
+            gfx_matrix_mul_safe((float*) rsp.P_matrix, matrix, (float*) rsp.P_matrix);
             rendering_state.p_mtx_changed = true;
         }
 
     } else { // G_MTX_MODELVIEW
-        float* src = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1];
+        float* src = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_current];
         
         // WYATT_TODO This is technically broken. We need to invalidate this on multiplies.
         // I fixed it but it was slower and didn't help for SM64 specifically soooooo
@@ -730,20 +729,22 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
             rendering_state.last_mv_mtx_addr = matrix;
         }
         
-        if (is_push && rsp.modelview_matrix_stack_size < 11)
-            ++rsp.modelview_matrix_stack_size;
+        if (is_push && rsp.modelview_matrix_current < (ARRAY_COUNT(rsp.modelview_matrix_stack) - 1))
+            ++rsp.modelview_matrix_current;
+        
+        float* dst = (float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_current];
 
         if (is_load) {
             if (matrix_updated) {
                 rendering_state.mv_mtx_changed = true;
-                gfx_copy_matrix((float*) rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], (float*) matrix);
+                gfx_copy_matrix(dst, (float*) matrix);
             }
         } else {
             rendering_state.mv_mtx_changed = true;
             if (is_push)
-                gfx_matrix_mul_unsafe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
+                gfx_matrix_mul_unsafe(dst, matrix, src);
             else
-                gfx_matrix_mul_safe(rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], matrix, src);
+                gfx_matrix_mul_safe(dst, matrix, src);
         }
     }
 }
@@ -751,8 +752,8 @@ static void gfx_sp_matrix(uint8_t parameters, const void* addr) {
 // SM64 only ever pops 1 matrix at a time, and never 0.
 static void gfx_sp_pop_matrix(uint32_t count) {
     // If you go below 0, you're already going to get UB, so we might as well not check the range.
-    // rsp.modelview_matrix_stack_size = UNLIKELY(count > rsp.modelview_matrix_stack_size) ? rsp.modelview_matrix_stack_size : count;
-    rsp.modelview_matrix_stack_size -= count;
+    // rsp.modelview_matrix_current = UNLIKELY(count > rsp.modelview_matrix_current) ? rsp.modelview_matrix_current : count;
+    rsp.modelview_matrix_current -= count;
     rendering_state.mv_mtx_changed = true;
 }
 
@@ -1607,7 +1608,7 @@ static void gfx_run_dl(Gfx* cmd) {
 }
 
 static void gfx_sp_reset() {
-    rsp.modelview_matrix_stack_size = 1;
+    rsp.modelview_matrix_current = 0;
     rsp.num_lights = 2;
     rsp.lights_changed_bitfield = SET_BITS(MAX_LIGHTS);
     rendering_state.last_mv_mtx_addr = rendering_state.last_p_mtx_addr = NULL;
