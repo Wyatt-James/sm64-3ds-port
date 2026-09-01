@@ -44,6 +44,7 @@ static void apt_hook_function(APT_HookType hook, UNUSED void* param)
 
         case APTHOOK_ONEXIT: // Application exit
             eventName = "exit";
+            g3dsConfig.run = false;
             break;
         
         case APTHOOK_COUNT: // Unused - should never happen
