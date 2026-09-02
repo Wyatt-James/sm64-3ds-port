@@ -1,15 +1,19 @@
 #include "n3ds_main.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
+#include "src/pc/configfile.h"
 #include "n3ds_hid.h"
 #include "n3ds_apt_hook.h"
 #include "n3ds_system_info.h"
 #include "n3ds_config.h"
 #include "n3ds_threading.h"
+#include "src/pc/pc_main.h"
 #include "src/pc/audio/audio_3ds_threading.h"
 #include "src/pc/gfx/windowing_apis/3ds/gfx_3ds.h"
 #include "n3ds_menu.h"
+#include "src/pc/n3ds/n3ds_async.h"
 
 #include "src/pc/profiler_3ds.h"
 
@@ -25,17 +29,25 @@ static void set_up_threading() {
     // We only really need the one extra core.
     if (!g3dsSystemInfo.is_new_3ds && g3dsConfig.enable_multi_threading)
         n3ds_enable_old_core_1();
+    
+    N3DS_Processor cpu_to_use;
 
     // Set desired thread constants
     if (g3dsConfig.enable_multi_threading) {
         if (g3dsSystemInfo.is_new_3ds)
-            n3ds_desired_audio_cpu = NEW_CORE_2; // n3ds 3rd core
+            cpu_to_use = NEW_CORE_2; // n3ds 3rd core
         else if (n3ds_old_core_1_is_available)
-            n3ds_desired_audio_cpu = OLD_CORE_1; // o3ds 2nd core
+            cpu_to_use = OLD_CORE_1; // o3ds 2nd core
         else
-            n3ds_desired_audio_cpu = OLD_CORE_0; // Run in Thread5
+            cpu_to_use = OLD_CORE_0; // Run in Thread5
     } else
-        n3ds_desired_audio_cpu = OLD_CORE_0; // Run in Thread5
+        cpu_to_use = OLD_CORE_0; // Run in Thread5
+
+    N3DS_Processor async_cpu = g3dsConfig.enable_async_thread ? cpu_to_use : OLD_CORE_0;
+    n3ds_desired_audio_cpu   = g3dsConfig.enable_audio_thread ? cpu_to_use : OLD_CORE_0;
+    
+    if (async_cpu != OLD_CORE_0)
+        N3DS_AsyncInit(async_cpu);
 }
 
 /* Order:
@@ -95,6 +107,10 @@ void n3ds_main_loop(void (*run_one_game_iter)(void))
     n3ds_apt_hook_init();
     aptSetSleepAllowed(true);
 
+    // Do it here to avoid some weird stalling
+    if (async.enabled)
+        N3DS_AsyncSubmitBlocking(N3DS_ASYNC_CALLFUNC1("save config", NULL, configfile_save, CONFIG_FILE), N3DS_MICROS_TO_NANOS(100));
+
     while (aptMainLoop() && g3dsConfig.run)
     {
         if (!n3ds_apt_suspended) {
@@ -122,6 +138,11 @@ void n3ds_main_init(void)
 
     if(g3dsSystemInfo.is_new_3ds && g3dsConfig.enable_new_3ds_speedup)
         osSetSpeedupEnable(true);
+        
+    atexit(N3DS_AsyncExit);
+
+    if (!async.enabled)
+        configfile_save(CONFIG_FILE);
 
     n3ds_handle_events();
     profiler_3ds_init();

@@ -1,3 +1,5 @@
+#include "pc_main.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -37,8 +39,6 @@
 #include "configfile.h"
 
 #include "compat.h"
-
-#define CONFIG_FILE "sm64config.txt"
 
 OSMesg D_80339BEC;
 OSMesgQueue gSIEventMesgQueue;
@@ -147,7 +147,9 @@ void main_func(void) {
     gEffectsMemoryPool = mem_pool_init(0x4000, MEMORY_POOL_LEFT);
 
     configfile_load(CONFIG_FILE);
+#ifndef TARGET_N3DS
     atexit(save_config);
+#endif
 
 #ifdef TARGET_N3DS
     n3ds_main_init();

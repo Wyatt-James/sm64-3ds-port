@@ -1,7 +1,10 @@
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include "lib/src/libultra_internal.h"
 #include "macros.h"
+#include "src/pc/n3ds/n3ds_async.h"
 
 #ifdef TARGET_WEB
 #include <emscripten.h>
@@ -121,7 +124,7 @@ s32 osEepromProbe(UNUSED OSMesgQueue *mq) {
     return 1;
 }
 
-s32 osEepromLongRead(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes) {
+s32 osEepromLongReadSync(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes) {
     u8 content[512];
     s32 ret = -1;
 
@@ -146,23 +149,24 @@ s32 osEepromLongRead(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes)
         ret = 0;
     }
 #else
-    FILE *fp = fopen("sm64_save_file.bin", "rb");
-    if (fp == NULL) {
-        return -1;
-    }
-    if (fread(content, 1, 512, fp) == 512) {
+    int file = open("sm64_save_file.bin", O_RDONLY | O_CREAT);
+    if (file == -1) {
+        ret = -1;
+    } else if (read(file, content, 512) == 512) {
         memcpy(buffer, content + address * 8, nbytes);
-        ret = 0;
+        close(file);
+    } else {
+        ret = -1;
     }
-    fclose(fp);
 #endif
     return ret;
 }
 
-s32 osEepromLongWrite(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes) {
+s32 osEepromLongWriteSync(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes) {
+    s32 ret = 0;
     u8 content[512] = {0};
     if (address != 0 || nbytes != 512) {
-        osEepromLongRead(mq, 0, content, 512);
+        osEepromLongReadSync(mq, 0, content, 512);
     }
     memcpy(content + address * 8, buffer, nbytes);
 
@@ -174,14 +178,47 @@ s32 osEepromLongWrite(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes
         }
         localStorage.sm64_save_file = btoa(str);
     }, content);
-    s32 ret = 0;
 #else
-    FILE* fp = fopen("sm64_save_file.bin", "wb");
-    if (fp == NULL) {
-        return -1;
+    int file = open("sm64_save_file.bin", O_WRONLY | O_CREAT);
+    if (file == -1) {
+        ret = -1;
+    } else {
+        ret = write(file, content, 512) == 512 ? 0 : -1;
+        close(file);
     }
-    s32 ret = fwrite(content, 1, 512, fp) == 512 ? 0 : -1;
-    fclose(fp);
 #endif
     return ret;
+}
+
+volatile N3DS_AsyncReceipt receipt;
+u8 asyncBuffer[512];
+
+// All reads are synchronous but must wait for writes
+s32 osEepromLongRead(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes) {
+    if (async.enabled) {
+        printf("EEPREAD: waiting for current save\n");
+        N3DS_AsyncWaitForCommand(&receipt, N3DS_MICROS_TO_NANOS(100));
+    }
+    s32 res = osEepromLongReadSync(mq, address, buffer, nbytes);
+    printf("EEPREAD: finished with %d\n", (int) res);
+    return res;
+}
+
+// All writes are asynchronous
+s32 osEepromLongWrite(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nbytes) {
+    if (!async.enabled) {
+        printf("SAVE: sync begin\n");
+        s32 res = osEepromLongWriteSync(mq, address, buffer, nbytes);
+        printf("EEPWRITE: sync end with %d\n", (int) res);
+        return res;
+    }
+    
+    printf("EEPWRITE: waiting for current save\n");
+    N3DS_AsyncWaitForCommand(&receipt, N3DS_MICROS_TO_NANOS(100));
+    memcpy(asyncBuffer, buffer, nbytes);
+    
+    printf("EEPWRITE: waiting for queue\n");
+    N3DS_AsyncSubmitBlocking(N3DS_ASYNC_CALLFUNC4("save game", &receipt, osEepromLongWriteSync, mq, address, asyncBuffer, nbytes), N3DS_MICROS_TO_NANOS(100));
+    printf("EEPWRITE: submitted\n");
+    return 0; //! WYATT_TODO fixing this would require engine changes. We could do error checking in the save func.
 }

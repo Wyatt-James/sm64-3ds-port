@@ -28,5 +28,6 @@ extern bool s_thread5_wait_for_audio_to_finish;
 // Synchronization variables
 extern volatile __3ds_s32 s_audio_frames_to_tick;
 extern volatile __3ds_s32 s_audio_frames_to_process;
+extern LightEvent s_audio_frame_ready; // Pulsed once whenever an audio frame is ready.
 
 #endif

@@ -5,6 +5,8 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #ifdef TARGET_N3DS
 #include "3ds.h"
@@ -242,12 +244,11 @@ void configfile_load(const char *filename) {
 
 // Writes the config file to 'filename'
 void configfile_save(const char *filename) {
-    FILE *file;
+    int file;
 
     printf("Saving configuration to '%s'\n", filename);
 
-    file = fopen(filename, "w");
-    if (file == NULL) {
+    if ((file = open(filename, O_WRONLY | O_CREAT)) == -1) {
         // error
         return;
     }
@@ -257,18 +258,18 @@ void configfile_save(const char *filename) {
 
         switch (option->type) {
             case CONFIG_TYPE_BOOL:
-                fprintf(file, "%s %s\n", option->name, *option->boolValue ? "true" : "false");
+                dprintf(file, "%s %s\n", option->name, *option->boolValue ? "true" : "false");
                 break;
             case CONFIG_TYPE_UINT:
-                fprintf(file, "%s %u\n", option->name, *option->uintValue);
+                dprintf(file, "%s %u\n", option->name, *option->uintValue);
                 break;
             case CONFIG_TYPE_FLOAT:
-                fprintf(file, "%s %f\n", option->name, *option->floatValue);
+                dprintf(file, "%s %f\n", option->name, *option->floatValue);
                 break;
             default:
                 assert(0); // unknown type
         }
     }
 
-    fclose(file);
+    close(file);
 }

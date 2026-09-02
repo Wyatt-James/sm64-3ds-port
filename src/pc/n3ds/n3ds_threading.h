@@ -31,7 +31,7 @@ struct N3DS_ThreadInfo_tag
     bool is_disabled;                 // Determines whether this thread will be used or not. Relevant for synchronous engine modes.
     int32_t friendly_id;              // Programmer-assigned thread ID.
     void* misc_data;                  // Miscellaneous data. Put whatever you want in here.
-    char friendly_name[16];           // Friendly name for printing.
+    const char* friendly_name;        // Friendly name for printing.
 
     N3DS_Processor assigned_cpu;      // Which CPU this thread is assigned to.
     int32_t desired_priority;         // Priority of this thread.
@@ -39,6 +39,7 @@ struct N3DS_ThreadInfo_tag
     bool priority_retrieved;          // True if the thread priority syscall worked, false otherwise.
     bool enable_sleep_while_spinning; // If set, this thread will use system sleep while spinning.
     __3ds_s64 spin_sleep_duration;    // Duration in nanos for this thread to sleep while spinning.
+    LightEvent* spin_sleep_event;     // If non-null, this thread will wait for this event instead of spinning.
 
     // --- Internal stuff ---
     size_t internal_stack_size;       // Stack size to allocate.

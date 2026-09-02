@@ -64,6 +64,7 @@ bool s_thread5_wait_for_audio_to_finish = true;
 // Synchronization Variables
 volatile __3ds_s32 s_audio_frames_to_tick = 0;
 volatile __3ds_s32 s_audio_frames_to_process = 0;
+LightEvent s_audio_frame_ready;
 
 // Statically allocate to improve performance
 static s16 audio_buffer [2 * SAMPLES_HIGH * N3DS_DSP_N_CHANNELS];
@@ -191,10 +192,11 @@ static void initialize_thread_info()
     n3ds_audio_thread_info.is_disabled                 = false;
     n3ds_audio_thread_info.friendly_id                 = N3DS_AUDIO_THREAD_FRIENDLY_ID;
     n3ds_audio_thread_info.enable_sleep_while_spinning = N3DS_AUDIO_ENABLE_SLEEP_FUNC;
+    n3ds_audio_thread_info.spin_sleep_duration         = N3DS_MILLIS_TO_NANOS(1);
     n3ds_audio_thread_info.assigned_cpu                = n3ds_desired_audio_cpu;
 
     // Fill the name with terminators and then copy the default.
-    memcpy(n3ds_audio_thread_info.friendly_name, N3DS_AUDIO_THREAD_NAME, sizeof(N3DS_AUDIO_THREAD_NAME));
+    n3ds_audio_thread_info.friendly_name = N3DS_AUDIO_THREAD_NAME;
     
     n3ds_audio_thread_info.desired_priority = g3dsConfig.desired_audio_thread_priority;
     n3ds_audio_thread_info.should_sleep     = audio_3ds_thread_should_sleep;
@@ -207,7 +209,10 @@ static void audio_3ds_initialize_thread()
 {
     // Start audio thread in a consistent state
     s_audio_frames_to_tick = s_audio_frames_to_process = 0;
+    LightEvent_Init(&s_audio_frame_ready, RESET_STICKY);
     initialize_thread_info();
+
+    n3ds_audio_thread_info.spin_sleep_event = &s_audio_frame_ready;
 
     // Create a thread if applicable
     if (n3ds_audio_thread_info.assigned_cpu != OLD_CORE_0)

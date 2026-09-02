@@ -1,6 +1,8 @@
 #ifndef CONFIGFILE_H
 #define CONFIGFILE_H
 
+#include <stdbool.h>
+
 extern bool         configFullscreen;
 extern unsigned int configKeyA;
 extern unsigned int configKeyB;

@@ -877,6 +877,7 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     // Notify audio thread that a frame is ready. Maintain this order.
     AtomicIncrement(&s_audio_frames_to_tick);
     AtomicIncrement(&s_audio_frames_to_process);
+    LightEvent_Pulse(&s_audio_frame_ready);
 
     profiler_3ds_log_time(0);
     if (n3ds_audio_thread_info.is_disabled)

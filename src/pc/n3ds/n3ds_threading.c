@@ -18,35 +18,37 @@ static void default_teardown(UNUSED N3DS_ThreadInfo* thread_info) {}
 
 void n3ds_thread_info_init(N3DS_ThreadInfo* thread_info)
 {
-    thread_info->is_disabled                 = true;
-    thread_info->friendly_id                 = 0xBEEF;
-    thread_info->misc_data                   = NULL;
+    *thread_info = (N3DS_ThreadInfo) {
+        .is_disabled                 = true,
+        .friendly_id                 = 0xBEEF,
+        .misc_data                   = NULL,
 
-    // Fill the name with terminators and then copy the default.
-    memset(thread_info->friendly_name,         '\0', sizeof(thread_info->friendly_name));
-    memcpy(thread_info->friendly_name,         DEFAULT_THREAD_NAME, sizeof(DEFAULT_THREAD_NAME));
-    
-    thread_info->assigned_cpu                = OLD_CORE_0;
-    thread_info->desired_priority            = g3dsConfig.desired_main_thread_priority;
-    thread_info->actual_priority             = -1;
-    thread_info->priority_retrieved          = false;
-    thread_info->enable_sleep_while_spinning = true;
-    thread_info->spin_sleep_duration         = N3DS_MICROS_TO_NANOS(10);
+        // Fill the name with terminators and then copy the default.
+        .friendly_name               = DEFAULT_THREAD_NAME,
+        
+        .assigned_cpu                = OLD_CORE_0,
+        .desired_priority            = g3dsConfig.desired_main_thread_priority,
+        .actual_priority             = -1,
+        .priority_retrieved          = false,
+        .enable_sleep_while_spinning = true,
+        .spin_sleep_duration         = N3DS_MICROS_TO_NANOS(10),
+        .spin_sleep_event            = NULL,
 
-    thread_info->internal_stack_size         = 64 * 1024;
-    thread_info->internal_detached           = true;
-    thread_info->thread                      = NULL;
+        .internal_stack_size         = 64 * 1024,
+        .internal_detached           = true,
+        .thread                      = NULL,
 
-    thread_info->running                     = false;
-    thread_info->is_currently_processing     = false;
-    thread_info->has_settled                 = false;
-    thread_info->attempted_to_start          = false;
+        .running                     = false,
+        .is_currently_processing     = false,
+        .has_settled                 = false,
+        .attempted_to_start          = false,
 
-    thread_info->entry_point  = n3ds_thread_loop_common;
-    thread_info->on_start     = default_init;
-    thread_info->should_sleep = default_should_sleep;
-    thread_info->task         = default_task;
-    thread_info->teardown     = default_teardown;
+        .entry_point  = n3ds_thread_loop_common,
+        .on_start     = default_init,
+        .should_sleep = default_should_sleep,
+        .task         = default_task,
+        .teardown     = default_teardown,
+    };
 }
 
 void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info)
@@ -63,8 +65,12 @@ void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info)
             thread_info->task();
         
         // Else, sleep if we must
-        else if (thread_info->enable_sleep_while_spinning)
-            N3DS_SLEEP_FUNC(thread_info->spin_sleep_duration);
+        else if (thread_info->enable_sleep_while_spinning) {
+            if (thread_info->spin_sleep_event != NULL)
+                LightEvent_WaitTimeout(thread_info->spin_sleep_event, thread_info->spin_sleep_duration);
+            else
+                N3DS_SLEEP_FUNC(thread_info->spin_sleep_duration);
+        }
     }
 
     thread_info->is_currently_processing = false;
@@ -74,7 +80,7 @@ void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info)
 int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info)
 {
     int friendly_id = (int) thread_info->friendly_id; // Only used for printing
-    char* friendly_name = thread_info->friendly_name;
+    const char* friendly_name = thread_info->friendly_name; // Only used for printing
 
     int32_t desired_priority = thread_info->desired_priority;
     N3DS_Processor assigned_cpu = thread_info->assigned_cpu;
@@ -82,7 +88,7 @@ int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info)
     bool detached = thread_info->internal_detached;
 
     if (thread_info->attempted_to_start) {
-        fprintf(stderr, "Attempted to start thread %d twice.\n", friendly_id);
+        fprintf(stderr, "Attempted to start thread %s twice.\n", friendly_name);
         return -3;
     }
 
@@ -90,7 +96,7 @@ int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info)
 
     // Disabled
     if (thread_info->is_disabled) {
-        fprintf(stderr, "Thread %d is disabled. Not starting.\n", friendly_id);
+        fprintf(stderr, "Thread %s is disabled. Not starting.\n", friendly_name);
         return -2;
     }
 
