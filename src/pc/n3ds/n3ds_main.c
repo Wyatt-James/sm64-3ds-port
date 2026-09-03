@@ -33,15 +33,15 @@ static void set_up_threading() {
     N3DS_Processor cpu_to_use;
 
     // Set desired thread constants
-    if (g3dsConfig.enable_multi_threading) {
-        if (g3dsSystemInfo.is_new_3ds)
-            cpu_to_use = NEW_CORE_2; // n3ds 3rd core
-        else if (n3ds_old_core_1_is_available)
-            cpu_to_use = OLD_CORE_1; // o3ds 2nd core
-        else
-            cpu_to_use = OLD_CORE_0; // Run in Thread5
-    } else
+    if (g3dsSystemInfo.is_new_3ds)
+        cpu_to_use = NEW_CORE_2; // n3ds 3rd core
+    else if (n3ds_old_core_1_is_available)
+        cpu_to_use = OLD_CORE_1; // o3ds 2nd core
+    else
         cpu_to_use = OLD_CORE_0; // Run in Thread5
+
+    if (!g3dsConfig.enable_multi_threading)
+        cpu_to_use = OLD_CORE_0;
 
     N3DS_Processor async_cpu = g3dsConfig.enable_async_thread ? cpu_to_use : OLD_CORE_0;
     n3ds_desired_audio_cpu   = g3dsConfig.enable_audio_thread ? cpu_to_use : OLD_CORE_0;
