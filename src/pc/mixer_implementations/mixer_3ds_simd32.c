@@ -139,8 +139,9 @@ void aSaveBufferImpl(int16_t *dest_addr) {
     memcpy(dest_addr, rspa.buf.as_s16 + rspa.out / sizeof(int16_t), ROUND_UP_8(rspa.nbytes));
 }
 
-void aLoadADPCMImpl(int num_entries_times_16, const int16_t *book_source_addr) {
-    memcpy(rspa.adpcm_table, book_source_addr, num_entries_times_16);
+// nbytes is num_entries * 16
+void aLoadADPCMImpl(int nbytes, const int16_t *book_source_addr) {
+    memcpy(rspa.adpcm_table, book_source_addr, nbytes);
 }
 
 void aSetBufferImpl(uint8_t flags, uint16_t in, uint16_t out, uint16_t nbytes) {
@@ -177,10 +178,10 @@ void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
 }
 
 // Interleaves into dest
-static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, const int count) {
+COLD static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, const int count) {
     typedef struct
     {
-        uint16_t samples[16];
+        uint32_t samples[8];
     } sample_batch;
 
     sample_batch* dest_batch = (sample_batch*) dest;
@@ -188,18 +189,49 @@ static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, const int
         __builtin_prefetch(((void*)l) + 32);
         __builtin_prefetch(((void*)r) + 32);
         *dest_batch++ = (sample_batch) {{
-            l[0], r[0],
-            l[1], r[1],
-            l[2], r[2],
-            l[3], r[3],
-            l[4], r[4],
-            l[5], r[5],
-            l[6], r[6],
-            l[7], r[7]
+            INT16x2_LOAD(l[0], r[0]),
+            INT16x2_LOAD(l[1], r[1]),
+            INT16x2_LOAD(l[2], r[2]),
+            INT16x2_LOAD(l[3], r[3]),
+            INT16x2_LOAD(l[4], r[4]),
+            INT16x2_LOAD(l[5], r[5]),
+            INT16x2_LOAD(l[6], r[6]),
+            INT16x2_LOAD(l[7], r[7]),
         }};
         l += 8;
         r += 8;
     }
+}
+
+// Interleaves into dest. This version requires 32-bit alignment, prefers 64-bit.
+static NAKED void aInterleaveInternalASM(int16_t* l, int16_t* r, int16_t* dest, int count) {
+    (void) l; (void) r; (void) dest; (void) count;
+
+// Packs and stores two sources
+// in:  low is first sample, high is second
+// out: low is left, high is right
+#define PACKSTR(rDst, rD1, rD2, rL, rR)                                        \
+    "pkhbt " #rD1", "#rL", "#rR", lsl #16   \n\t" /* L low + R low << 16   */  \
+    "pkhtb " #rD2", "#rR", "#rL", asr #16   \n\t" /* L high >> 16 + R high */  \
+    "stm   " #rDst", {"#rD1", "#rD2"}       \n\t"
+
+    // r0 is left, r1 is right, r2 is dest, r3 is nIterations
+    asm (
+    "    cmp r3, #0                         \n\t"
+    "    bxeq lr                            \n\t"
+    "    push {r4-r12, lr}                  \n\t"
+    "aInterleaveInternalASM_loop:           \n\t"
+    "    ldm r1!, {r8-r9}                   \n\t"
+    "    ldm r0!, {r4-r7}                   \n\t"
+    "    ldm r1!, {r10-r11}                 \n\t"
+    "    subs r3, r3, #1                    \n\t"
+         PACKSTR(r2!, r12, lr, r4, r8)
+         PACKSTR(r2!, r4, r8, r5, r9)
+         PACKSTR(r2!, r5, r9, r6, r10)
+         PACKSTR(r2!, r6, r10, r7, r11)
+    "    bne aInterleaveInternalASM_loop    \n\t"
+    "    pop {r4-r12, pc}                   \n\t"
+    );
 }
 
 // Interleaves RSPA NBYTES bytes into RSPA OUT
@@ -209,16 +241,24 @@ void aInterleaveImpl(uint16_t left, uint16_t right) {
     int16_t *r = rspa.buf.as_s16 + right / sizeof(int16_t);
     int16_t *d = rspa.buf.as_s16 + rspa.out / sizeof(int16_t);
 
-    aInterleaveInternal(l, r, d, count);
+    // In the real world, this seems to always be taken
+    if (LIKELY((((uintptr_t)l | (uintptr_t) r | (uintptr_t) d) & 0b11) == 0))
+        aInterleaveInternalASM(l, r, d, count);
+    else
+        aInterleaveInternal(l, r, d, count);
 }
 
 // Interleaves RSPA NBYTES bytes into the provided buffer
-void aInterleaveAndCopyImpl(uint16_t left, uint16_t right, int16_t *dest_addr) {
+void aInterleaveAndCopyImpl(uint16_t left, uint16_t right, int16_t *restrict dest_addr) {
     const int count = ROUND_UP_16(rspa.nbytes) / sizeof(int16_t) / 8;
     int16_t *l = rspa.buf.as_s16 + left / sizeof(int16_t);
     int16_t *r = rspa.buf.as_s16 + right / sizeof(int16_t);
-
-    aInterleaveInternal(l, r, dest_addr, count);
+    
+    // In the real world, this seems to always be taken
+    if (LIKELY((((uintptr_t)l | (uintptr_t) r | (uintptr_t) dest_addr) & 0b11) == 0))
+        aInterleaveInternalASM(l, r, dest_addr, count);
+    else
+        aInterleaveInternal(l, r, dest_addr, count);
 }
 
 void aDMEMMoveImpl(uint16_t in_addr, uint16_t out_addr, int nbytes) {
