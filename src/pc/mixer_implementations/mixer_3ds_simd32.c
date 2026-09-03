@@ -298,7 +298,7 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
 
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
-        const uint8_t shift = *in >> 4; // range 0..12
+        const uint8_t shift = 28 - (*in >> 4); // range 0..12
         const uint8_t table_index = *in++ & 0xf; // range 0..7
         const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
         const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
@@ -313,19 +313,19 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
             // Load, extend, and shift 8 nibbles from in, and calculate initial accumulators
             #pragma GCC unroll 4
             for (int j = 0; j < 8; j += 2, in++) {
-                ins[j]     = (((*in >> 4)  << 28) >> 28) << shift;
-                ins[j + 1] = (((*in & 0xf) << 28) >> 28) << shift;
+                ins[j]     = ((*in >> 4)  << 28) >> shift;
+                ins[j + 1] = ((*in & 0xf) << 28) >> shift;
 
                 acc_tbl[j]     = __smlad(INT16x2_LOAD(tbl_1[j],     tbl_0[j]),     prev, ins[j]     << 11);
                 acc_tbl[j + 1] = __smlad(INT16x2_LOAD(tbl_1[j + 1], tbl_0[j + 1]), prev, ins[j + 1] << 11);
             }
 
-            int16x2_t inputs = INT16x2_LOAD(ins[0], ins[1]);
+            int16x2_t inputs;
 
             // Meat and potatoes
             // Touch the funny numbers and you shall surely perish
             // acc_tbl += tbl_simd * inputs
-            acc_tbl[2] = __smlad(tbl_simd[0],  inputs,                                 acc_tbl[2]); // tbl = 1,0
+            acc_tbl[2] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(ins[0], ins[1])), acc_tbl[2]); // tbl = 1,0
             acc_tbl[4] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[4]); // tbl = 3,2
             acc_tbl[6] = __smlad(tbl_simd[2],  inputs,                                 acc_tbl[6]); // tbl = 5,4
             acc_tbl[3] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[2])), acc_tbl[3]); // tbl = 1,0
