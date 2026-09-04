@@ -38,7 +38,9 @@
 #define ROUND_UP_16(v) (((v) + 15) & ~15)
 #define ROUND_UP_32(v) (((v) + 31) & ~31)
 
-#define INT16x2_LOAD(upper, lower) (int16x2_t) (((upper) << 16) | ((uint16_t) (lower)))
+// By all rights PKHBT should be faster but it's not turning out.
+#define INT16x2_LOAD(upper, lower) ((int16x2_t) (((upper) << 16) | ((uint16_t) (lower)))) // 0x2a38
+// #define INT16x2_LOAD(upper, lower) ((int16x2_t) __pkhbt(lower, upper, 16)) // 0x2a28
 
 static struct {
     uint16_t in;
