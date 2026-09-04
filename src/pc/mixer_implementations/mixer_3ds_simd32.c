@@ -42,6 +42,17 @@
 #define INT16x2_LOAD(upper, lower) ((int16x2_t) (((upper) << 16) | ((uint16_t) (lower)))) // 0x2a38
 // #define INT16x2_LOAD(upper, lower) ((int16x2_t) __pkhbt(lower, upper, 16)) // 0x2a28
 
+typedef struct
+{
+    union {
+        int16x2_t cross[8]; // table 1 high, table 0 low
+        struct {
+            int16_t t0, t1;
+        } separate[8];
+    };
+    int16x2_t simd[4]; // tbl1 as read through the simd pointer
+} AdpcmTableRow;
+
 static struct {
     uint16_t in;
     uint16_t out;
@@ -61,7 +72,7 @@ static struct {
 
     ADPCM_STATE *adpcm_loop_state;
 
-    int16_t adpcm_table[8][2][8];
+    AdpcmTableRow adpcm_table[8] ALIGNED(64);
     union {
         int16_t as_s16[2512 / sizeof(int16_t)];
         uint8_t as_u8[2512];
@@ -142,9 +153,30 @@ void aSaveBufferImpl(int16_t *dest_addr) {
     memcpy(dest_addr, rspa.buf.as_s16 + rspa.out / sizeof(int16_t), ROUND_UP_8(rspa.nbytes));
 }
 
-// nbytes is num_entries * 16
+// nbytes is a multiple of 16 as per the ABI, which is one row of 8 s16s.
+// We don't support copying individual bytes. Womp womp! If you need that
+// it'd be reasonably simple to add because data is read linearly.
 void aLoadADPCMImpl(int nbytes, const int16_t *book_source_addr) {
-    memcpy(rspa.adpcm_table, book_source_addr, nbytes);
+    #define OLD(i, tbl, j) book_source_addr[i*16 + tbl*8 + j]
+
+    for (int i = 0; i < nbytes / 16; i++) {
+        int row = i >> 1;
+        int tbl = i & 1;
+
+        // Copy data of one row
+        for (int j = 0; j < 8; j++) {
+            int16_t entry = OLD(row, tbl, j);
+
+            // Update the cross table
+            int16_t* cross = (int16_t*) &rspa.adpcm_table[row].cross[j] + (tbl);
+            *cross = entry;
+
+            // Update the simd table
+            int16_t* simd_tbl_16 = (int16_t*) &rspa.adpcm_table[row].simd;
+            simd_tbl_16[j] = entry;
+        }
+    }
+    #undef OLD
 }
 
 void aSetBufferImpl(uint8_t flags, uint16_t in, uint16_t out, uint16_t nbytes) {
@@ -303,15 +335,18 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
     while (nbytes > 0) {
         const uint8_t shift = 28 - (*in >> 4); // range 28 - 0..12
         const uint8_t table_index = *in++ & 0xf; // range 0..7
-        const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
-        const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
-        const int16x2_t* const tbl_simd = (int16x2_t*) tbl_1;
+        const AdpcmTableRow tbl = rspa.adpcm_table[table_index];
 
         // Output 8 PCM samples per-loop
         for (int i = 0; i < 2; i++) {
             const int16x2_t prev = *((int16x2_t*) (out - 2)); // Reverse order due to endianness
             int16_t ins[8];
             int32_t acc_tbl[8];
+            
+            #define TCROSS(n) tbl.cross[n]
+            #define T0(n) tbl.separate[n].t0
+            #define T1(n) tbl.separate[n].t1
+            #define TSIMD(n) tbl.simd[n]
 
             // Load, extend, and shift 8 nibbles from in, and calculate initial accumulators
             #pragma GCC unroll 4
@@ -319,8 +354,8 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
                 ins[j]     = ((*in >> 4)  << 28) >> shift;
                 ins[j + 1] = ((*in & 0xf) << 28) >> shift;
 
-                acc_tbl[j]     = __smlad(INT16x2_LOAD(tbl_1[j],     tbl_0[j]),     prev, ins[j]     << 11);
-                acc_tbl[j + 1] = __smlad(INT16x2_LOAD(tbl_1[j + 1], tbl_0[j + 1]), prev, ins[j + 1] << 11);
+                acc_tbl[j]     = __smlad(TCROSS(j),     prev, ins[j]     << 11);
+                acc_tbl[j + 1] = __smlad(TCROSS(j + 1), prev, ins[j + 1] << 11);
             }
 
             int16x2_t inputs;
@@ -328,24 +363,24 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
             // Meat and potatoes
             // Touch the funny numbers and you shall surely perish
             // acc_tbl += tbl_simd * inputs
-            acc_tbl[2] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(ins[0], ins[1])), acc_tbl[2]); // tbl = 1,0
-            acc_tbl[4] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[4]); // tbl = 3,2
-            acc_tbl[6] = __smlad(tbl_simd[2],  inputs,                                 acc_tbl[6]); // tbl = 5,4
-            acc_tbl[3] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[2])), acc_tbl[3]); // tbl = 1,0
-            acc_tbl[5] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[5]); // tbl = 3,2
-            acc_tbl[7] = __smlad(tbl_simd[2],  inputs,                                 acc_tbl[7]); // tbl = 5,4
-            acc_tbl[4] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[3])), acc_tbl[4]); // tbl = 1,0
-            acc_tbl[6] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[6]); // tbl = 3,2
-            acc_tbl[5] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[4])), acc_tbl[5]); // tbl = 1,0
-            acc_tbl[7] = __smlad(tbl_simd[1],  inputs,                                 acc_tbl[7]); // tbl = 3,2
-            acc_tbl[6] = __smlad(tbl_simd[0], (inputs = INT16x2_LOAD(inputs, ins[5])), acc_tbl[6]); // tbl = 1,0
-            acc_tbl[7] = __smlad(tbl_simd[0],           INT16x2_LOAD(inputs, ins[6]),  acc_tbl[7]); // tbl = 1,0
+            acc_tbl[2] = __smlad(TSIMD(0), (inputs = INT16x2_LOAD(ins[0], ins[1])), acc_tbl[2]); // tbl = 1,0
+            acc_tbl[4] = __smlad(TSIMD(1),  inputs,                                 acc_tbl[4]); // tbl = 3,2
+            acc_tbl[6] = __smlad(TSIMD(2),  inputs,                                 acc_tbl[6]); // tbl = 5,4
+            acc_tbl[3] = __smlad(TSIMD(0), (inputs = INT16x2_LOAD(inputs, ins[2])), acc_tbl[3]); // tbl = 1,0
+            acc_tbl[5] = __smlad(TSIMD(1),  inputs,                                 acc_tbl[5]); // tbl = 3,2
+            acc_tbl[7] = __smlad(TSIMD(2),  inputs,                                 acc_tbl[7]); // tbl = 5,4
+            acc_tbl[4] = __smlad(TSIMD(0), (inputs = INT16x2_LOAD(inputs, ins[3])), acc_tbl[4]); // tbl = 1,0
+            acc_tbl[6] = __smlad(TSIMD(1),  inputs,                                 acc_tbl[6]); // tbl = 3,2
+            acc_tbl[5] = __smlad(TSIMD(0), (inputs = INT16x2_LOAD(inputs, ins[4])), acc_tbl[5]); // tbl = 1,0
+            acc_tbl[7] = __smlad(TSIMD(1),  inputs,                                 acc_tbl[7]); // tbl = 3,2
+            acc_tbl[6] = __smlad(TSIMD(0), (inputs = INT16x2_LOAD(inputs, ins[5])), acc_tbl[6]); // tbl = 1,0
+            acc_tbl[7] = __smlad(TSIMD(0),           INT16x2_LOAD(inputs, ins[6]),  acc_tbl[7]); // tbl = 1,0
             
             // Add the stragglers that we can't SIMD
-            acc_tbl[1] += tbl_1[0] * ins[0];
-            acc_tbl[3] += tbl_1[2] * ins[0];
-            acc_tbl[5] += tbl_1[4] * ins[0];
-            acc_tbl[7] += tbl_1[6] * ins[0];
+            acc_tbl[1] += T1(0) * ins[0];
+            acc_tbl[3] += T1(2) * ins[0];
+            acc_tbl[5] += T1(4) * ins[0];
+            acc_tbl[7] += T1(6) * ins[0];
             
             // Output
             #pragma GCC unroll 8
