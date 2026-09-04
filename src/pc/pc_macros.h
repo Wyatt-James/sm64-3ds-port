@@ -23,6 +23,9 @@
 #undef VARARGS_COUNT
 #undef NTSC_FRAMERATE
 #undef ROUND_UP
+#undef NOP
+#undef PRINT_C3D_MTX
+#undef PRINT_FLOAT_MTX
 #undef KIB_TO_BYTE
 #undef MIB_TO_BYTE
 #undef BYTE_TO_KIB
@@ -33,10 +36,16 @@
 #undef ALIGNED
 #undef HOT
 #undef COLD
+#undef NAKED
+#undef ASSUME_ALIGNED
+#undef ALIGNOF
+#undef UNREACHABLE
+#undef ARTIFICIAL
 #undef ASSUME
 #undef LIKELY
 #undef UNLIKELY
 #undef EXPECT
+#undef UNUSED2
 
 // General macros
 #define MAX(a_, b_) ((a_) > (b_) ? (a_) : (b_)) // Returns the higher of a_ and b_.
