@@ -579,12 +579,12 @@ void aMixImpl(const int16_t gain, const uint16_t in_addr, const uint16_t out_add
     // If gain is a specific value, use simplified logic
     if (gain == -0x8000)
         for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++)
-            *out = (int16_t) saturate16(*out - *in);
+            *out = __qsub16(*out, *in);
     
     // Else, use full logic
     else
         for (int nsamples = ROUND_UP_32(rspa.nbytes) >> 1; nsamples != 0; nsamples--, in++, out++)
-            *out = (int16_t) saturate16(*out + ((*in * gain) >> 15));
+            *out = saturate16(*out + ((*in * gain) >> 15));
 }
 
 // Enables one to inspect the contents of the Emulated RSPA via debugger.
