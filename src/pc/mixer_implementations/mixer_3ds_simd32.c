@@ -301,7 +301,7 @@ static void aADPCMdecInternal(uint8_t flags, ADPCM_STATE state, uint8_t* in, int
 
     // Main decode: write data in chunks of 16 samples (32 bytes)
     while (nbytes > 0) {
-        const uint8_t shift = 28 - (*in >> 4); // range 0..12
+        const uint8_t shift = 28 - (*in >> 4); // range 28 - 0..12
         const uint8_t table_index = *in++ & 0xf; // range 0..7
         const int16_t* const tbl_0 = rspa.adpcm_table[table_index][0];
         const int16_t* const tbl_1 = rspa.adpcm_table[table_index][1];
