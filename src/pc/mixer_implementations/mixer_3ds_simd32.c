@@ -6,6 +6,7 @@
 #include <ultra64.h>
 #include <arm_acle.h>
 #include "src/pc/pc_macros.h"
+#include "src/pc/n3ds/n3ds_intrinsics.h"
 
 /*
  * 3DS-optimized mixer.c software implementation, using SIMD32 extensions.
