@@ -435,7 +435,7 @@ static ALWAYS_INLINE void envMixerProcessOneSample(
     const int16_t input,
     int16_t* dry[2],
     int16_t* wet[2],
-    const int16_t volume[2],
+    const int32_t volume[2],
     const int32_t vol_dry, // In inaccurate math, these are 18-bit due to a left-shift.
     const int32_t vol_wet,
     const bool aux)
@@ -448,11 +448,14 @@ static ALWAYS_INLINE void envMixerProcessOneSample(
         *wet[1] = saturate16(((*wet[1] << 15) - *dry[0] + input * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
     }
 #else
-    *dry[0] = saturate16(*dry[0] + ((input * volume[0] * (int64_t) vol_dry) >> 32));
-    *dry[1] = saturate16(*dry[1] + ((input * volume[1] * (int64_t) vol_dry) >> 32));
+    int32_t iv0 = __smulbt(input, volume[0]);
+    int32_t iv1 = __smulbt(input, volume[1]);
+
+    *dry[0] = saturate16(__smmlar(iv0, vol_dry, *dry[0]));
+    *dry[1] = saturate16(__smmlar(iv1, vol_dry, *dry[1]));
     if (aux) {
-        *wet[0] = saturate16(*wet[0] + ((input * volume[0] * (int64_t) vol_wet) >> 32));
-        *wet[1] = saturate16(*wet[1] + ((input * volume[1] * (int64_t) vol_wet) >> 32));
+        *wet[0] = saturate16(__smmlar(iv0, vol_wet, *wet[0]));
+        *wet[1] = saturate16(__smmlar(iv1, vol_wet, *wet[1]));
     }
 #endif
 }
@@ -473,8 +476,7 @@ static ALWAYS_INLINE void envMixerLoop(
     for (size_t i = 0; i < nSamples / 8; i++) {
         #pragma GCC unroll 0
         for (int j = 0; j < 8; j++, in++, dry[0]++, dry[1]++, wet[0] += aux, wet[1] += aux) {
-            const int16_t volume[] = {vols[0][j] >> 16,
-                                      vols[1][j] >> 16};
+            const int32_t volume[] = {vols[0][j], vols[1][j]};
 
             envMixerProcessOneSample(*in, dry, wet, volume, vol_dry, vol_wet, aux);
         }
