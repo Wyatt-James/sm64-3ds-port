@@ -221,8 +221,6 @@ COLD static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, cons
 
     sample_batch* dest_batch = (sample_batch*) dest;
     for (int i = count; i != 0; i--) {
-        __builtin_prefetch(((void*)l) + 32);
-        __builtin_prefetch(((void*)r) + 32);
         *dest_batch++ = (sample_batch) {{
             INT16x2_LOAD(l[0], r[0]),
             INT16x2_LOAD(l[1], r[1]),
