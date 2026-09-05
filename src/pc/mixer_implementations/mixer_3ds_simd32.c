@@ -507,27 +507,26 @@ static ALWAYS_INLINE void envMixerLoop(
     const int32_t rate[2],
     const int32_t vol_dry,
     const int32_t vol_wet,
-    const size_t nSamples,
+    size_t nLoops,
     const bool aux
 )
 {
-    for (size_t i = 0; i < nSamples / 8; i++) {
+    do {
         #pragma GCC unroll 0
         for (int j = 0; j < 8; j++, in++, dry[0]++, dry[1]++, wet[0] += aux, wet[1] += aux) {
             const int32_t volume[] = {vols[0][j], vols[1][j]};
-
-            envMixerProcessOneSample(*in, dry, wet, volume, vol_dry, vol_wet, aux);
-        }
-
-        #pragma GCC unroll 8
-        for (int j = 0; j < 8; j++) {
-            for (int ch = 0; ch < NUM_CHANNELS; ch++)
+            
+            #pragma GCC unroll 2
+            for (int ch = 0; ch < NUM_CHANNELS; ch++) {
                 if (rate[ch] >= 0x10000)
                     vols[ch][j] = CLAMP_UPPER((((int64_t) vols[ch][j] * rate[ch]) >> 16), target_s[ch]);
                 else
                     vols[ch][j] = CLAMP_LOWER((((int64_t) vols[ch][j] * rate[ch]) >> 16), target_s[ch]);
+            }
+
+            envMixerProcessOneSample(*in, dry, wet, volume, vol_dry, vol_wet, aux);
         }
-    }
+    } while (--nLoops > 0);
 }
 
 // Crackpipe optimized version
@@ -573,32 +572,33 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     }
 
     // Round up, and divide by 2 for sample count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
-    const size_t nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t));
+    // const size_t nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(int16_t));
+    const size_t nLoops = ROUND_UP_16(rspa.nbytes) / (8 * sizeof(int16_t));
 
     // If Aux is set, we output wet and dry, else only dry.
     // We outline rate to reduce logic within the loop.
     if (flags & A_AUX)
         if (rate[0] >= 0x10000)
             if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_AUX); // ++A
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // ++A
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_AUX); // +-A
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // +-A
         else
             if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_AUX); // -+A
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // -+A
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_AUX); // --A
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // --A
     else
         if (rate[0] >= 0x10000)
             if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_NORMAL); // ++N
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // ++N
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_NORMAL); // +-N
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // +-N
         else
             if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_NORMAL); // -+N
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // -+N
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nSamples, MIX_NORMAL); // --N
+                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // --N
 
     memcpy(state,      vols[0], 32);
     memcpy(state + 16, vols[1], 32);
