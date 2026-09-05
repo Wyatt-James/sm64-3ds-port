@@ -507,7 +507,7 @@ static ALWAYS_INLINE void envMixerLoop(
     const int32_t rate[2],
     const int32_t vol_dry,
     const int32_t vol_wet,
-    size_t nLoops,
+    int nLoops,
     const bool aux
 )
 {
@@ -571,9 +571,7 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
         memcpy(vols[1], state + 16, 32);
     }
 
-    // Round up, and divide by 2 for sample count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
-    // const size_t nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(int16_t));
-    const size_t nLoops = ROUND_UP_16(rspa.nbytes) / (8 * sizeof(int16_t));
+    int nLoops = ROUND_UP_16(rspa.nbytes) / (8 * sizeof(int16_t));
 
     // If Aux is set, we output wet and dry, else only dry.
     // We outline rate to reduce logic within the loop.
