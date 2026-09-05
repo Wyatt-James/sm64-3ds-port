@@ -432,27 +432,26 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     in -= 4;
     memcpy(in, tmp, 4 * sizeof(int16_t));
     uint32_t pitch_accumulator = (uint16_t) tmp[4];
+    int nSamples = ROUND_UP_16(rspa.nbytes) / 2;
     
-    // Round up, and divide by 2 for sample count. If RSPA.nbytes == 0, do 8 samples for do-while compensation.
-    for (int nSamples = rspa.nbytes == 0 ? 8 : (ROUND_UP_16(rspa.nbytes) / sizeof(uint16_t)); nSamples != 0; nSamples--, out++) {
-
+    do {
 #ifdef AUDIO_USE_ACCURATE_MATH
         const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
         *out = saturate16(((in[0] * tbl[0] + 0x4000) >> 15) +
-                       ((in[1] * tbl[1] + 0x4000) >> 15) +
-                       ((in[2] * tbl[2] + 0x4000) >> 15) +
-                       ((in[3] * tbl[3] + 0x4000) >> 15));
+                    ((in[1] * tbl[1] + 0x4000) >> 15) +
+                    ((in[2] * tbl[2] + 0x4000) >> 15) +
+                    ((in[3] * tbl[3] + 0x4000) >> 15));
 #else
         // Inaccurate rounding
         const int32_t* const tbl = (const int32_t* const) resample_table[(pitch_accumulator << 6) >> 16];
         const int32_t* const in_tmp = (const int32_t* const) in;
-        *out = saturate16((__smlad(tbl[1], in_tmp[1], __smlad(tbl[0], in_tmp[0], 0x10000))) >> 15);
+        *out++ = saturate16((__smlad(tbl[1], in_tmp[1], __smlad(tbl[0], in_tmp[0], 0x10000))) >> 15);
 #endif
 
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
         pitch_accumulator %= 0x10000;
-    }
+    } while (--nSamples > 0);
 
     state[4] = (int16_t) pitch_accumulator;
     memcpy(state, in, 4 * sizeof(int16_t));
