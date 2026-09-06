@@ -509,8 +509,9 @@ static ALWAYS_INLINE void envMixerLoop(
 )
 {
     do {
-        // WYATT_TODO Unroll 8 is about 300us faster in single-threaded mode. Check if this holds up in MT.
-        #pragma GCC unroll 0
+        // It's close but it is a 100us speedup even on syscore, despite the cache concerns.
+        // Unroll 4 or 2 should be the ticket but they have odd performance issues.
+        #pragma GCC unroll 8
         for (int j = 0; j < 8; j++, in++, dry[0]++, dry[1]++, wet[0] += aux, wet[1] += aux) {
             const int32_t volume[] = {vols[0][j], vols[1][j]};
             
