@@ -265,6 +265,7 @@ static NAKED void aInterleaveInternalASM(int16_t* l, int16_t* r, int16_t* dest, 
     "    bne aInterleaveInternalASM_loop    \n\t"
     "    pop {r4-r12, pc}                   \n\t"
     );
+#undef PACKSTR
 }
 
 // Interleaves RSPA NBYTES bytes into RSPA OUT
