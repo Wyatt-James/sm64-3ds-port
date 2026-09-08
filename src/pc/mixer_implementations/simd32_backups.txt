@@ -1,0 +1,37 @@
+// approximation of the ASM logic
+void envMixerLoop_C(
+    int16_t *in,
+    int16_t *dry0,
+    int16_t *dry1,
+    int16_t *wet0,
+    int16_t *wet1,               
+    EnvMixerLoopParams *restrict d,  
+    int nSamples                 
+)
+{
+    int16_t* const end = in + nSamples;
+    bool aux = true;
+    int i = 0;
+    do {
+        const int32_t volume[] = {d->vols[0][i], d->vols[1][i]};
+     
+        if (d->rate[0] >= 0x10000)
+            d->vols[0][i] = CLAMP_UPPER((((int64_t) d->vols[0][i] * d->rate[0]) >> 16), d->target_s[0]);
+        else
+            d->vols[0][i] = CLAMP_LOWER((((int64_t) d->vols[0][i] * d->rate[0]) >> 16), d->target_s[0]);
+     
+        if (d->rate[1] >= 0x10000)
+            d->vols[1][i] = CLAMP_UPPER((((int64_t) d->vols[1][i] * d->rate[1]) >> 16), d->target_s[1]);
+        else
+            d->vols[1][i] = CLAMP_LOWER((((int64_t) d->vols[1][i] * d->rate[1]) >> 16), d->target_s[1]);
+        int32_t iv0 = __smulbt(*in,   volume[0]);
+        int32_t iv1 = __smulbt(*in++, volume[1]);
+        *dry0++ = saturate16(__smmlar(iv0, d->vol_dry, *dry0));
+        *dry1++ = saturate16(__smmlar(iv1, d->vol_dry, *dry1));
+        if (aux) {
+            *wet0++ = saturate16(__smmlar(iv0, d->vol_wet, *wet0));
+            *wet1++ = saturate16(__smmlar(iv1, d->vol_wet, *wet1));
+        }
+        i = (i + 1) & 7;
+    } while (in < end);
+}

@@ -9,9 +9,9 @@
 #include "src/pc/n3ds/n3ds_intrinsics.h"
 
 /*
- * 3DS-optimized mixer.c software implementation, using SIMD32 extensions.
+ * 3DS-optimized mixer.c software implementation, using ASM.
  * Enhanced RSPA emulation is supported.
-
+ * 
  * Enhanced RSPA emulation allows us to break the rules of
  * RSPA emulation a little bit for better performance.
  * 
@@ -27,12 +27,7 @@
 #define MIX_AUX true
 #define MIX_NORMAL false
 #define NUM_CHANNELS 2
-
-#ifdef AUDIO_USE_ACCURATE_MATH
-#define MIX_VOLUME_SHIFT 0
-#else
 #define MIX_VOLUME_SHIFT 2
-#endif
 
 #define ROUND_UP_8(v)  (((v) + 7)  & ~7)
 #define ROUND_UP_16(v) (((v) + 15) & ~15)
@@ -53,6 +48,16 @@ typedef struct
     int16x2_t simd[4]; // tbl1 as read through the simd pointer
 } AdpcmTableRow;
 
+// Passed to EnvMixer functions as a struct for convenience.
+typedef struct
+{
+    int32_t vols[2][8];
+    int32_t target_s[2]; // 64, 68
+    int32_t rate[2];     // 72, 76
+    int32_t vol_dry;     // 80
+    int32_t vol_wet;     // 84
+} EnvMixerParams;
+
 static struct {
     uint16_t in;
     uint16_t out;
@@ -64,11 +69,7 @@ static struct {
     uint16_t wet_left;
     uint16_t wet_right;
 
-    int16_t target[2];
-    int32_t rate[2];
-
-    int16_t vol_dry;
-    int16_t vol_wet;
+    EnvMixerParams envmix;
 
     ADPCM_STATE *adpcm_loop_state;
 
@@ -193,8 +194,8 @@ void aSetBufferImpl(uint8_t flags, uint16_t in, uint16_t out, uint16_t nbytes) {
 
 void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
     if (flags & A_AUX) {
-        rspa.vol_dry = v;
-        rspa.vol_wet = r;
+        rspa.envmix.vol_dry = v << MIX_VOLUME_SHIFT;
+        rspa.envmix.vol_wet = r << MIX_VOLUME_SHIFT;
     } else if (flags & A_VOL) {
         if (flags & A_LEFT) {
             rspa.vol[0] = v;
@@ -203,11 +204,11 @@ void aSetVolumeImpl(uint8_t flags, int16_t v, int16_t t, int16_t r) {
         }
     } else {
         if (flags & A_LEFT) {
-            rspa.target[0] = v;
-            rspa.rate[0] = (int32_t)((uint16_t)t << 16 | ((uint16_t)r));
+            rspa.envmix.target_s[0] = v << 16;
+            rspa.envmix.rate[0] = (int32_t)((uint16_t)t << 16 | ((uint16_t)r));
         } else {
-            rspa.target[1] = v;
-            rspa.rate[1] = (int32_t)((uint16_t)t << 16 | ((uint16_t)r));
+            rspa.envmix.target_s[1] = v << 16;
+            rspa.envmix.rate[1] = (int32_t)((uint16_t)t << 16 | ((uint16_t)r));
         }
     }
 }
@@ -236,13 +237,50 @@ COLD static void aInterleaveInternal(int16_t* l, int16_t* r, int16_t* dest, cons
     }
 }
 
+// Interleaves into dest. This version requires 32-bit alignment, prefers 64-bit.
+static NAKED void aInterleaveInternalASM(int16_t* l, int16_t* r, int16_t* dest, int count) {
+    (void) l; (void) r; (void) dest; (void) count;
+
+// Packs and stores two sources
+// in:  low is first sample, high is second
+// out: low is left, high is right
+#define PACKSTR(rDst, rD1, rD2, rL, rR)                                        \
+    "pkhbt " #rD1", "#rL", "#rR", lsl #16   \n\t" /* L low + R low << 16   */  \
+    "pkhtb " #rD2", "#rR", "#rL", asr #16   \n\t" /* L high >> 16 + R high */  \
+    "stm   " #rDst", {"#rD1", "#rD2"}       \n\t"
+
+    // r0 is left, r1 is right, r2 is dest, r3 is nIterations
+    asm (
+    "    cmp r3, #0                         \n\t"
+    "    bxeq lr                            \n\t"
+    "    push {r4-r12, lr}                  \n\t"
+    "aInterleaveInternalASM_loop:           \n\t"
+    "    ldm r1!, {r8-r9}                   \n\t"
+    "    ldm r0!, {r4-r7}                   \n\t"
+    "    ldm r1!, {r10-r11}                 \n\t"
+    "    subs r3, r3, #1                    \n\t"
+         PACKSTR(r2!, r12, lr, r4, r8)
+         PACKSTR(r2!, r4, r8, r5, r9)
+         PACKSTR(r2!, r5, r9, r6, r10)
+         PACKSTR(r2!, r6, r10, r7, r11)
+    "    bne aInterleaveInternalASM_loop    \n\t"
+    "    pop {r4-r12, pc}                   \n\t"
+    );
+#undef PACKSTR
+}
+
 // Interleaves RSPA NBYTES bytes into RSPA OUT
 void aInterleaveImpl(uint16_t left, uint16_t right) {
     const int count = ROUND_UP_16(rspa.nbytes) / sizeof(int16_t) / 8;
     int16_t *l = rspa.buf.as_s16 + left / sizeof(int16_t);
     int16_t *r = rspa.buf.as_s16 + right / sizeof(int16_t);
     int16_t *d = rspa.buf.as_s16 + rspa.out / sizeof(int16_t);
-    aInterleaveInternal(l, r, d, count);
+
+    // In the real world, this seems to always be taken
+    if (LIKELY((((uintptr_t)l | (uintptr_t) r | (uintptr_t) d) & 0b11) == 0))
+        aInterleaveInternalASM(l, r, d, count);
+    else
+        aInterleaveInternal(l, r, d, count);
 }
 
 // Interleaves RSPA NBYTES bytes into the provided buffer
@@ -250,7 +288,12 @@ void aInterleaveAndCopyImpl(uint16_t left, uint16_t right, int16_t *restrict des
     const int count = ROUND_UP_16(rspa.nbytes) / sizeof(int16_t) / 8;
     int16_t *l = rspa.buf.as_s16 + left / sizeof(int16_t);
     int16_t *r = rspa.buf.as_s16 + right / sizeof(int16_t);
-    aInterleaveInternal(l, r, dest_addr, count);
+    
+    // In the real world, this seems to always be taken
+    if (LIKELY((((uintptr_t)l | (uintptr_t) r | (uintptr_t) dest_addr) & 0b11) == 0))
+        aInterleaveInternalASM(l, r, dest_addr, count);
+    else
+        aInterleaveInternal(l, r, dest_addr, count);
 }
 
 void aDMEMMoveImpl(uint16_t in_addr, uint16_t out_addr, int nbytes) {
@@ -392,18 +435,10 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     int nSamples = ROUND_UP_16(rspa.nbytes) / 2;
     
     do {
-#ifdef AUDIO_USE_ACCURATE_MATH
-        const int16_t* const tbl = resample_table[(pitch_accumulator << 6) >> 16];
-        *out = saturate16(((in[0] * tbl[0] + 0x4000) >> 15) +
-                    ((in[1] * tbl[1] + 0x4000) >> 15) +
-                    ((in[2] * tbl[2] + 0x4000) >> 15) +
-                    ((in[3] * tbl[3] + 0x4000) >> 15));
-#else
         // Inaccurate rounding
         const int32_t* const tbl = (const int32_t* const) resample_table[(pitch_accumulator << 6) >> 16];
         const int32_t* const in_tmp = (const int32_t* const) in;
         *out++ = saturate16((__smlad(tbl[1], in_tmp[1], __smlad(tbl[0], in_tmp[0], 0x10000))) >> 15);
-#endif
 
         pitch_accumulator += double_pitch;
         in += pitch_accumulator >> 16;
@@ -423,74 +458,73 @@ void aResampleImpl(const uint8_t flags, const uint16_t pitch, RESAMPLE_STATE sta
     memcpy(state + 8, in, 8 * sizeof(int16_t));
 }
 
-// EnvMixes a single sample. If AUX is set, writes both dry and wet buffers, else only dry.
-// Thanks to michi and Wuerfel_21 for help in optimizing the underlying math here.
-static ALWAYS_INLINE void envMixerProcessOneSample(
-    const int16_t input,
-    int16_t* dry[2],
-    int16_t* wet[2],
-    const int32_t volume[2],
-    const int32_t vol_dry, // In inaccurate math, these are 18-bit due to a left-shift.
-    const int32_t vol_wet,
-    const bool aux)
-{
-#ifdef AUDIO_USE_ACCURATE_MATH
-    *dry[0] = saturate16(((*dry[0] << 15) - *dry[0] + input * ((volume[0] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-    *dry[1] = saturate16(((*dry[1] << 15) - *dry[0] + input * ((volume[1] * vol_dry + 0x4000) >> 15) + 0x4000) >> 15);
-    if (aux) {
-        *wet[0] = saturate16(((*wet[0] << 15) - *dry[0] + input * ((volume[0] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
-        *wet[1] = saturate16(((*wet[1] << 15) - *dry[0] + input * ((volume[1] * vol_wet + 0x4000) >> 15) + 0x4000) >> 15);
-    }
-#else
-    int32_t iv0 = __smulbt(input, volume[0]);
-    int32_t iv1 = __smulbt(input, volume[1]);
+#define MIXER_FUNC(name_)                         \
+static NAKED void envMixerLoop ## name_(          \
+    UNUSED int16_t *in,                /* R0  */  \
+    UNUSED int16_t *dry0,              /* R1  */  \
+    UNUSED int16_t *dry1,              /* R2  */  \
+    UNUSED int16_t *wet0,              /* R3  */  \
+    UNUSED int16_t *wet1,              /* SP+0*/  \
+    UNUSED EnvMixerParams *restrict d, /* SP+4*/  \
+    UNUSED int nSamples                /* SP+8*/  \
+)
 
-    *dry[0] = saturate16(__smmlar(iv0, vol_dry, *dry[0]));
-    *dry[1] = saturate16(__smmlar(iv1, vol_dry, *dry[1]));
-    if (aux) {
-        *wet[0] = saturate16(__smmlar(iv0, vol_wet, *wet[0]));
-        *wet[1] = saturate16(__smmlar(iv1, vol_wet, *wet[1]));
-    }
-#endif
+MIXER_FUNC(APP) {
+    #define FUNCNAME "envMixerLoopAPP"
+    #define PROCESS_AUX
+    #define POSITIVE_0
+    #define POSITIVE_1
+    #include "envmixer_asm.inline.h"
 }
 
-static ALWAYS_INLINE void envMixerLoop(
-    int16_t *in,
-    int16_t *dry[2],
-    int16_t *wet[2],
-    int32_t vols[2][8],
-    const int32_t target_s[2],
-    const int32_t rate[2],
-    const int32_t vol_dry,
-    const int32_t vol_wet,
-    int nLoops,
-    const bool aux
-)
-{
-    do {
-        // It's close but it is a 100us speedup even on syscore, despite the cache concerns.
-        // Unroll 4 or 2 should be the ticket but they have odd performance issues.
-        #pragma GCC unroll 8
-        for (int j = 0; j < 8; j++, in++, dry[0]++, dry[1]++, wet[0] += aux, wet[1] += aux) {
-            const int32_t volume[] = {vols[0][j], vols[1][j]};
-            
-            #pragma GCC unroll 2
-            for (int ch = 0; ch < NUM_CHANNELS; ch++) {
-                if (rate[ch] >= 0x10000)
-                    vols[ch][j] = CLAMP_UPPER((((int64_t) vols[ch][j] * rate[ch]) >> 16), target_s[ch]);
-                else
-                    vols[ch][j] = CLAMP_LOWER((((int64_t) vols[ch][j] * rate[ch]) >> 16), target_s[ch]);
-            }
+MIXER_FUNC(APN) {
+    #define FUNCNAME "envMixerLoopAPN"
+    #define PROCESS_AUX
+    #define POSITIVE_0
+    #include "envmixer_asm.inline.h"
+}
 
-            envMixerProcessOneSample(*in, dry, wet, volume, vol_dry, vol_wet, aux);
-        }
-    } while (--nLoops > 0);
+MIXER_FUNC(ANP) {
+    #define FUNCNAME "envMixerLoopANP"
+    #define PROCESS_AUX
+    #define POSITIVE_1
+    #include "envmixer_asm.inline.h"
+}
+
+MIXER_FUNC(ANN) {
+    #define FUNCNAME "envMixerLoopANN"
+    #define PROCESS_AUX
+    #include "envmixer_asm.inline.h"
+}
+
+MIXER_FUNC(PP) {
+    #define FUNCNAME "envMixerLoopPP"
+    #define POSITIVE_0
+    #define POSITIVE_1
+    #include "envmixer_asm.inline.h"
+}
+
+MIXER_FUNC(PN) {
+    #define FUNCNAME "envMixerLoopPN"
+    #define POSITIVE_0
+    #include "envmixer_asm.inline.h"
+}
+
+MIXER_FUNC(NP) {
+    #define FUNCNAME "envMixerLoopNP"
+    #define POSITIVE_1
+    #include "envmixer_asm.inline.h"
+}
+
+MIXER_FUNC(NN) {
+    #define FUNCNAME "envMixerLoopNN"
+    #include "envmixer_asm.inline.h"
 }
 
 // Crackpipe optimized version
 // Optimize at your own risk!
 // Channel 0 is left and 1 is right
-void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
+void aEnvMixerImpl(const uint8_t flags, short state[restrict 40]) {
     const bool isInit = flags & A_INIT ? true : false;
 
     int16_t *in = rspa.buf.as_s16 + rspa.in / sizeof(int16_t);
@@ -501,71 +535,66 @@ void aEnvMixerImpl(const uint8_t flags, ENVMIX_STATE state) {
     int16_t *wet[2] = {rspa.buf.as_s16 + rspa.wet_left / sizeof(int16_t),
                        rspa.buf.as_s16 + rspa.wet_right / sizeof(int16_t)};
 
-    const int16_t target[2] = {isInit ? rspa.target[0] : state[32],
-                               isInit ? rspa.target[1] : state[35]};
-
-    const int32_t target_s[2] = {target[0] << 16,
-                                 target[1] << 16};
-
-    const int32_t rate[2] = {isInit ? rspa.rate[0] : (state[33] << 16) | (uint16_t)state[34],
-                             isInit ? rspa.rate[1] : (state[36] << 16) | (uint16_t)state[37]};
-
-    const int32_t vol_dry = (isInit ? rspa.vol_dry : state[38]) << MIX_VOLUME_SHIFT,
-                  vol_wet = (isInit ? rspa.vol_wet : state[39]) << MIX_VOLUME_SHIFT;
-
-    int32_t vols[2][8];
-
-    if (isInit) {
-        const int32_t step_diff[2] = {rspa.vol[0] * (rate[0] - 0x10000) / 8,
-                                      rspa.vol[1] * (rate[1] - 0x10000) / 8};
+    EnvMixerParams* envmix = &rspa.envmix;
+    
+    if (LIKELY(!isInit)) {
+        envmix->rate[0] = (state[33] << 16) | (uint16_t)state[34];
+        envmix->rate[1] = (state[36] << 16) | (uint16_t)state[37];
+        envmix->target_s[0] = state[32] << 16;
+        envmix->target_s[1] = state[35] << 16;
+        envmix->vol_dry = state[38] << MIX_VOLUME_SHIFT;
+        envmix->vol_wet = state[39] << MIX_VOLUME_SHIFT;
+        memcpy(envmix->vols[0], state, 32);
+        memcpy(envmix->vols[1], state + 16, 32);
+    } else {
+        state[32] = envmix->target_s[0] >> 16;
+        state[35] = envmix->target_s[1] >> 16;
+        state[33] = envmix->rate[0] >> 16;
+        state[34] = envmix->rate[0];
+        state[36] = envmix->rate[1] >> 16;
+        state[37] = envmix->rate[1];
+        state[38] = envmix->vol_dry >> MIX_VOLUME_SHIFT;
+        state[39] = envmix->vol_wet >> MIX_VOLUME_SHIFT;
+        
+        const int32_t step_diff[2] = {rspa.vol[0] * (envmix->rate[0] - 0x10000) / 8,
+                                      rspa.vol[1] * (envmix->rate[1] - 0x10000) / 8};
 
         #pragma GCC unroll 0
         for (int i = 0; i < 8; i++) {
-            vols[0][i] = saturate32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
-            vols[1][i] = saturate32((int64_t)(rspa.vol[1] << 16) + step_diff[1] * (i + 1));
+            envmix->vols[0][i] = saturate32((int64_t)(rspa.vol[0] << 16) + step_diff[0] * (i + 1));
+            envmix->vols[1][i] = saturate32((int64_t)(rspa.vol[1] << 16) + step_diff[1] * (i + 1));
         }
-    } else {
-        memcpy(vols[0], state, 32);
-        memcpy(vols[1], state + 16, 32);
     }
 
-    int nLoops = ROUND_UP_16(rspa.nbytes) / (8 * sizeof(int16_t));
+    int nSamples = ROUND_UP_16(rspa.nbytes) / sizeof(int16_t);
 
     // If Aux is set, we output wet and dry, else only dry.
-    // We outline rate to reduce logic within the loop.
+    // We outline rate and aux to reduce logic within the loop.
     if (flags & A_AUX)
-        if (rate[0] >= 0x10000)
-            if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // ++A
+        if (envmix->rate[0] >= 0x10000)
+            if (envmix->rate[1] >= 0x10000)
+                envMixerLoopAPP(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // ++ Aux
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // +-A
+                envMixerLoopAPN(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // +- Aux
         else
-            if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // -+A
+            if (envmix->rate[1] >= 0x10000)
+                envMixerLoopANP(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // -+ Aux
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_AUX); // --A
+                envMixerLoopANN(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // -- Aux
     else
-        if (rate[0] >= 0x10000)
-            if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // ++N
-            else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // +-N
+        if (envmix->rate[0] >= 0x10000)
+            if (envmix->rate[1] >= 0x10000)
+                envMixerLoopPP(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // ++
+                            else
+                envMixerLoopPN(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // +-
         else
-            if (rate[1] >= 0x10000)
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // -+N
+            if (envmix->rate[1] >= 0x10000)
+                envMixerLoopNP(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // -+
             else
-                envMixerLoop(in, dry, wet, vols, target_s, rate, vol_dry, vol_wet, nLoops, MIX_NORMAL); // --N
+                envMixerLoopNN(in, dry[0], dry[1], wet[0], wet[1], envmix, nSamples); // --
 
-    memcpy(state,      vols[0], 32);
-    memcpy(state + 16, vols[1], 32);
-    state[32] = target[0];
-    state[35] = target[1];
-    state[33] = (int16_t)(rate[0] >> 16);
-    state[34] = (int16_t) rate[0];
-    state[36] = (int16_t)(rate[1] >> 16);
-    state[37] = (int16_t) rate[1];
-    state[38] = vol_dry >> MIX_VOLUME_SHIFT;
-    state[39] = vol_wet >> MIX_VOLUME_SHIFT;
+    memcpy(state,      envmix->vols[0], 32);
+    memcpy(state + 16, envmix->vols[1], 32);
 }
 
 void aMixImpl(const int16_t gain, const uint16_t in_addr, const uint16_t out_addr) {

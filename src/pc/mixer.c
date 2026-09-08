@@ -35,11 +35,10 @@
 // Optimized for N3DS, supports ENHANCED_RSPA_EMULATION.
 #elif defined TARGET_N3DS
 
-// SIMD32 enhancements allow for much faster operations
-// on audio code. Unfortunately, it seems like the 3DS
-// SIMD32 instructions aren't actually that useful.
+// SIMD32 enhancements allow for much faster audio code. ASM is even better.
 #if __ARM_FEATURE_SIMD32 == 1 && __ARM_FEATURE_SAT == 1
-#include "src/pc/mixer_implementations/mixer_3ds_simd32.c"
+#include "src/pc/mixer_implementations/mixer_3ds_asm.c"
+// #include "src/pc/mixer_implementations/mixer_3ds_simd32.c"
 
 // If ARM SIMD32 is disabled, use the standard implementation.
 #else
