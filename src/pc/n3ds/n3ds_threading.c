@@ -12,7 +12,7 @@ bool n3ds_old_core_1_is_available = false;
 
 
 static void default_init(UNUSED N3DS_ThreadInfo* thread_info) {}
-static bool default_should_sleep() { return false; }
+static bool thread_sleep_never() { return false; }
 static void default_task(void) {}
 static void default_teardown(UNUSED N3DS_ThreadInfo* thread_info) {}
 
@@ -45,7 +45,7 @@ void n3ds_thread_info_init(N3DS_ThreadInfo* thread_info)
 
         .entry_point  = n3ds_thread_loop_common,
         .on_start     = default_init,
-        .should_sleep = default_should_sleep,
+        .should_sleep = thread_sleep_never,
         .task         = default_task,
         .teardown     = default_teardown,
     };

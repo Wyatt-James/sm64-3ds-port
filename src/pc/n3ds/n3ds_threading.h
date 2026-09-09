@@ -57,7 +57,7 @@ struct N3DS_ThreadInfo_tag
     // --- API Functions ---
     void (*entry_point)  (N3DS_ThreadInfo* thread_info); // Entry-point.
     void (*on_start)     (N3DS_ThreadInfo* thread_info); // Runs once on startup.
-    bool (*should_sleep) (void);                         // Determines whether this thread should run its task or spin.
+    bool (*should_sleep) (void);                         // Determines whether this thread should run its task or spin. By default, it never sleeps.
     void (*task)         (void);                         // Does real work.
     void (*teardown)     (N3DS_ThreadInfo* thread_info); // Runs after the thread exits its loop.
 };
