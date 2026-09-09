@@ -6,11 +6,13 @@
 
 #include "src/pc/n3ds/libctru_inc.h"
 
-#define N3DS_SECONDS_TO_NANOS(t) (t * 1000000000)     // Calculate a duration in seconds
-#define N3DS_MILLIS_TO_NANOS(t)  (t * 1000000)        // Calculate a duration in milliseconds
-#define N3DS_MICROS_TO_NANOS(t)  (t * 1000)           // Calculate a duration in microseconds
+#define N3DS_SECONDS_TO_NANOS(t) (t * 1000000000LL)   // Convert seconds to nanoseconds
+#define N3DS_MILLIS_TO_NANOS(t)  (t * 1000000LL)      // Convert milliseconds to nanoseconds
+#define N3DS_MICROS_TO_NANOS(t)  (t * 1000LL)         // Convert microseconds to nanoseconds
+#define N3DS_NANOS_TO_SECONDS(t) (t / 1000000000LL)   // Convert nanoseconds to seconds
+#define N3DS_NANOS_TO_MILLIS(t)  (t / 1000000LL)      // Convert nanoseconds to milliseconds
+#define N3DS_NANOS_TO_MICROS(t)  (t / 1000LL)         // Convert nanoseconds to microseconds
 #define N3DS_NANOS(t)            (t)                  // A duration in nanoseconds
-#define N3DS_SLEEP_FUNC(time)    svcSleepThread(time) // Allows us to conveniently replace the sleep func.
 
 typedef enum
 {

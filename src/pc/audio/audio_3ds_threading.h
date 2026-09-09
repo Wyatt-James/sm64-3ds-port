@@ -7,13 +7,13 @@
 #define N3DS_AUDIO_ENABLE_SLEEP_FUNC true
 
 // Audio sleep duration of 10 microseconds (0.01 millis). May sleep for longer.
-#define N3DS_AUDIO_SLEEP_DURATION_NANOS N3DS_MICROS_TO_NANOS(10)
+#define N3DS_AUDIO_SLEEP_DURATION N3DS_MICROS_TO_NANOS(100)
 #define N3DS_AUDIO_THREAD_NAME "audio"
 #define N3DS_AUDIO_THREAD_FRIENDLY_ID 1
 
 // Allows us to conveniently replace audio-related sleep functions
 #if N3DS_AUDIO_ENABLE_SLEEP_FUNC == true
-#define N3DS_AUDIO_SLEEP_FUNC(time) N3DS_SLEEP_FUNC(time)
+#define N3DS_AUDIO_SLEEP_FUNC(time) svcSleepThread(time)
 #else
 #define N3DS_AUDIO_SLEEP_FUNC(time) do {} while (0)
 #endif

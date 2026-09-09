@@ -69,7 +69,7 @@ void n3ds_thread_loop_common(N3DS_ThreadInfo* thread_info)
             if (thread_info->spin_sleep_event != NULL)
                 LightEvent_WaitTimeout(thread_info->spin_sleep_event, thread_info->spin_sleep_duration);
             else
-                N3DS_SLEEP_FUNC(thread_info->spin_sleep_duration);
+                svcSleepThread(thread_info->spin_sleep_duration);
         }
     }
 
@@ -127,7 +127,7 @@ int32_t n3ds_thread_start(N3DS_ThreadInfo* thread_info)
             if ((settle_counter & 15) == 0)
                 printf("Thread %d is settling...\n", friendly_id); // Print every ~0.8s
 
-            N3DS_SLEEP_FUNC(N3DS_MILLIS_TO_NANOS(50));
+            svcSleepThread(N3DS_MILLIS_TO_NANOS(50));
         }
 
         printf("Thread %d settled.\n", friendly_id);

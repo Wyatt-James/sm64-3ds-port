@@ -837,7 +837,7 @@ static void (*LevelScriptJumpTable[])(void) = {
 
 static inline void waitForSynchronizationVar(volatile __3ds_s32* const ptr) {
     while(*ptr > 0)
-        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION);
 }
 
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {

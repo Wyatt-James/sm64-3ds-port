@@ -116,7 +116,7 @@ static void audio_3ds_play_internal(const uint8_t *src, size_t len_total, size_t
     // buffer at a constant rate, so waiting should be ok. This
     // technically slows down synthesis slightly.
     while (!audio_3ds_next_buffer_is_ready())
-        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION_NANOS);
+        N3DS_AUDIO_SLEEP_FUNC(N3DS_AUDIO_SLEEP_DURATION);
 
     // Copy the data to be played
     s16* dst = (s16*)sDspVAddrs[sNextBuffer];
