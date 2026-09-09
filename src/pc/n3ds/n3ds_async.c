@@ -9,6 +9,11 @@
 N3DS_ThreadInfo n3ds_async_thread_info;
 N3DS_AsyncThread async;
 
+static bool is_queue_empty()
+{
+    return async.count == 0;
+}
+
 static void run_one_command(void)
 {
     if (async.count != 0) {
@@ -39,15 +44,16 @@ static void initialize_thread_info(N3DS_Processor desired_cpu)
     n3ds_async_thread_info.is_disabled                 = false;
     n3ds_async_thread_info.friendly_id                 = 2;
     n3ds_async_thread_info.assigned_cpu                = desired_cpu;
-    n3ds_async_thread_info.spin_sleep_duration         = N3DS_MICROS_TO_NANOS(100);
+    n3ds_async_thread_info.spin_sleep_duration         = N3DS_MICROS_TO_NANOS(500);
     n3ds_async_thread_info.internal_detached           = true;
-    n3ds_async_thread_info.spin_sleep_event            = &async.task_added;
+    // n3ds_async_thread_info.spin_sleep_event            = &async.task_added;  Currently quite broken
 
     // Fill the name with terminators and then copy the default.
     n3ds_async_thread_info.friendly_name = "async";
     
     n3ds_async_thread_info.desired_priority = g3dsConfig.desired_async_thread_priority;
     n3ds_async_thread_info.task             = run_one_command;
+    n3ds_async_thread_info.should_sleep     = is_queue_empty;
 }
 
 int32_t N3DS_AsyncInit(N3DS_Processor desired_cpu)
@@ -55,25 +61,21 @@ int32_t N3DS_AsyncInit(N3DS_Processor desired_cpu)
     if (async.enabled)
         return -1;
 
+    LightEvent_Init(&async.task_finished, RESET_STICKY);
+    LightEvent_Init(&async.task_added, RESET_STICKY);
     initialize_thread_info(desired_cpu);
-    int32_t ret = 0;
 
-    ret = n3ds_thread_start(&n3ds_async_thread_info);
+    int32_t ret = n3ds_thread_start(&n3ds_async_thread_info);
     
     // If thread creation failed, or was never attempted, use thread5.
-    if (n3ds_async_thread_info.thread == NULL) {
-        n3ds_async_thread_info.is_disabled = true;
-        n3ds_async_thread_info.assigned_cpu = OLD_CORE_0;
+    if (ret != 0) {
         async.enabled = false;
         printf("Async thread is disabled.\n");
     } else {
         async.enabled = true;
-        LightEvent_Init(&async.task_finished, RESET_STICKY);
-        LightEvent_Init(&async.task_added, RESET_STICKY);
+        async.measure_time = g3dsConfig.console_screen != N3DS_SCREEN_NONE;
+        printf("Async measure time: %c\n", async.measure_time ? 'Y' : 'N');
     }
-
-    async.measure_time = g3dsConfig.console_screen != N3DS_SCREEN_NONE;
-    printf("Async measure time: %c\n", async.measure_time ? 'Y' : 'N');
 
     return ret;
 }
@@ -87,5 +89,7 @@ void N3DS_AsyncExit(void)
     n3ds_async_thread_info.running = false;
     while (R_FAILED(threadJoin(n3ds_async_thread_info.thread, N3DS_MILLIS_TO_NANOS(100))))
         printf("Waiting for async thread to exit...\n");
+    printf("Async thread exited.\n");
     n3ds_async_thread_info.thread = NULL;
+    async.enabled = false;
 }

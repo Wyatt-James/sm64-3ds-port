@@ -48,6 +48,11 @@ static void set_up_threading() {
     
     if (async_cpu != OLD_CORE_0)
         N3DS_AsyncInit(async_cpu);
+    
+    if (async.enabled)
+        printf("Async thread active.\n");
+    else
+        printf("Async thread is disabled.\n");
 }
 
 /* Order:
