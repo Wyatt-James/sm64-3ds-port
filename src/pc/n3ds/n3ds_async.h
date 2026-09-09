@@ -97,6 +97,7 @@ static inline void N3DS_AsyncSubmit(N3DS_AsyncCommand cmd)
         out->receipt->notFinished = true;
 
     AtomicIncrement(&async.count);
+    LightEvent_Pulse(&async.task_added);
 }
 
 static inline void N3DS_AsyncTry(N3DS_AsyncCommand cmd, bool runIfFailed)
