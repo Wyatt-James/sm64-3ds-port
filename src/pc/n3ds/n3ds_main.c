@@ -118,7 +118,7 @@ void n3ds_main_loop(void (*run_one_game_iter)(void))
             run_one_game_iter();
             profiler_3ds_snoop(0);
         } else
-            N3DS_SLEEP_FUNC(N3DS_MILLIS_TO_NANOS(33));
+            svcSleepThread(N3DS_MILLIS_TO_NANOS(33));
     }
 
     aptSetSleepAllowed(false);
