@@ -26,7 +26,7 @@ static const C3D_Mtx DEPTH_ADD_W_MTX = {
                     }
                };
 
-static const int texture_tile_order[4][4] =
+static const uint8_t texture_tile_order[4][4] =
 {
     {0,  1,   4,  5},
     {2,  3,   6,  7},
