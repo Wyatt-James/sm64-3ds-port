@@ -16,6 +16,7 @@
 #include "src/pc/profiler_3ds.h"
 #include "src/pc/n3ds/n3ds_hid.h"
 #include "src/pc/n3ds/n3ds_menu.h"
+#include "src/pc/pc_macros.h"
 
 #define DEFAULT_GXQUEUE_SIZE 32 // This is the default used by C3D.
 
@@ -24,6 +25,8 @@
 #else
 #define FRAME_RATE 30
 #endif
+
+USED C3D_GpuCmdBuffer prev_cmd_buffer;
 
 static ShaderProgram default_program;
 
@@ -59,6 +62,9 @@ void gfx_rapi_end_frame(void)
     C3D_FrameSync();
     profiler_3ds_log_time(4); // VSync
     C3D_FrameEnd(0);
+
+    prev_cmd_buffer = C3D_GetLastGpuCmdBuffer();
+    NOP;
 }
 
 void gfx_rapi_init(void)
