@@ -28,14 +28,14 @@ RUN wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/m
   echo 976c17a78617e157083a8e342836d35c47a45940f9d0209ee8fd210a81ba7bc0  makerom.zip | sha256sum --check
 
 # CREATES citro3d-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/citro3d/archive/7c16b2da36774d370a48dafa787e397a714ca4a2.zip \
+RUN wget https://github.com/Wyatt-James/citro3d/archive/b7101d310c306afebf9b8122ce81673d643b5cc7.zip \
   -O citro3d-wyatt-james.zip && \
-  echo 2b3310c5d89a5f07491307701a7e0a334c80f48292714cae74a44c19367b1cba  citro3d-wyatt-james.zip | sha256sum --check
+  echo 206681898221441a0a2c8f2dfb44782cbf8fe7bf4be02a50ff16b5a15b2542f4  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/libctru/archive/0c2d3dffc99447109faa111f74b087be79ecf6b7.zip \
+RUN wget https://github.com/Wyatt-James/libctru/archive/dd7bff9bacdafc84e27212e9e95e72aa10995db5.zip \
   -O libctru-wyatt-james.zip && \
-  echo b1ef5bd399364af4e4152dbe1a6f3187c1115e93b9702563d57c7497691d18d0  libctru-wyatt-james.zip | sha256sum --check
+  echo 154943a8e7316020f068288397667c7d228a47697fcaaf3f983acf4f034b3c4f  libctru-wyatt-james.zip | sha256sum --check
 
 # ----- Extract archives in-place, removing commit-specific container folders -----
   
@@ -52,14 +52,14 @@ RUN mv ./libctru-wyatt-james-temp/libctru-* ./libctru-wyatt-james
 # Install wyatt-james's fork of libctru. Use the longer line to build with GDB-optimized debug data included.
 # Removing this will leave the official devkitPro version installed.
 WORKDIR /tmp/libctru-wyatt-james/libctru
-RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_LTO=1 > /docker_logs/make_libctru-wyatt-james.txt
+RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_ASSUME_WRITES_ALIGNED=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_LTO=1 > /docker_logs/make_libctru-wyatt-james.txt
 # RUN make install ARCH="-ggdb3 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_libctru-wyatt-james.txt
 
 # Install wyatt-james's fork of Citro3D. Use the longer line to build with GDB-optimized debug data included.
 # Removing this will leave the official devkitPro version installed.
 # The profiler defaults to off.
 WORKDIR /tmp/citro3d-wyatt-james
-RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_PROFILER=0 ENABLE_LTO=1 > /docker_logs/make_citro3d-wyatt-james.txt
+RUN make install GPUCMD_DISABLE_BOUNDS_CHECKS=1 GPUCMD_ASSUME_WRITES_ALIGNED=1 GPUCMD_INLINE_THRESH=0 GPUCMD_ENABLE_ZERO_PADDING=0 ENABLE_PROFILER=0 ENABLE_LTO=1 > /docker_logs/make_citro3d-wyatt-james.txt
 # RUN make install ENABLE_PROFILER=0 > /docker_logs/make_citro3d-wyatt-james.txt
 # RUN make install ARCH="-ggdb3 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft" > /docker_logs/make_citro3d-wyatt-james.txt
 
