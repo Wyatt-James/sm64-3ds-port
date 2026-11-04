@@ -43,7 +43,7 @@ static void draw_button_internal(Click_Button* button, WrappedTexture* tex)
     Mtx_Identity(&model_view_mtx);
     Mtx_Scale(&model_view_mtx, button->position.w, button->position.h, 1.0f);
     Mtx_Translate(&model_view_mtx, button->position.x, 240 - button->position.h - button->position.y, 0.0f, false);
-    C3D_FVUnifMtxNx4(GPU_VERTEX_SHADER, EMU64_ULOC_model_view_mtx, &model_view_mtx, 3);
+    C3D_FVUnifMtxNx4(GPU_VERTEX_SHADER, EMU64_ULOC_model_view_mtx, &model_view_mtx, 2);
 
     C3D_FVUnifSet(GPU_VERTEX_SHADER, EMU64_ULOC_tex_settings_1, tex->size_s, tex->size_t, tex->origin_s, tex->origin_t);
     C3D_TexBind(0, &tex->c3d_tex);
@@ -115,8 +115,8 @@ void gfx_citro3d_menu_on_draw_start(void)
     C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
     C3D_CullFace(GPU_CULL_NONE);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, EMU64_ULOC_projection_mtx, &projection_mtx);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, EMU64_ULOC_model_view_mtx + 2, 0, 0, 1, 0);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, EMU64_ULOC_model_view_mtx + 3, 0, 0, 0, 1);
-    C3D_SetTexEnv(0, &texenv);
 
     C3D_BindProgram(&shader_program.pica_shader_program);
     C3D_SetAttrInfo(&shader_program.vertex_buffer->attr_info);
