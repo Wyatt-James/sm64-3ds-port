@@ -10,11 +10,15 @@
 #include "src/pc/pc_macros.h"
 #include "src/pc/gfx/gfx_rendering_api.h"
 
-#define DISPLAY_TRANSFER_FLAGS                        \
-(                                                     \
-	   GX_TRANSFER_FLIP_VERT(0)                       \
-     | GX_TRANSFER_OUT_TILED(0)                       \
-     | GX_TRANSFER_RAW_COPY(0)                        \
+#ifndef C3D_DEPTH_NONE
+#error Wyatt-James' Custom Citro3D and libctru forks are required. You should use the provided Docker config unless you really know what you're doing.
+#endif
+
+#define DISPLAY_TRANSFER_FLAGS     \
+(                                  \
+	   GX_TRANSFER_FLIP_VERT(0)    \
+     | GX_TRANSFER_OUT_TILED(0)    \
+     | GX_TRANSFER_RAW_COPY(0)     \
 )
 
 typedef struct
