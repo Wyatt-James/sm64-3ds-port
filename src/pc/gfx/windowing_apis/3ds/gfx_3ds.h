@@ -14,11 +14,13 @@
 
 typedef enum
 {
-    N3DS_DISPLAY_2D_400_240,    // 400px 2D
-    N3DS_DISPLAY_2D_800_240,    // 800px no AA
-    N3DS_DISPLAY_2D_800_480,    // 800px +  AA
-    N3DS_DISPLAY_3D,            // Dual 400px in 3D
-    N3DS_DISPLAY_COUNT          // Not a valid mode
+    N3DS_DISPLAY_2D_400_240,      // 400x240 2D
+    N3DS_DISPLAY_2D_800_240,      // 800x240 wide mode (3DS and N2DS only)
+    N3DS_DISPLAY_2D_800_480,      // 800x480 downscaled to 800x240 (3DS and N2DS only)
+    N3DS_DISPLAY_3D,              // Dual 400px in 3D
+    N3DS_DISPLAY_2D_400_480,      // 400x480 downscaled to 400x240
+    N3DS_DISPLAY_2D_800_480_2DS,  // 800x480 downscaled to 400x240 (Old 2DS)
+    N3DS_DISPLAY_COUNT            // Not a valid mode
 } N3DS_DisplayMode;
 
 typedef struct

@@ -5,9 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "macros.h"
-
-
 #include "src/pc/n3ds/libctru_inc.h"
 
 #include "src/pc/gfx/gfx_rendering_api.h"
@@ -35,10 +32,12 @@ Gfx3DSState g3dsGfxState = {
 };
 
 static const N3DS_DisplayModeInfo display_mode_info[N3DS_DISPLAY_COUNT] = {
-    [N3DS_DISPLAY_2D_400_240] = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_400_240", .top_mode = MODE_2D},
-    [N3DS_DISPLAY_2D_800_240] = {.width = 800, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_800_240", .top_mode = MODE_WIDE},
-    [N3DS_DISPLAY_2D_800_480] = {.width = 800, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X),  .name = "N3DS_DISPLAY_2D_800_480", .top_mode = MODE_WIDE},
-    [N3DS_DISPLAY_3D]         = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_3D",         .top_mode = MODE_3D},
+    [N3DS_DISPLAY_2D_400_240]     = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_400_240",     .top_mode = MODE_2D},
+    [N3DS_DISPLAY_2D_800_240]     = {.width = 800, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_2D_800_240",     .top_mode = MODE_WIDE},
+    [N3DS_DISPLAY_2D_800_480]     = {.width = 800, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X),  .name = "N3DS_DISPLAY_2D_800_480",     .top_mode = MODE_WIDE},
+    [N3DS_DISPLAY_3D]             = {.width = 400, .height = 240, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO), .name = "N3DS_DISPLAY_3D",             .top_mode = MODE_3D},
+    [N3DS_DISPLAY_2D_400_480]     = {.width = 400, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_X),  .name = "N3DS_DISPLAY_2D_400_480",     .top_mode = MODE_2D},
+    [N3DS_DISPLAY_2D_800_480_2DS] = {.width = 800, .height = 480, .transfer_scaling_flags = GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_XY), .name = "N3DS_DISPLAY_2D_800_480_2DS", .top_mode = MODE_2D},
 };
 
 // Synchronously clears the entirety of N3DS VRAM.

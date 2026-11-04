@@ -31,6 +31,7 @@ static C3D_ClearBits screen_clear_bits[GFX_C3D_VIEWPORT_COUNT];
 
 static C3D_RenderTarget* target_800_480;
 static C3D_RenderTarget* target_800_240;
+static C3D_RenderTarget* target_400_480;
 static C3D_RenderTarget* target_400_240_left;
 static C3D_RenderTarget* target_400_240_right;
 static C3D_RenderTarget* target_bottom;
@@ -38,12 +39,14 @@ static C3D_RenderTarget* target_bottom;
 static N3DS_RenderTargetGroupConfig
     group_800_480 = N3DS_RENDERTARGET_GROUP({&target_800_480,      800, 480, GPU_RB_RGB8,   GPU_RB_DEPTH16}),
     group_800_240 = N3DS_RENDERTARGET_GROUP({&target_800_240,      800, 240, GPU_RB_RGB8,   GPU_RB_DEPTH16}),
+    group_400_480 = N3DS_RENDERTARGET_GROUP({&target_400_480,      400, 480, GPU_RB_RGB8,   GPU_RB_DEPTH16}),
     group_stereo  = N3DS_RENDERTARGET_GROUP({&target_400_240_left, 400, 240, GPU_RB_RGB8,   GPU_RB_DEPTH16}, {&target_400_240_right, 400, 240, GPU_RB_RGB8, GPU_RB_DEPTH16}),
     group_bottom  = N3DS_RENDERTARGET_GROUP({&target_bottom,       320, 240, GPU_RB_RGB565, C3D_DEPTH_NONE});
 
 static N3DS_RenderTargetGroupConfig* initializers_top[] = {
     &group_800_480,
     &group_800_240,
+    &group_400_480,
     &group_stereo,
 };
 
@@ -52,18 +55,35 @@ static N3DS_RenderTargetGroupConfig* initializers_bottom[] = {
 };
 
 TopScreenSetup top_screen_setups[] = {
-    [N3DS_DISPLAY_2D_400_240] = {&target_400_240_left, NULL,                  N3DS_DISPLAY_2D_400_240},
-    [N3DS_DISPLAY_2D_800_240] = {&target_800_240,      NULL,                  N3DS_DISPLAY_2D_800_240},
-    [N3DS_DISPLAY_2D_800_480] = {&target_800_480,      NULL,                  N3DS_DISPLAY_2D_800_480},
-    [N3DS_DISPLAY_3D]         = {&target_400_240_left, &target_400_240_right, N3DS_DISPLAY_3D},
+    [N3DS_DISPLAY_2D_400_240]     = {&target_400_240_left, NULL,                  N3DS_DISPLAY_2D_400_240},
+    [N3DS_DISPLAY_2D_800_240]     = {&target_800_240,      NULL,                  N3DS_DISPLAY_2D_800_240},
+    [N3DS_DISPLAY_2D_800_480]     = {&target_800_480,      NULL,                  N3DS_DISPLAY_2D_800_480},
+    [N3DS_DISPLAY_3D]             = {&target_400_240_left, &target_400_240_right, N3DS_DISPLAY_3D},
+    [N3DS_DISPLAY_2D_400_480]     = {&target_400_480,      NULL,                  N3DS_DISPLAY_2D_400_480},
+    [N3DS_DISPLAY_2D_800_480_2DS] = {&target_800_480,      NULL,                  N3DS_DISPLAY_2D_800_480_2DS},
 };
 
-static N3DS_DisplayMode parse_video_mode(bool antialias, bool wide, bool stereo3d)
+static N3DS_DisplayMode parse_video_mode(bool antialias, bool wide, bool stereo3d, bool supports800px)
 {
-    if (stereo3d)               return N3DS_DISPLAY_3D;
-    if (!antialias && !wide)    return N3DS_DISPLAY_2D_400_240;
-    if (!antialias &&  wide)    return N3DS_DISPLAY_2D_800_240;
-    /* ( antialias &&  wide) */ return N3DS_DISPLAY_2D_800_480;
+    if (stereo3d) return N3DS_DISPLAY_3D;
+
+    uint32_t code = (supports800px << 2) | (antialias << 1) | wide;
+    
+    static const N3DS_DisplayMode mode_lookup[0b111 + 1] = {
+        // Old 2DS cannot use 800px wide modes but can still use antialiasing
+        [0b000] = N3DS_DISPLAY_2D_400_240,     // Default
+        [0b001] = N3DS_DISPLAY_2D_400_240,     // Unsupported combination, use default
+        [0b010] = N3DS_DISPLAY_2D_400_480,     // AA
+        [0b011] = N3DS_DISPLAY_2D_800_480_2DS, // Wide + AA
+
+        // 3DS and New 2DS can use 800px wide modes
+        [0b100] = N3DS_DISPLAY_2D_400_240,     // Default
+        [0b101] = N3DS_DISPLAY_2D_800_240,     // Wide
+        [0b110] = N3DS_DISPLAY_2D_400_480,     // AA
+        [0b111] = N3DS_DISPLAY_2D_800_480,     // Wide + AA
+    };
+
+    return mode_lookup[code];
 }
 
 static __3ds_u32 create_transfer_flags(C3D_RenderTarget* target, GSPGPU_FramebufferFormat framebuffer_format, __3ds_u32 scaling_flags)
@@ -76,18 +96,19 @@ static __3ds_u32 create_transfer_flags(C3D_RenderTarget* target, GSPGPU_Framebuf
 
 static void reconfigure_top_screen()
 {
-    // Detach
+    // Detach old outputs
     if (gTarget      != NULL) C3D_RenderTargetDetachOutput(gTarget);
     if (gTargetRight != NULL) C3D_RenderTargetDetachOutput(gTargetRight);
     gTarget = gTargetRight = NULL;
     
     // Grab configs
-    bool use_aa   = g3dsMenuConfig.use_aa   && g3dsSystemInfo.supports_800px; // old 2DS does not support 800px
-    bool use_wide = g3dsMenuConfig.use_wide && g3dsSystemInfo.supports_800px; // old 2DS does not support 800px
+    bool use_aa   = g3dsMenuConfig.use_aa;
+    bool use_wide = g3dsMenuConfig.use_wide;
     bool use3d    = g3dsGfxState.stereo_3d_active;
+    bool supports_800px = g3dsSystemInfo.supports_800px; // Old 2DS does not support 800px
 
     // Look up display mode
-    N3DS_DisplayMode mode = parse_video_mode(use_aa, use_wide, use3d);
+    N3DS_DisplayMode mode = parse_video_mode(use_aa, use_wide, use3d, supports_800px);
     TopScreenSetup* setup = &top_screen_setups[mode];
     const N3DS_DisplayModeInfo* info = gfx_3ds_display_mode_info(setup->mode);
 

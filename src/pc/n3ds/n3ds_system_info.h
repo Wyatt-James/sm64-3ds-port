@@ -16,5 +16,5 @@ typedef struct
 
 extern N3DS_SystemInfo g3dsSystemInfo;
 
-// Initializes the system info flags
-extern void n3ds_system_info_init(void);
+void n3ds_system_info_init(void); // Initializes the system info flags
+void n3ds_system_info_print(void); // Prints the system info flags

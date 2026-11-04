@@ -139,6 +139,7 @@ void n3ds_handle_events(void)
 void n3ds_main_init(void)
 {
     n3ds_system_info_init();
+    n3ds_system_info_print();
     set_up_threading();
 
     if(g3dsSystemInfo.is_new_3ds && g3dsConfig.enable_new_3ds_speedup)

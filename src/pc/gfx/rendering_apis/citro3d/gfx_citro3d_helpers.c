@@ -409,11 +409,13 @@ void citro3d_helpers_apply_projection_mtx_preset(C3D_Mtx* mtx)
 static inline ScaleFactor gfx_mode_scale_factor(N3DS_DisplayMode gfx_mode)
 {
     switch (gfx_mode) {
-        default:                      // Same as 400x240
-        case N3DS_DISPLAY_3D:         // Same as 400x240
-        case N3DS_DISPLAY_2D_400_240: return (ScaleFactor) {0, 0};
-        case N3DS_DISPLAY_2D_800_240: return (ScaleFactor) {1, 0};
-        case N3DS_DISPLAY_2D_800_480: return (ScaleFactor) {1, 1};
+        default:                          // Same as 400x240
+        case N3DS_DISPLAY_3D:             // Same as 400x240
+        case N3DS_DISPLAY_2D_400_240:     return (ScaleFactor) {0, 0};
+        case N3DS_DISPLAY_2D_800_240:     return (ScaleFactor) {1, 0};
+        case N3DS_DISPLAY_2D_800_480:     return (ScaleFactor) {1, 1};
+        case N3DS_DISPLAY_2D_400_480:     return (ScaleFactor) {0, 1};
+        case N3DS_DISPLAY_2D_800_480_2DS: return (ScaleFactor) {1, 1};
     }
 }
 

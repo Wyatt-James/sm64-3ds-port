@@ -54,7 +54,6 @@ enum
     GROUP_CONFIGS_DISPLAY    = BIT(2),
     GROUP_CONFIG_AREA        = BIT(3),
 
-    GROUP_CONFIGS_NO_800PX   = GROUP_CONFIGS_OTHER,
     GROUP_CONFIGS_800PX      = GROUP_CONFIGS_OTHER | GROUP_CONFIGS_DISPLAY,
     GROUP_ALL                = (GROUP_CONFIG_AREA << 1) - 1
 };
@@ -94,12 +93,17 @@ static void exit_game(UNUSED Click_Button* button)
     g3dsConfig.run = false;
 }
 
+// WYATT_TODO replace this. Compatible consoles should be able to select all modes.
 static void toggle_aa(UNUSED Click_Button* button)
 {
-    if (!g3dsGfxState.stereo_3d_active && g3dsMenuConfig.use_wide)
+    if (!g3dsGfxState.stereo_3d_active)
     {
         g3dsGfxState.reinitialize_top_screen = true;
         g3dsMenuConfig.use_aa = !g3dsMenuConfig.use_aa;
+
+        // Old 2DS cannot use wide without AA
+        if (!g3dsMenuConfig.use_aa && !g3dsSystemInfo.supports_800px)
+            g3dsMenuConfig.use_wide = false;
     }
 }
 
@@ -107,9 +111,12 @@ static void toggle_width(UNUSED Click_Button* button)
 {
     if (!g3dsGfxState.stereo_3d_active)
     {
+        // Old 2DS cannot use wide without AA
+        if (!g3dsSystemInfo.supports_800px && !g3dsMenuConfig.use_aa)
+            return;
+
         g3dsGfxState.reinitialize_top_screen = true;
         g3dsMenuConfig.use_wide = !g3dsMenuConfig.use_wide;
-        g3dsMenuConfig.use_aa = false;
     }
 }
 
@@ -140,7 +147,7 @@ void n3ds_menu_handle_touch()
     Click_Flags interaction_flags = GROUP_C_BUTTONS;
 
     if (g3dsMenuConfig.show_menu)
-        interaction_flags |= (g3dsSystemInfo.supports_800px ? GROUP_CONFIGS_800PX : GROUP_CONFIGS_NO_800PX);
+        interaction_flags |= GROUP_CONFIGS_800PX;
     else
         interaction_flags |= GROUP_CONFIG_AREA;
         
@@ -174,7 +181,7 @@ void n3ds_menu_render(void)
     Click_Flags draw_flags = GROUP_C_BUTTONS;
 
     if (g3dsMenuConfig.show_menu)
-        draw_flags |= (g3dsSystemInfo.supports_800px ? GROUP_CONFIGS_800PX : GROUP_CONFIGS_NO_800PX);
+        draw_flags |= GROUP_CONFIGS_800PX;
 
     gfx_citro3d_menu_on_draw_start();
     click_render(ARRAY_COUNT(buttons), buttons, draw_flags, NULL);
