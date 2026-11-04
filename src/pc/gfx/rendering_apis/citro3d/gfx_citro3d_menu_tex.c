@@ -6,6 +6,8 @@
 #include "src/minimap/textures/aa_off_t3x.h"
 #include "src/minimap/textures/hide_menu_t3x.h"
 #include "src/minimap/textures/exit_t3x.h"
+#include "src/minimap/textures/exit_cancel_t3x.h"
+#include "src/minimap/textures/exit_menu_label_t3x.h"
 #include "src/minimap/textures/menu_cleft_t3x.h"
 #include "src/minimap/textures/menu_cright_t3x.h"
 #include "src/minimap/textures/menu_cdown_t3x.h"
@@ -39,6 +41,9 @@ WrappedTexture mode_400_tex,
                aa_off_tex,
                hide_menu_tex,
                exit_tex,
+               exit_confirm_tex,
+               exit_cancel_tex,
+               exit_menu_label_tex,
                menu_cleft_tex,
                menu_cright_tex,
                menu_cdown_tex,
@@ -53,6 +58,8 @@ static const TexLoadGroup load_groups[] = {
     TEX(aa_off,                  64,  64),
     TEX(hide_menu,               64,  64),
     TEX(exit,                    64,  64),
+    TEX(exit_cancel,             64,  64),
+    TEX(exit_menu_label,         57,  12),
     TEX(menu_cleft,              64,  64),
     TEX(menu_cright,             64,  64),
     TEX(menu_cdown,              64,  32),
@@ -73,7 +80,7 @@ void gfx_citro3d_menu_init_tex_single(MenuTexId id)
     C3D_Tex* c3d_tex = &load_group->output_tex->c3d_tex;
 
     citro3d_helpers_load_t3x_texture(c3d_tex, NULL, *load_group->t3x_data, load_group->t3x_size);
-    C3D_TexSetFilter(c3d_tex, GPU_LINEAR, GPU_NEAREST);
+    C3D_TexSetFilter(c3d_tex, GPU_NEAREST, GPU_NEAREST);
     C3D_TexFlush(c3d_tex);
 
     load_group->output_tex->size_s   = load_group->original_w / ((float) c3d_tex->width);
