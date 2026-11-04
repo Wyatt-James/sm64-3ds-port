@@ -87,7 +87,7 @@ void convert_i4_to_rgba32(union RGBA32* output, const uint8_t* data, uint32_t wi
 
     for (uint32_t i = 0; i < size_bytes; i++, output += 2) {
         uint8_t byte = data[i];
-        union I4x2 i4x2 = (union I4x2) byte; // Reverse order? Why?
+        union I4x2 i4x2 = {.u8 = byte}; // Reverse order? Why?
         output[0].r = SCALE_4_8(i4x2.i2);
         output[0].g = SCALE_4_8(i4x2.i2);
         output[0].b = SCALE_4_8(i4x2.i2);
@@ -122,7 +122,7 @@ void convert_ci4_to_rgba32(union RGBA32* output, const uint8_t* data, const uint
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
         uint8_t byte = data[i / 2];
         uint8_t idx = (byte >> (4 - (i % 2) * 4)) & 0xf;
-        union RGBA16 col = (union RGBA16) palette_as_u16[idx];
+        union RGBA16 col = {.u16 = palette_as_u16[idx]};
         output->r = SCALE_5_8(col.r);
         output->g = SCALE_5_8(col.g);
         output->b = SCALE_5_8(col.b);
@@ -138,7 +138,7 @@ void convert_ci8_to_rgba32(union RGBA32* output, const uint8_t* data, const uint
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
         uint8_t idx = data[i];
-        union RGBA16 col = (union RGBA16) palette_as_u16[idx];
+        union RGBA16 col = {.u16 = palette_as_u16[idx]};
         output->r = SCALE_5_8(col.r);
         output->g = SCALE_5_8(col.g);
         output->b = SCALE_5_8(col.b);
@@ -155,7 +155,7 @@ void convert_ci4_to_rgba16(union RGBA16* output, const uint8_t* data, const uint
     for (uint32_t i = 0; i < size_bytes * 2; i++, output++) {
         uint8_t byte = data[i / 2];
         uint8_t idx = (byte >> (4 - (i % 2) * 4)) & 0xf;
-        *output = (union RGBA16) palette_as_u16[idx];
+        *output = (union RGBA16) {.u16 = palette_as_u16[idx]};
     }
 }
 
@@ -167,7 +167,7 @@ void convert_ci8_to_rgba16(union RGBA16* output, const uint8_t* data, const uint
     const uint16_t* palette_as_u16 = (uint16_t*) palette;
     for (uint32_t i = 0; i < size_bytes; i++, output++) {
         uint8_t idx = data[i];
-        *output = (union RGBA16) palette_as_u16[idx];
+        *output = (union RGBA16) {.u16 = palette_as_u16[idx]};
     }
 }
 
