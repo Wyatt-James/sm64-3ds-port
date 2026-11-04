@@ -30,3 +30,7 @@
 #undef s16
 #undef u8
 #undef s8
+
+#ifndef C3D_DEPTH_NONE
+#error Wyatt-James' Custom Citro3D and libctru forks are required. You should use the provided Docker config unless you really know what you're doing.
+#endif
