@@ -35,6 +35,7 @@ typedef struct
     __3ds_s32 desired_main_thread_priority,  // Desired priority of the main thread.
               desired_audio_thread_priority, // Desired priority of the audio thread, if enabled.
               desired_async_thread_priority; // Desired priority of the async thread, if enabled.
+    float gx_timeout_duration;               // Maximum time allotted to GX to run any single command list, in seconds.
 } N3DS_Config;
 
 // Configuration for the menu. For changes to appear, g3dsGfxState.bottom_screen_needs_render must be set.

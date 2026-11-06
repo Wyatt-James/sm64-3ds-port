@@ -29,6 +29,8 @@ Gfx3DSState g3dsGfxState = {
     .reinitialize_top_screen    = false,
     .reinitialize_bottom_screen = false,
     .display_mode               = N3DS_DISPLAY_2D_800_480,
+    .gfx_initialized            = false,
+    .console_initialized        = false,
 };
 
 static const N3DS_DisplayModeInfo display_mode_info[N3DS_DISPLAY_COUNT] = {
@@ -48,18 +50,30 @@ static void clear_vram()
 }
 
 // Initializes the console, based on g3dsConfig. Does nothing if VRAM framebuffers are enabled.
-static void init_console()
+void gfx_3ds_init_console(void)
 {
     if (!g3dsConfig.vram_framebuffers)
     {
         switch (g3dsConfig.console_screen)
         {
             default:                 // Default to none
-            case N3DS_SCREEN_NONE:   break;
+            case N3DS_SCREEN_NONE:   return;
             case N3DS_SCREEN_BOTTOM: consoleInit(GFX_BOTTOM, NULL); break;
             case N3DS_SCREEN_TOP:    consoleInit(GFX_TOP,    NULL); break;
         }
+        g3dsGfxState.console_initialized = true;
     }
+}
+
+// For debugging crashes
+void gfx_3ds_reinitialize(void)
+{
+    bool initialized = g3dsGfxState.gfx_initialized;
+    g3dsGfxState.gfx_initialized = true;
+
+    if (initialized)
+        gfxExit();
+    gfxInit(N3DS_TOP_FRAMEBUFFER_FORMAT, N3DS_BOTTOM_FRAMEBUFFER_FORMAT, g3dsConfig.vram_framebuffers);
 }
 
 static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_fullscreen)
@@ -68,8 +82,8 @@ static void gfx_3ds_init(UNUSED const char *game_name, UNUSED bool start_in_full
     clear_vram();
     gspExit();
     
-    gfxInit(N3DS_TOP_FRAMEBUFFER_FORMAT, N3DS_BOTTOM_FRAMEBUFFER_FORMAT, g3dsConfig.vram_framebuffers);
-    init_console();
+    gfx_3ds_reinitialize();
+    gfx_3ds_init_console();
     shprog_emu64_init();
 }
 

@@ -17,6 +17,7 @@ N3DS_Config g3dsConfig = {
     .desired_main_thread_priority  = 0x30,
     .desired_audio_thread_priority = 0x30 - 1,
     .desired_async_thread_priority = 0x30 + 1, // Bigger number is lower priority
+    .gx_timeout_duration           = 1.0f,
 };
 
 N3DS_MenuConfig g3dsMenuConfig = {

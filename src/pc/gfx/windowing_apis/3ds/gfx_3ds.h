@@ -36,7 +36,9 @@ typedef struct
     bool bottom_screen_needs_render,
          reinitialize_top_screen,
          reinitialize_bottom_screen,
-         stereo_3d_active;
+         stereo_3d_active,
+         gfx_initialized,
+         console_initialized;
     N3DS_DisplayMode display_mode;
 } Gfx3DSState;
 
@@ -44,5 +46,7 @@ extern Gfx3DSState g3dsGfxState;
 extern struct GfxWindowManagerAPI gfx_wapi_3ds;
 
 const N3DS_DisplayModeInfo* gfx_3ds_display_mode_info(N3DS_DisplayMode mode);
+void gfx_3ds_reinitialize(void); // For debugging crashes
+void gfx_3ds_init_console(void); // For debugging crashes
 
 #endif
