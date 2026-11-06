@@ -144,6 +144,8 @@ void n3ds_main_init(void)
 
     if(g3dsSystemInfo.is_new_3ds && g3dsConfig.enable_new_3ds_speedup)
         osSetSpeedupEnable(true);
+    else
+        g3dsConfig.enable_new_3ds_speedup = false;
         
     atexit(N3DS_AsyncExit);
 
