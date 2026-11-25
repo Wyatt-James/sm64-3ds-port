@@ -185,7 +185,7 @@ GPU_TEVSRC citro3d_helpers_cc_input_to_tev_src(int cc_input, bool swap_input)
     }
 }
 
-static void configure_tev_internal(struct CCFeatures* cc_features, C3D_TexEnv* texenv, bool swap_input, C3D_TexEnvMode mode)
+static void configure_tev_internal(const struct CCFeatures* cc_features, C3D_TexEnv* texenv, bool swap_input, C3D_TexEnvMode mode)
 {
     if (cc_features->do_single_0)
     {
@@ -220,7 +220,7 @@ static void configure_tev_internal(struct CCFeatures* cc_features, C3D_TexEnv* t
     }
 }
 
-C3D_TexEnv citro3d_helpers_configure_tex_env(struct CCFeatures* cc_features)
+C3D_TexEnv citro3d_helpers_configure_tex_env(const struct CCFeatures* cc_features)
 {
     C3D_TexEnv texenv_;
     C3D_TexEnv* texenv = &texenv_;

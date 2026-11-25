@@ -45,7 +45,7 @@ void citro3d_helpers_pad_and_tile_texture_u8(uint8_t* src, uint8_t* dest, struct
 GPU_TEVSRC citro3d_helpers_cc_input_to_tev_src(int cc_input, bool swap_input);
 
 // Configures a C3D_TexEnv for slot 0.
-C3D_TexEnv citro3d_helpers_configure_tex_env(struct CCFeatures* cc_features);
+C3D_TexEnv citro3d_helpers_configure_tex_env(const struct CCFeatures* cc_features);
 
 // Configures a C3D_TexEnv for slot 1. The result is always identical!
 C3D_TexEnv citro3d_helpers_configure_two_color_tex_env(void);
