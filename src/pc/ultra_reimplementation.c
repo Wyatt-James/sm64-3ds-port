@@ -152,11 +152,12 @@ s32 osEepromLongReadSync(UNUSED OSMesgQueue *mq, u8 address, u8 *buffer, int nby
     int file = open("sm64_save_file.bin", O_RDONLY | O_CREAT);
     if (file == -1) {
         ret = -1;
-    } else if (read(file, content, 512) == 512) {
-        memcpy(buffer, content + address * 8, nbytes);
-        close(file);
     } else {
-        ret = -1;
+        if (read(file, content, 512) == 512) {
+            memcpy(buffer, content + address * 8, nbytes);
+            ret = 0;
+        }
+        close(file);
     }
 #endif
     return ret;
