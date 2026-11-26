@@ -95,8 +95,7 @@ void                    gfx_rapi_upload_texture             (const uint8_t *rgba
 // Optional feature: GPU handles fog rendering
 #if GFX_RAPI_FOG == GFX_ENABLE
 void                    gfx_rapi_set_fog                    (uint16_t from, uint16_t to);                  // Sets the GPU fog distance factors.
-void                    gfx_rapi_set_fog_color              (uint8_t r, uint8_t g, uint8_t b, uint8_t a);  // Sets the GPU fog color.
-void                    gfx_rapi_set_fog_color_u32          (uint32_t color);                              // Sets the GPU fog color, RGBA8888 format.
+void                    gfx_rapi_set_fog_color              (uint32_t color);                              // Sets the GPU fog color, RGBA8888 format.
 #endif
 
 // Optional feature: stereoscopic 3D rendering

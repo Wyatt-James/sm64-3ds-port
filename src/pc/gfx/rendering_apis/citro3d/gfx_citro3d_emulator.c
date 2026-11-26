@@ -505,9 +505,9 @@ void gfx_rapi_select_color_combiner(size_t cc_index)
     }
 }
 
-void gfx_rapi_set_fog_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+void gfx_rapi_set_fog_color(uint32_t color)
 {
-    ctx.fog_color = (union RGBA32) {.r = r, .g = g, .b = b, .a = a};
+    ctx.fog_color.u32 = color;
     CTX_NOTIFY(CTX_FOG_COLOR);
 }
 
