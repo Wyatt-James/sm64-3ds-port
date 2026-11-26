@@ -1,4 +1,4 @@
-FROM devkitpro/devkitarm:20240202 AS build
+FROM devkitpro/devkitarm:20260610 AS build
 
 RUN mkdir /docker_logs
 
@@ -28,9 +28,9 @@ RUN wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/m
   echo 976c17a78617e157083a8e342836d35c47a45940f9d0209ee8fd210a81ba7bc0  makerom.zip | sha256sum --check
 
 # CREATES citro3d-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/citro3d/archive/d2d2dfcb1abb6099afe563fbb029d4c2862fe8a4.zip \
+RUN wget https://github.com/Wyatt-James/citro3d/archive/15b6ab605cd1f54e8d7d624408a0f0e973fd6285.zip \
   -O citro3d-wyatt-james.zip && \
-  echo c3612032ddeff11646edf09b9f2596858bbe4497490610af83aa54d2c3c35809  citro3d-wyatt-james.zip | sha256sum --check
+  echo f77f732372decf03c2a7893ded4429ee4ca047592fbe5001fbab9dcd9a1a9ffd  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
 RUN wget https://github.com/Wyatt-James/libctru/archive/dd7bff9bacdafc84e27212e9e95e72aa10995db5.zip \
