@@ -43,6 +43,7 @@ static const N3DS_DisplayModeInfo display_mode_info[N3DS_DISPLAY_COUNT] = {
 };
 
 // Synchronously clears the entirety of N3DS VRAM.
+// WYATT_TODO this hangs forever on emulator.
 static void clear_vram()
 {
     GX_MEMORYFILL_SINGLE(OS_VRAM_VADDR, 0, (OS_VRAM_VADDR + OS_VRAM_SIZE), BIT(0) | (2 << 8));
