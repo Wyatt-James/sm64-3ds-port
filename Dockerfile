@@ -28,14 +28,14 @@ RUN wget https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.17/m
   echo 976c17a78617e157083a8e342836d35c47a45940f9d0209ee8fd210a81ba7bc0  makerom.zip | sha256sum --check
 
 # CREATES citro3d-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/citro3d/archive/49112d8bbfe0150b54f12e39432c110f851ce245.zip \
+RUN wget https://github.com/Wyatt-James/citro3d/archive/d14ed98cef97ddb494cdaccf31a83c2aa63d5057.zip \
   -O citro3d-wyatt-james.zip && \
-  echo b7e8babb7a995fe7a804eeccfc49fc44d8e829aa1a8059e86d21bd2377b81d5d  citro3d-wyatt-james.zip | sha256sum --check
+  echo 0aa2fcb8a9d80f72310d5fd321adc92cad1c91bcc6815991fe8d369fffe0fb4e  citro3d-wyatt-james.zip | sha256sum --check
 
 # CREATES libctru-wyatt-james.zip
-RUN wget https://github.com/Wyatt-James/libctru/archive/dd7bff9bacdafc84e27212e9e95e72aa10995db5.zip \
+RUN wget https://github.com/Wyatt-James/libctru/archive/fcd787bc5c4c8c58301814407fdac8e6da4e1f06.zip \
   -O libctru-wyatt-james.zip && \
-  echo 154943a8e7316020f068288397667c7d228a47697fcaaf3f983acf4f034b3c4f  libctru-wyatt-james.zip | sha256sum --check
+  echo c4cedee9f0f7365e693d1ab5fde1ccceb5b3fbb94cfc83c9c29ff509d337fce1  libctru-wyatt-james.zip | sha256sum --check
 
 # ----- Extract archives in-place, removing commit-specific container folders -----
   
